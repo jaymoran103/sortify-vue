@@ -1,0 +1,62 @@
+/* Design tokens — ported from vanilla shared/base.css */
+
+:root {
+  /* ── Palette ── */
+  --color-green: rgb(56, 137, 65);
+  --color-green-emphasis: rgb(56, 214, 83);
+  --color-red: rgb(198, 49, 49);
+  --color-red-emphasis: rgb(255, 113, 113);
+  --color-blue: rgb(56, 120, 137);
+  --color-blue-emphasis: rgb(56, 207, 214);
+
+  /* ── Surfaces ── */
+  --color-bg: #212121;
+  --color-surface: #272727;
+  --color-surface-hi: #313131;
+  --color-header: #222;
+
+  --color-row: #333;
+  --color-row-hover: #444;
+  --color-row-selected: #555;
+  --color-checkbox-row-hover: #7f9181; /* Determine more dynamically based on the accent color? */
+
+  /* ── Text ── */
+  --color-text: #ccc;
+  /* --color-text-secondary: #999; */
+  --color-text-muted: #888;
+  --color-button-text: #000;
+
+  /* ── Semantic ── */
+  --color-accent: var(--color-green);
+  --color-accent-hover: var(--color-green-emphasis);
+  --color-accent-subtle: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  --color-accent-text: var(--color-green-emphasis);
+  --color-error: var(--color-red);
+  --color-error-hover: var(--color-red-emphasis);
+  --color-disabled: rgb(120, 120, 120);
+
+  /* ── Buttons ── */
+  --color-button-primary: var(--color-accent);
+  --color-button-primary-hover: var(--color-accent-hover);
+  --color-button-cancel: #9e9da9;
+  --color-button-cancel-hover: rgb(130, 130, 130);
+
+  /* ── Borders ── */
+  --color-border: #000;
+  --border-standard: 2px solid var(--color-border);
+  --border-soft: 2px solid #3a3a3a;
+  --border-emphasized: 2px solid #fff;
+
+  /* ── Layout ── */
+  --card-height: 400px;
+
+  /* ── Typography ── */
+  --font-family: sans-serif;
+  --font-size-base: 1em;
+  --font-size-controls: 0.9em;
+  --font-size-button: 0.85em;
+  --font-size-metadata: 0.9em;
+
+  /* ── Transitions ── */
+  --transition-fast: 150ms ease;
+}
