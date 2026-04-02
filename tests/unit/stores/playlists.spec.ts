@@ -43,6 +43,24 @@ describe('Playlist Store', () => {
     expect(retrieved?.trackIDs).toEqual(['track-1', 'track-2'])
   })
 
+  it('addPlaylist sets lastModified timestamp', async () => {
+    const store = usePlaylistStore()
+    const before = Date.now()
+
+    const playlist = {
+      name: 'My Playlist',
+      trackIDs: [],
+    }
+
+    const id = await store.addPlaylist(playlist)
+    const added = await store.getPlaylist(id)
+
+    const after = Date.now()
+
+    expect(added?.lastModified).toBeGreaterThanOrEqual(before)
+    expect(added?.lastModified).toBeLessThanOrEqual(after)
+  })
+
   it('updatePlaylist modifies only specified fields', async () => {
     const store = usePlaylistStore()
     const originalPlaylist = {
@@ -58,6 +76,39 @@ describe('Playlist Store', () => {
     expect(updated?.trackIDs).toEqual(['track-1'])
   })
 
+  it('updatePlaylist preserves unmodified fields', async () => {
+    const store = usePlaylistStore()
+    const playlist = {
+      name: 'Playlist',
+      trackIDs: ['track-1', 'track-2'],
+      playlistURI: 'spotify:playlist:123',
+    }
+
+    const id = await store.addPlaylist(playlist)
+    await store.updatePlaylist(id, { name: 'Renamed' })
+
+    const updated = await store.getPlaylist(id)
+    expect(updated?.playlistURI).toBe('spotify:playlist:123')
+  })
+
+  it('updatePlaylist updates lastModified timestamp', async () => {
+    const store = usePlaylistStore()
+    const playlist = {
+      name: 'Playlist',
+      trackIDs: [],
+    }
+
+    const id = await store.addPlaylist(playlist)
+    const firstModified = (await store.getPlaylist(id))?.lastModified
+
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    await store.updatePlaylist(id, { name: 'Renamed' })
+
+    const secondModified = (await store.getPlaylist(id))?.lastModified
+
+    expect(secondModified).toBeGreaterThan(firstModified || 0)
+  })
+
   it('getPlaylist returns playlist for valid id', async () => {
     const store = usePlaylistStore()
     const playlist = {
@@ -69,6 +120,13 @@ describe('Playlist Store', () => {
     const retrieved = await store.getPlaylist(id)
 
     expect(retrieved?.name).toBe('Test')
+  })
+
+  it('getPlaylist returns undefined for invalid id', async () => {
+    const store = usePlaylistStore()
+    const retrieved = await store.getPlaylist(999)
+
+    expect(retrieved).toBeUndefined()
   })
 
   it('deletePlaylist removes playlist from database', async () => {

@@ -5,6 +5,10 @@ import { useTrackStore } from '@/stores/tracks'
 import { db } from '@/db'
 import type { Track } from '@/types/models'
 
+/**
+ * Track Store Tests
+ * Note: Tests assume that the database is cleared after each test to ensure isolation. Avoiding database deletion to prevent future issues with closed singleton instance.
+ */
 describe('Track Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -30,7 +34,32 @@ describe('Track Store', () => {
     expect(id).toBe('track-1')
     expect(retrieved).toEqual(track)
   })
-  
+
+  it('addTrack with duplicate trackID overwrites existing', async () => {
+    const store = useTrackStore()
+    const track1: Track = {
+      trackID: 'track-1',
+      title: 'Original',
+      artist: 'Artist',
+      album: 'Album',
+      source: 'csv',
+    }
+
+    const track2: Track = {
+      trackID: 'track-1',
+      title: 'Updated',
+      artist: 'Artist',
+      album: 'Album',
+      source: 'csv',
+    }
+
+    await store.addTrack(track1)
+    await store.addTrack(track2)
+
+    const retrieved = await store.getTrack('track-1')
+    expect(retrieved?.title).toBe('Updated')
+  })
+
   it('addTracks bulk inserts multiple tracks', async () => {
     const store = useTrackStore()
     const tracks: Track[] = [
@@ -72,6 +101,13 @@ describe('Track Store', () => {
     const retrieved = await store.getTrack('track-1')
 
     expect(retrieved).toEqual(track)
+  })
+
+  it('getTrack returns undefined for nonexistent ID', async () => {
+    const store = useTrackStore()
+    const retrieved = await store.getTrack('nonexistent')
+
+    expect(retrieved).toBeUndefined()
   })
 
   it('getTracksByIds returns only matching tracks', async () => {
