@@ -38,6 +38,8 @@
   /* ── Buttons ── */
   --color-button-primary: var(--color-accent);
   --color-button-primary-hover: var(--color-accent-hover);
+  --color-button-danger: var(--color-red);
+  --color-button-danger-hover: var(--color-red-emphasis);
   --color-button-cancel: #9e9da9;
   --color-button-cancel-hover: rgb(130, 130, 130);
 
