@@ -4,11 +4,14 @@ import { useTrackStore } from '@/stores/tracks'
 import { usePlaylistStore } from '@/stores/playlists'
 import { csvImportAdapter } from '@/adapters/csvImport'
 import { csvExportAdapter } from '@/adapters/csvExport'
+import { jsonImportAdapter } from '@/adapters/jsonImport'
+import { jsonExportAdapter } from '@/adapters/jsonExport'
 
 const trackStore = useTrackStore()
 const playlistStore = usePlaylistStore()
 
 const csvInput = ref<HTMLInputElement | null>(null)
+const jsonInput = ref<HTMLInputElement | null>(null)
 
 async function onCsvFiles(e: Event) {
   const files = Array.from((e.target as HTMLInputElement).files ?? [])
@@ -18,9 +21,22 @@ async function onCsvFiles(e: Event) {
   ;(e.target as HTMLInputElement).value = ''
 }
 
+async function onJsonFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const result = await jsonImportAdapter.import({ file })
+  console.log('[JSON Import]', result)
+  ;(e.target as HTMLInputElement).value = ''
+}
+
 async function exportCsv() {
   const result = await csvExportAdapter.export({ playlistIds: 'all', profile: 'full' })
   console.log('[CSV Export]', result)
+}
+
+async function exportJson() {
+  const result = await jsonExportAdapter.export({})
+  console.log('[JSON Export]', result)
 }
 
 async function clearAll() {
@@ -44,11 +60,14 @@ async function clearAll() {
 
       <div class="btn-row">
         <button @click="csvInput?.click()">Import CSV</button>
+        <button @click="jsonInput?.click()">Import JSON</button>
         <button @click="exportCsv">Export CSV (all)</button>
+        <button @click="exportJson">Export JSON</button>
         <button class="danger" @click="clearAll">Clear DB</button>
       </div>
 
       <input ref="csvInput" type="file" accept=".csv" multiple hidden @change="onCsvFiles" />
+      <input ref="jsonInput" type="file" accept=".json" hidden @change="onJsonFile" />
 
     </section>
   </div>

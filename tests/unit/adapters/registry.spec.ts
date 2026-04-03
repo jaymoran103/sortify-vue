@@ -46,7 +46,8 @@ describe('registry', () => {
 
   it('getImporterKeys returns all registered keys', () => {
     registerImporter(makeImporter('csv'))
-    expect(getImporterKeys()).toEqual(['csv'])
+    registerImporter(makeImporter('json'))
+    expect(getImporterKeys()).toEqual(['csv', 'json'])
   })
 
   it('clearRegistry removes all registrations', () => {

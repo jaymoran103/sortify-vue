@@ -11,9 +11,13 @@ import './styles/utilities.css'
 import { registerImporter, registerExporter } from '@/adapters/registry'
 import { csvImportAdapter } from '@/adapters/csvImport'
 import { csvExportAdapter } from '@/adapters/csvExport'
+import { jsonImportAdapter } from '@/adapters/jsonImport'
+import { jsonExportAdapter } from '@/adapters/jsonExport'
 
 registerImporter(csvImportAdapter)
 registerExporter(csvExportAdapter)
+registerImporter(jsonImportAdapter)
+registerExporter(jsonExportAdapter)
 
 const app = createApp(App)
 
