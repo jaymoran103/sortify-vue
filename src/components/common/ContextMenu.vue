@@ -30,6 +30,7 @@ watch(
       document.removeEventListener('click', handleOutsideClick)
     }
   },
+  { immediate: true },
 )
 
 onBeforeUnmount(() => {

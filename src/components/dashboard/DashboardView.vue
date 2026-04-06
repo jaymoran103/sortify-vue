@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import IOCard from './IOCard.vue'
+import LibraryCard from './LibraryCard.vue'
+import WorkspaceCard from './WorkspaceCard.vue'
 </script>
 
 <template>
@@ -7,12 +9,13 @@ import IOCard from './IOCard.vue'
     <h1 class="dashboard__title">Dashboard</h1>
     <div class="dashboard__grid">
       <IOCard />
+      <LibraryCard />
+      <WorkspaceCard />
     </div>
   </div>
 </template>
 
 <style scoped>
-/* TODO move styling elsewhere */
 .dashboard {
   padding: var(--space-6);
   max-width: 1200px;
