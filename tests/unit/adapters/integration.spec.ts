@@ -21,8 +21,10 @@ describe('adapter integration', () => {
     const tracks = await db.tracks.toArray()
     expect(tracks).toHaveLength(2)
     const playlists = await db.playlists.toArray()
-    expect(playlists[0].name).toBe('My Playlist')
-    expect(playlists[0].trackIDs).toHaveLength(2)
+    expect(playlists).toHaveLength(1)
+    const playlist = playlists[0]!
+    expect(playlist.name).toBe('My Playlist')
+    expect(playlist.trackIDs).toHaveLength(2)
   })
 
   it('export as JSON → re-import JSON → verify data matches', async () => {
@@ -41,8 +43,11 @@ describe('adapter integration', () => {
     const reimportedTracks = await db.tracks.toArray()
     const reimportedPlaylists = await db.playlists.toArray()
     expect(reimportedTracks).toHaveLength(1)
-    expect(reimportedTracks[0].trackID).toBe('t1')
-    expect(reimportedPlaylists[0].name).toBe('Test Playlist')
+    expect(reimportedPlaylists).toHaveLength(1)
+    const reimportedTrack = reimportedTracks[0]!
+    const reimportedPlaylist = reimportedPlaylists[0]!
+    expect(reimportedTrack.trackID).toBe('t1')
+    expect(reimportedPlaylist.name).toBe('Test Playlist')
   })
 
   it('import JSON bundle → verify correct track/playlist counts', async () => {

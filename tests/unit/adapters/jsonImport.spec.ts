@@ -27,7 +27,9 @@ describe('jsonImport', () => {
     expect(result.tracksImported).toBe(1)
     expect(result.playlistsImported).toBe(1)
     const tracks = await db.tracks.toArray()
-    expect(tracks[0].trackID).toBe('t1')
+    expect(tracks).toHaveLength(1)
+    const track = tracks[0]!
+    expect(track.trackID).toBe('t1')
   })
 
   it('rejects file missing tracks array', async () => {
@@ -45,8 +47,10 @@ describe('jsonImport', () => {
     }
     await importJsonBundle(bundle)
     const playlists = await db.playlists.toArray()
-    expect(playlists[0].id).not.toBe(999)
-    expect(typeof playlists[0].id).toBe('number')
+    expect(playlists).toHaveLength(1)
+    const playlist = playlists[0]!
+    expect(playlist.id).not.toBe(999)
+    expect(typeof playlist.id).toBe('number')
   })
 
   it('reports correct import counts', async () => {

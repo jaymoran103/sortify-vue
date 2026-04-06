@@ -10,7 +10,8 @@ describe('jsonExport', () => {
     const bundle = buildJsonBundle([track], [playlist])
     expect(bundle.tracks).toHaveLength(1)
     expect(bundle.playlists).toHaveLength(1)
-    expect(bundle.tracks[0].trackID).toBe('t1')
+    const exportedTrack = bundle.tracks[0]!
+    expect(exportedTrack.trackID).toBe('t1')
   })
 
   it('includes exportedAt timestamp', () => {

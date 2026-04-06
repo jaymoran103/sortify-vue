@@ -22,23 +22,29 @@ describe('csvImport', () => {
     const result = await importCsvText(csv, 'Alias Test')
     expect(result.tracksImported).toBe(1)
     const tracks = await db.tracks.toArray()
-    expect(tracks[0].title).toBe('My Song')
-    expect(tracks[0].artist).toBe('My Artist')
-    expect(tracks[0].album).toBe('My Album')
+    expect(tracks).toHaveLength(1)
+    const track = tracks[0]!
+    expect(track.title).toBe('My Song')
+    expect(track.artist).toBe('My Artist')
+    expect(track.album).toBe('My Album')
   })
 
   it('generates trackID from title+artist+album when no URI present', async () => {
     const csv = 'title,artist,album\nSong A,Artist B,Album C'
     await importCsvText(csv, 'No ID Playlist')
     const tracks = await db.tracks.toArray()
-    expect(tracks[0].trackID).toBe(hashTrackId('Song A', 'Artist B', 'Album C'))
+    expect(tracks).toHaveLength(1)
+    const track = tracks[0]!
+    expect(track.trackID).toBe(hashTrackId('Song A', 'Artist B', 'Album C'))
   })
 
   it('uses spotifyURI as trackID when available', async () => {
     const csv = 'title,artist,album,spotifyURI\nSong A,Artist B,Album C,spotify:track:xyz'
     await importCsvText(csv, 'Playlist')
     const tracks = await db.tracks.toArray()
-    expect(tracks[0].trackID).toBe('spotify:track:xyz')
+    expect(tracks).toHaveLength(1)
+    const track = tracks[0]!
+    expect(track.trackID).toBe('spotify:track:xyz')
   })
 
   it('skips rows with missing title', async () => {
@@ -61,7 +67,9 @@ describe('csvImport', () => {
     const csv = 'trackID,title,artist,album\nspotify:track:1,Song,Artist,Album'
     await importCsvText(csv, 'my-playlist')
     const playlists = await db.playlists.toArray()
-    expect(playlists[0].name).toBe('my-playlist')
+    expect(playlists).toHaveLength(1)
+    const playlist = playlists[0]!
+    expect(playlist.name).toBe('my-playlist')
   })
 
   it('reports correct tracksImported and playlistsImported counts', async () => {
