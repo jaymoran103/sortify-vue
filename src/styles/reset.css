@@ -1,32 +1,60 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-
-html { font-size: 16px; }
-
-body { 
-    font-family: system-ui,
-    -apple-system, sans-serif; 
-    background: var(--color-bg); 
-    color: var(--color-text); 
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-a { 
-    color: inherit; 
-    text-decoration: none; 
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-button { 
-    cursor: pointer; 
-    font: inherit; 
-    border: none;
-    background: none;
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  background: var(--color-bg);
 }
 
-select, input { 
-    font-family: inherit; 
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
-[hidden] { 
-    display: 
-    none !important; 
+button {
+  cursor: pointer;
+  font: inherit;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+img, svg {
+  display: block;
+  max-width: 100%;
 }

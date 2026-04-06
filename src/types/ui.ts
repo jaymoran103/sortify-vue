@@ -28,10 +28,3 @@ export interface ModalConfig {
   props?: Record<string, unknown>
   className?: string
 }
-
-/** Notification/toast for non-blocking feedback */
-export interface ToastConfig {
-  message: string
-  type: 'success' | 'error' | 'info'
-  duration?: number
-}

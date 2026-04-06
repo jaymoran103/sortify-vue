@@ -1,133 +1,35 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useTrackStore } from '@/stores/tracks'
-import { usePlaylistStore } from '@/stores/playlists'
-import { csvImportAdapter } from '@/adapters/csvImport'
-import { csvExportAdapter } from '@/adapters/csvExport'
-import { jsonImportAdapter } from '@/adapters/jsonImport'
-import { jsonExportAdapter } from '@/adapters/jsonExport'
-
-const trackStore = useTrackStore()
-const playlistStore = usePlaylistStore()
-
-const csvInput = ref<HTMLInputElement | null>(null)
-const jsonInput = ref<HTMLInputElement | null>(null)
-
-async function onCsvFiles(e: Event) {
-  const files = Array.from((e.target as HTMLInputElement).files ?? [])
-  if (!files.length) return
-  const result = await csvImportAdapter.import({ files })
-  console.log('[CSV Import]', result)
-  ;(e.target as HTMLInputElement).value = ''
-}
-
-async function onJsonFile(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  const result = await jsonImportAdapter.import({ file })
-  console.log('[JSON Import]', result)
-  ;(e.target as HTMLInputElement).value = ''
-}
-
-async function exportCsv() {
-  const result = await csvExportAdapter.export({ playlistIds: 'all', profile: 'full' })
-  console.log('[CSV Export]', result)
-}
-
-async function exportJson() {
-  const result = await jsonExportAdapter.export({})
-  console.log('[JSON Export]', result)
-}
-
-async function clearAll() {
-  await trackStore.clearTracks()
-  await playlistStore.clearPlaylists()
-  console.log('[Clear] DB wiped')
-}
+import IOCard from './IOCard.vue'
 </script>
 
 <template>
-  <div class="dashboard-view">
-    <h1>Dashboard</h1>
-
-    <section class="io-panel">
-      <h2>I/O Tester</h2>
-
-      <div class="stats">
-        <span>Tracks: {{ trackStore.trackCount }}</span>
-        <span>Playlists: {{ playlistStore.playlistCount }}</span>
-      </div>
-
-      <div class="btn-row">
-        <button @click="csvInput?.click()">Import CSV</button>
-        <button @click="jsonInput?.click()">Import JSON</button>
-        <button @click="exportCsv">Export CSV (all)</button>
-        <button @click="exportJson">Export JSON</button>
-        <button class="danger" @click="clearAll">Clear DB</button>
-      </div>
-
-      <input ref="csvInput" type="file" accept=".csv" multiple hidden @change="onCsvFiles" />
-      <input ref="jsonInput" type="file" accept=".json" hidden @change="onJsonFile" />
-
-    </section>
+  <div class="dashboard">
+    <h1 class="dashboard__title">Dashboard</h1>
+    <div class="dashboard__grid">
+      <IOCard />
+    </div>
   </div>
 </template>
 
 <style scoped>
 /* TODO move styling elsewhere */
-.dashboard-view {
-  padding: 1.5rem;
-  color: var(--color-text);
+.dashboard {
+  padding: var(--space-6);
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.io-panel {
-  margin-top: 1.5rem;
-  padding: 1.25rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+.dashboard__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-6);
 }
 
-.io-panel h2 {
-  margin: 0 0 1rem;
-  font-size: var(--font-size-md);
+.dashboard__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-6);
 }
-
-.stats {
-  display: flex;
-  gap: 1.5rem;
-  margin-bottom: 1rem;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-}
-
-.btn-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-button {
-  padding: 0.4rem 0.85rem;
-  background: var(--color-surface-hi);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-}
-
-button:hover {
-  background: var(--color-row-hover);
-}
-
-button.danger {
-  color: var(--color-button-danger);
-  border-color: var(--color-button-danger);
-}
-
-button.danger:hover {
-  background: var(--color-button-danger-hover);
-  color: var(--color-button-text);
-}
-
 </style>
+
+
