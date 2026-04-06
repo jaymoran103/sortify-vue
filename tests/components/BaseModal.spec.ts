@@ -16,8 +16,8 @@ function mountModal(pinia: ReturnType<typeof createPinia>) {
     global: {
       plugins: [pinia],
       stubs: {
-        Teleport: false,
-        Transition: false,
+        Teleport: true,
+        Transition: true,
       },
     },
     attachTo: document.body,
@@ -55,6 +55,29 @@ describe('BaseModal', () => {
     await flushPromises()
     expect(wrapper.findComponent(DummyContent).text()).toContain('Hello!')
     store.closeModal()
+    wrapper.unmount()
+  })
+
+  it('closes on backdrop click', async () => {
+    const store = useUiStore()
+    store.openModal({ component: DummyContent })
+    const wrapper = mountModal(pinia)
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const backdrop = wrapper.find('.modal-backdrop')
+    expect(backdrop.exists()).toBe(true)
+    await backdrop.trigger('click')
+    expect(store.activeModal).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('closes on Escape key', async () => {
+    const store = useUiStore()
+    store.openModal({ component: DummyContent })
+    const wrapper = mountModal(pinia)
+    await flushPromises()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(store.activeModal).toBeNull()
     wrapper.unmount()
   })
 

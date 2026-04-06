@@ -53,4 +53,14 @@ describe('useKeyboardShortcuts', () => {
     expect(escHandler).toHaveBeenCalledOnce()
     expect(enterHandler).toHaveBeenCalledOnce()
   })
+
+  it('prevents default for cmd combos', () => {
+    const handler = vi.fn()
+    useKeyboardShortcuts({ 'cmd+s': handler })
+    // Simulate cmd on mac (metaKey) or ctrl
+    const e = new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true })
+    const spy = vi.spyOn(e, 'preventDefault')
+    document.dispatchEvent(e)
+    expect(spy).toHaveBeenCalled()
+  })
 })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import { useUiStore } from '@/stores/ui'
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 
 const uiStore = useUiStore()
 const modalShell = ref<HTMLElement | null>(null)
@@ -54,14 +55,22 @@ function handleClose(result?: unknown): void {
   uiStore.closeModal(result)
 }
 
+useKeyboardShortcuts({
+  escape: () => {
+    if (uiStore.activeModal) handleClose()
+  },
+})
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="modal">
       <!-- Modal backdrop -->
-      <div v-if="uiStore.activeModal" class="modal-backdrop" @click.self="handleClose()" >
-
+      <div
+        v-if="uiStore.activeModal"
+        class="modal-backdrop"
+        @click.self="handleClose()"
+      >
         <!-- Modal shell -->
         <div
           ref="modalShell"

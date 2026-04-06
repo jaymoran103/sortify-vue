@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { getImporter } from '@/adapters/registry'
+import ProgressBar from '@/components/common/ProgressBar.vue'
 import type { ImportResult } from '@/types/adapters'
 
 const emit = defineEmits<{
@@ -73,6 +74,7 @@ async function handleFile(e: Event): Promise<void> {
 
     <div v-else-if="isImporting" class="import-modal__body">
       <p class="text-muted">Importing&hellip;</p>
+      <ProgressBar :progress="progress" />
     </div>
 
     <div v-else-if="result" class="import-modal__body">

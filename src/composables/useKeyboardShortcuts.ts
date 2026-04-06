@@ -2,10 +2,6 @@ import { onBeforeUnmount, getCurrentInstance } from 'vue'
 
 type ShortcutMap = Record<string, (e: KeyboardEvent) => void>
 
-function isMac(): boolean {
-  return typeof navigator !== 'undefined' && /mac/i.test(navigator.platform)
-}
-
 function parseCombo(combo: string): {
   key: string
   meta: boolean
@@ -26,7 +22,7 @@ function matchesCombo(
   e: KeyboardEvent,
   parsed: ReturnType<typeof parseCombo>,
 ): boolean {
-  const cmdPressed = isMac() ? e.metaKey : e.ctrlKey
+  const cmdPressed = e.metaKey || e.ctrlKey
   if (parsed.meta !== cmdPressed) return false
   if (parsed.shift !== e.shiftKey) return false
   if (parsed.alt !== e.altKey) return false
