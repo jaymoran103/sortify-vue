@@ -14,7 +14,14 @@ const emit = defineEmits<{
 
 <template>
   <div class="search-bar">
-    <span class="search-bar__icon" aria-hidden="true">⌕</span>
+    <span 
+    class="search-bar__icon" 
+    aria-hidden="true" 
+    style="font-size: var(--font-size-xl);"
+    >
+      ⌕
+    </span>
+
     <input
       type="search"
       class="search-bar__input"
@@ -27,6 +34,7 @@ const emit = defineEmits<{
       class="search-bar__clear"
       aria-label="Clear search"
       @click="emit('update:modelValue', '')"
+      style="font-size: var(--font-size-lg);"
     >
       ✕
     </button>

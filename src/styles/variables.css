@@ -39,7 +39,7 @@
   /* ── Interactive States ── */
   --color-row-hover: var(--gray-600);
   --color-row-selected: var(--gray-500);
-  --color-focus-ring: var(--blue-400);
+  --color-focus-ring: var(--green-400);
 
   /* ── Spacing Scale (4px base) ── */
   --space-1: 0.25rem;   /* 4px */
