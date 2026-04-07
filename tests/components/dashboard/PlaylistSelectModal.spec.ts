@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
@@ -22,7 +22,8 @@ vi.mock('@/stores/playlists', () => ({
   usePlaylistStore: () => ({ playlists }),
 }))
 
-// Use html stub to allow testing without a real ScrollableList implementation
+
+// Use html stub to to render all items directly: avoids virtualizer needing a DOM scroll container
 // FUTURE: Ensure format matches actual ScrollableList usage and structure
 const ScrollableListStub = {
   props: ['items', 'keyField', 'estimateSize', 'overscan'],
@@ -52,6 +53,10 @@ function mountModal() {
 }
 
 describe('PlaylistSelectModal', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('renders playlists as selectable items', () => {
     const wrapper = mountModal()
     expect(wrapper.text()).toContain('Blues Mix')
@@ -85,6 +90,26 @@ describe('PlaylistSelectModal', () => {
 
     const openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
     expect((openBtn.element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('clicking two items selects both (checkbox / multi-select semantics)', async () => {
+    const wrapper = mountModal()
+    const items = wrapper.findAll('.selectable-item')
+    await items[0]!.trigger('click')
+    await items[1]!.trigger('click')
+
+    const openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
+    expect(openBtn.text()).toContain('2')
+  })
+
+  it('clicking a selected item deselects it', async () => {
+    const wrapper = mountModal()
+    const items = wrapper.findAll('.selectable-item')
+    await items[0]!.trigger('click') // select
+    await items[0]!.trigger('click') // deselect
+
+    const openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
+    expect((openBtn.element as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('shows selected count in confirm button label', async () => {
@@ -125,5 +150,102 @@ describe('PlaylistSelectModal', () => {
 
     expect(wrapper.text()).toContain('Blues Mix')
     expect(wrapper.findAll('.selectable-item').length).toBe(1)
+  })
+
+  it('renders a sort dropdown', () => {
+    const wrapper = mountModal()
+    expect(wrapper.find('select').exists()).toBe(true)
+  })
+
+  it('sort dropdown has Name and Track Count options', () => {
+    const wrapper = mountModal()
+    const options = wrapper.findAll('select option')
+    const labels = options.map((o) => o.text())
+    expect(labels).toContain('Name')
+    expect(labels).toContain('Track Count')
+  })
+
+  it('renders Select All button', () => {
+    const wrapper = mountModal()
+    const btn = wrapper.findAll('button').find((b) => b.text().includes('Select All'))
+    expect(btn).toBeTruthy()
+  })
+
+  it('Select All selects all visible items', async () => {
+    const wrapper = mountModal()
+    const selectAllBtn = wrapper.findAll('button').find((b) => b.text().includes('Select All'))!
+    await selectAllBtn.trigger('click')
+
+    const openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
+    expect(openBtn.text()).toContain('3')
+  })
+
+  it('Select All becomes Deselect All when all items are selected', async () => {
+    const wrapper = mountModal()
+    const selectAllBtn = wrapper.findAll('button').find((b) => b.text().includes('Select All'))!
+    await selectAllBtn.trigger('click')
+
+    const deselectBtn = wrapper.findAll('button').find((b) => b.text().includes('Deselect All'))
+    expect(deselectBtn).toBeTruthy()
+  })
+
+  it('Deselect All clears selection', async () => {
+    const wrapper = mountModal()
+    const selectAllBtn = wrapper.findAll('button').find((b) => b.text().includes('Select All'))!
+    await selectAllBtn.trigger('click')
+    const deselectBtn = wrapper.findAll('button').find((b) => b.text().includes('Deselect All'))!
+    await deselectBtn.trigger('click')
+
+    const openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
+    expect((openBtn.element as HTMLButtonElement).disabled).toBe(true)
+  })
+
+
+  it ('Selection is preserved when filtering or sorting', async () => {
+    const wrapper = mountModal()
+    const items = wrapper.findAll('.selectable-item')
+    await items[0]!.trigger('click') // select first item
+
+    // Apply a filter that still includes the selected item
+    const searchInput = wrapper.find('input')
+    await searchInput.setValue('mix')
+    await new Promise((r) => setTimeout(r, 250))
+    await wrapper.vm.$nextTick()
+
+    let openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
+    expect(openBtn.text()).toContain('1') // still 1 selected
+
+    // Change sort order
+    const sortSelect = wrapper.find('select')
+    await sortSelect.setValue('trackCount')
+    await wrapper.vm.$nextTick()
+
+    openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
+    expect(openBtn.text()).toContain('1') // still 1 selected
+  })  
+
+
+  // NOTE: Should fail until selection updates are decoupled from display scope
+  it ('Selections persist regardless of display scope)', async () => {
+    const wrapper = mountModal()
+    const items = wrapper.findAll('.selectable-item')
+    await items[0]!.trigger('click') // select first item
+
+    // Apply a filter that excludes the selected item
+    const searchInput = wrapper.find('input')
+    await searchInput.setValue('workout')
+    await new Promise((r) => setTimeout(r, 250))
+    await wrapper.vm.$nextTick()
+
+    let openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
+    expect(openBtn.text()).toContain('1') // still 1 selected, even though it's filtered out
+
+    // Change sort order
+    const sortSelect = wrapper.find('select')
+    await sortSelect.setValue('trackCount')
+    await wrapper.vm.$nextTick()
+
+    openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
+    expect(openBtn.text()).toContain('1')
   })
 })

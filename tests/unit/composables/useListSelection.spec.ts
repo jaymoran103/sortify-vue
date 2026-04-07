@@ -121,3 +121,44 @@ describe('useListSelection', () => {
     expect(selectedIds.value.has('b')).toBe(true)
   })
 })
+
+describe('useListSelection — selectMultiple option', () => {
+  it('plain click toggles without clearing others', () => {
+    const items = makeItems()
+    const { toggle, selectedIds } = useListSelection(items, keyFn, { selectMultiple: true })
+    toggle('a')
+    toggle('b')
+    expect(selectedIds.value.has('a')).toBe(true)
+    expect(selectedIds.value.has('b')).toBe(true)
+    expect(selectedIds.value.size).toBe(2)
+  })
+
+  it('plain click on selected item deselects it', () => {
+    const items = makeItems()
+    const { toggle, selectedIds } = useListSelection(items, keyFn, { selectMultiple: true })
+    toggle('a')
+    toggle('a')
+    expect(selectedIds.value.has('a')).toBe(false)
+    expect(selectedIds.value.size).toBe(0)
+  })
+
+  it('shift-range select still works with selectMultiple', () => {
+    const items = makeItems()
+    const { toggle, selectedIds } = useListSelection(items, keyFn, { selectMultiple: true })
+    toggle('a')
+    toggle('c', { metaKey: false, ctrlKey: false, shiftKey: true } as MouseEvent)
+    expect(selectedIds.value.has('a')).toBe(true)
+    expect(selectedIds.value.has('b')).toBe(true)
+    expect(selectedIds.value.has('c')).toBe(true)
+    expect(selectedIds.value.has('d')).toBe(false)
+  })
+
+  it('default (no option) still clears on plain click', () => {
+    const items = makeItems()
+    const { toggle, selectedIds } = useListSelection(items, keyFn)
+    toggle('a')
+    toggle('b')
+    expect(selectedIds.value.has('a')).toBe(false)
+    expect(selectedIds.value.size).toBe(1)
+  })
+})
