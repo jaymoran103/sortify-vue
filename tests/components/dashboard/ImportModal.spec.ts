@@ -15,10 +15,10 @@ describe('ImportModal', () => {
     })
   })
 
-  it('renders file input and format hint', () => {
+  it('renders file input with multiple attribute', () => {
     const wrapper = mount(ImportModal)
-    expect(wrapper.find('input[type="file"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Supported formats')
+    const input = wrapper.find('input[type="file"]')
+    expect(input.attributes('multiple')).toBeDefined()
   })
 
   it('Cancel button emits cancel', async () => {
@@ -59,19 +59,23 @@ describe('ImportModal', () => {
     expect(registry.getImporter).toHaveBeenCalledWith('json')
   })
 
-  it('shows summary on completion', async () => {
-    mockImport.mockResolvedValue({ tracksImported: 42, playlistsImported: 3, errors: [] })
+  it('accumulates results from multiple files', async () => {
+    // First call returns csv result, second call returns json result
+    vi.spyOn(registry, 'getImporter')
+      .mockReturnValueOnce({ key: 'csv', label: 'CSV File', import: vi.fn().mockResolvedValue({ tracksImported: 10, playlistsImported: 0, errors: [] }) })
+      .mockReturnValueOnce({ key: 'json', label: 'JSON Bundle', import: vi.fn().mockResolvedValue({ tracksImported: 5, playlistsImported: 2, errors: [] }) })
 
     const wrapper = mount(ImportModal)
     const input = wrapper.find('input[type="file"]')
 
-    const file = new File(['a,b'], 'data.csv', { type: 'text/csv' })
-    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    const csvFile = new File(['a,b'], 'tracks.csv', { type: 'text/csv' })
+    const jsonFile = new File(['{}'], 'bundle.json', { type: 'application/json' })
+    Object.defineProperty(input.element, 'files', { value: [csvFile, jsonFile], configurable: true })
     await input.trigger('change')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('42')
-    expect(wrapper.text()).toContain('3')
+    // Should show combined 15 tracks
+    expect(wrapper.text()).toContain('15')
   })
 
   it('shows Done button label after successful import', async () => {

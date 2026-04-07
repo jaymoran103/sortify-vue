@@ -249,14 +249,28 @@ export const csvImportAdapter: ImportAdapter<CsvImportOptions> = {
     let totalPlaylistsImported = 0
     const allErrors: string[] = []
 
-    for (const file of options.files) {
+    for (let fileIdx = 0; fileIdx < options.files.length; fileIdx++) {
+      const file = options.files[fileIdx]!
       const text = await file.text()
       const playlistName = file.name.replace(/\.csv$/i, '')
-      const result = await importCsvText(text, playlistName, onProgress)
+      // Normalise per-file row-level progress into a 0→N scale (N = file count) so the caller
+      // receives smooth overall progress rather than a 0→1 reset for each file.
+
+      // Normalize per-file progress into a 0->N scale, so the progress callback receives smoother overall progress throughout the batch. 
+      // This method doesn't differentiate between row types. Treating all CSV and JSON files as the same weight may mean the normalized progress may not be linear, with consistent steps but variable waits between them, especially during the JSON batch.
+      // More accurate updates would require more adapter overhead, this caveat isn't a concern here. FUTURE: Generalize units. May estimate total tracks, sniff json files and adjust weight accordingly, or find a more granular unit to report on.  
+      const wrappedProgress = onProgress
+        ? (rowDone: number, rowTotal: number) => {
+            const fraction = rowTotal > 0 ? rowDone / rowTotal : 0
+            onProgress(fileIdx + fraction, options.files.length)
+          }
+        : undefined
+      const result = await importCsvText(text, playlistName, wrappedProgress)
       totalTracksImported += result.tracksImported
       totalPlaylistsImported += result.playlistsImported
       allErrors.push(...result.errors)
     }
+    if (onProgress) onProgress(options.files.length, options.files.length)
 
     return {
       tracksImported: totalTracksImported,
