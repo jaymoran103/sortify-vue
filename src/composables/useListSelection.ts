@@ -1,4 +1,4 @@
-import { ref, computed, watch, shallowRef, type Ref, type ComputedRef } from 'vue'
+import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 
 export interface ListSelectionOptions {
   /** selectMultiple:
@@ -6,19 +6,20 @@ export interface ListSelectionOptions {
   When true, plain click toggles just the clicked item (checkbox semantics) */
   selectMultiple?: boolean
 
-  /** selectedFirst: when true, selected items sort to the top of displayItems whenever the source items list changes (sort/filter event). 
-   * Selection interactions do NOT trigger re-ordering — only list content changes do, preserving focus stability during interaction. */
-  selectedFirst?: boolean
-
   // FUTURE: could be used to conditionally show select all button in UI, but doesn't affect logic for now
   //showSelectAll?: boolean 
 }
 
 // Composable for managing list selection state and interactions (click, shift-click, ctrl/cmd-click).
+// validItems: optional authoritative source for pruning 
+//  - defaults to items if omitted.
+//  - Passing the full unfiltered dataset here means that filtering items out doesn't deselect them.
+//  - items still governs selectAll scope and display ordering.
 export function useListSelection<T>(
   items: Ref<T[]> | ComputedRef<T[]>,
   keyFn: (item: T) => string,
   options?: ListSelectionOptions,
+  validItems?: Ref<T[]> | ComputedRef<T[]>,
 ): {
   selectedIds: Ref<Set<string>>
   lastSelectedIndex: Ref<number>
@@ -27,14 +28,15 @@ export function useListSelection<T>(
   clear: () => void
   isSelected: (id: string) => boolean
   selectedCount: ComputedRef<number>
-  displayItems: Ref<T[]>
 } {
   const selectedIds = ref<Set<string>>(new Set())
   const lastSelectedIndex = ref(-1)
 
-  // Prune ghost selections and reset last index when items change
+  // Prune ghost selections when items are removed from the data source.
+  // Uses validItems if provided (full dataset) so that filtering does not cause deselection.
+  const pruneSource = validItems ?? items
   watch(
-    () => items.value.map(keyFn),
+    () => pruneSource.value.map(keyFn),
     (currentKeys) => {
       const keySet = new Set(currentKeys)
       const pruned = new Set<string>()
@@ -95,7 +97,12 @@ export function useListSelection<T>(
   }
 
   function selectAll(): void {
-    selectedIds.value = new Set(items.value.map(keyFn))
+    // Add all currently visible items to the selection without clearing filtered-out selections (union)
+    const next = new Set(selectedIds.value)
+    for (const item of items.value) {
+      next.add(keyFn(item))
+    }
+    selectedIds.value = next
   }
   // Clear selection, reset last index
   function clear(): void {
@@ -109,27 +116,6 @@ export function useListSelection<T>(
 
   const selectedCount = computed(() => selectedIds.value.size)
 
-  // displayItems mirrors items (sorted/filtered). When selectedFirst is enabled, selected items
-  // are sorted to the top whenever the source list changes. Selection changes do NOT trigger
-  // a re-order — only sort/filter events do, matching the intended vanilla behaviour.
-  const displayItems = shallowRef<T[]>([...items.value])
-  watch(
-    items,
-    (newItems) => {
-      if (options?.selectedFirst) {
-        const ids = selectedIds.value
-        displayItems.value = [...newItems].sort((a, b) => {
-          const aSelected = ids.has(keyFn(a)) ? 0 : 1
-          const bSelected = ids.has(keyFn(b)) ? 0 : 1
-          return aSelected - bSelected
-        })
-      } else {
-        displayItems.value = [...newItems]
-      }
-    },
-    { immediate: true },
-  )
-
   return {
     selectedIds,
     lastSelectedIndex,
@@ -138,6 +124,5 @@ export function useListSelection<T>(
     clear,
     isSelected,
     selectedCount,
-    displayItems,
   }
 }

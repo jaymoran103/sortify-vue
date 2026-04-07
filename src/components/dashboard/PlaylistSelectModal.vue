@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useListFilter } from '@/composables/useListFilter'
@@ -21,7 +21,7 @@ const emit = defineEmits<{
 const router = useRouter()
 const playlistStore = usePlaylistStore()
 
-// Get all playlists from the store, then chain filter, sort, and selection composables.
+// Get all playlists from the store, then chain filter and sort composables.
 const allPlaylists = computed((): Playlist[] => playlistStore.playlists ?? [])
 
 // Define sort options. Not emphasizing variety like asc/desc or many extra qualities. FUTURE: Add variety here once selected items have more relevant fields
@@ -31,28 +31,42 @@ const sortOptions: SortOption<Playlist>[] = [
   // { key: 'createdAt', label: 'Time Created', compareFn: (a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0) },
 ]
 
-// Filter first, reducing set size.
+
+// Pure transformation pipeline: allPlaylists -> filtered -> sorted.
 const { query, filtered } = useListFilter<Playlist>(
   allPlaylists,
   (item, q) => item.name.toLowerCase().includes(q.toLowerCase()),
 )
-// Sort second, based on sortOptions and current selection.
 const { currentSort, sorted } = useListSort<Playlist>(filtered, sortOptions)
 
-
-// Then handle selection. Selection operates on the final displayed list, so it won't get messed up by filtering or sorting.
-// TODO: This is not a pure transformation, should not be chained when selection is orthogonal to display scope.
-//       Will fix with an additional reference set to serve as the basis for selection, decouplng from display logic.
-// NOTE: Current state causes test 'Selections persist regardless of display scope)' to fail.
+// Determine selection state: orthogonal to the display pipeline.
+// Pruning uses the data source, not the display list, so filtering does not cause phantom deselection.
 const selection = useListSelection<Playlist>(
   sorted, (item) => String(item.id!),
-  { selectMultiple: true, selectedFirst: true },
+  { selectMultiple: true },
+  allPlaylists,
 )
-const { displayItems } = selection
 
-// Compute whether all currently sorted/filtered playlists are selected.
+// Determine displayItems: sorted output prioritizing selections is applied on pipeline change
+// Implemented as a watch (not computed) so that selection changes do not trigger a re-render. Only manual control updates (sort/filter) will reorder the list, so results don't jump around during selection. 
+const displayItems = shallowRef<Playlist[]>([])
+watch(
+  sorted,
+  (newSorted) => {
+    const ids = selection.selectedIds.value // non-reactive snapshot: not a watch dependency
+    displayItems.value = [...newSorted].sort((a, b) => {
+      return (ids.has(String(a.id!)) ? 0 : 1) - (ids.has(String(b.id!)) ? 0 : 1)
+    })
+  },
+  { immediate: true },
+)
+
+// allSelected: true when every currently visible (sorted/filtered) item is selected.
+// NOTE: Items that are selected but not displayed don't factor into this computation. This is intentional. 
 const allSelected = computed(
-  () => sorted.value.length > 0 && selection.selectedCount.value === sorted.value.length,
+  () =>
+    sorted.value.length > 0 &&
+    sorted.value.every((item) => selection.isSelected(String(item.id!))),
 )
 
 // Toggle select all/deselect all based on current state.
