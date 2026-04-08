@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ContextMenu from '@/components/common/ContextMenu.vue'
@@ -76,13 +76,16 @@ describe('ContextMenu', () => {
   })
 
   it('clicking outside closes menu', async () => {
+    vi.useFakeTimers()
     const ctx = useContextMenu()
     ctx.show(makeMouseEvent(), items)
     const wrapper = mountContextMenu()
     await wrapper.vm.$nextTick()
+    vi.runAllTimers() // flush setTimeout(0) that attaches the outside-click listener
     expect(ctx.isOpen.value).toBe(true)
     document.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     expect(ctx.isOpen.value).toBe(false)
+    vi.useRealTimers()
     wrapper.unmount()
   })
 })

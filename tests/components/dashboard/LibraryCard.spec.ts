@@ -55,9 +55,18 @@ describe('LibraryCard', () => {
   })
 
   it('displays track count from store', () => {
-    mockTracks = [{ trackID: 'a' }, { trackID: 'b' }, { trackID: 'c' }]
+    mockPlaylists = [{ id: 1, name: 'A', trackIDs: ['a', 'b', 'c'] }]
     const wrapper = mountCard()
-    expect(wrapper.text()).toContain('3 tracks')
+    expect(wrapper.text().toLowerCase()).toContain('3total tracks')
+  })
+
+  it('displays unique track count from store', () => {
+    mockPlaylists = [
+      { id: 1, name: 'A', trackIDs: ['a', 'b', 'c'] },
+      { id: 2, name: 'B', trackIDs: ['b', 'c', 'd'] },
+    ]
+    const wrapper = mountCard()
+    expect(wrapper.text().toLowerCase()).toContain('4unique tracks')
   })
 
   it('displays playlist count from store', () => {
@@ -66,7 +75,7 @@ describe('LibraryCard', () => {
       { id: 2, name: 'Rock', trackIDs: [] },
     ]
     const wrapper = mountCard()
-    expect(wrapper.text()).toContain('2 playlists')
+    expect(wrapper.text().toLowerCase()).toContain('2playlists')
   })
 
   it('renders each playlist name', () => {

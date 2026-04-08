@@ -9,7 +9,7 @@ const menuEl = ref<HTMLElement | null>(null)
   
 // State management for outside click listener
 let removeClickListener: (() => void) | null = null
-let attachTimer: ReturnType<typeof setTimeout> | null = null
+let attachTimer: number | null = null
 
 // Handle menu item click
 function handleClick(entry: MenuItem): void {
