@@ -46,6 +46,7 @@ watch(enableProfile, (enabled) => {
 
 // ── Playlist selection (inline, mirrors PlaylistSelectModal) ──────────────────
 // FUTURE: Extract selection body into a shared component to avoid drift between the modals?
+
 const playlistStore = usePlaylistStore()
 const allPlaylists = computed((): Playlist[] => playlistStore.playlists ?? [])
 
@@ -176,9 +177,14 @@ async function handleExport(): Promise<void> {
         <label class="io-modal__label">Format</label>
         <SortDropdown v-model="format" :options="formatOptions" />
       </div>
-      <div v-if="enableProfile" class="io-modal__field">
+      <div class="io-modal__field">
         <label class="io-modal__label">Profile</label>
-        <SortDropdown v-model="profile" :options="profileOptions" />
+        <SortDropdown v-model="profile" 
+          :options="profileOptions" 
+          :disabled="!enableProfile" 
+          :title="!enableProfile ? 'JSON Bundles include all fields' : ''" 
+        />   
+        <!-- NOTE: tooltip assumes selection of JSON Bundle is responsible for disabling this dropdown -->  
       </div>
       <p v-if="errorMsg" class="io-modal__error">{{ errorMsg }}</p>
     </div>

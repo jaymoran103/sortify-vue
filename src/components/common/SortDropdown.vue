@@ -11,15 +11,20 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <select
-    class="sort-dropdown dropdown"
-    :value="modelValue"
-    @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
-  >
-    <option v-for="opt in options" :key="opt.key" :value="opt.key">
-      {{ opt.label }}
-    </option>
-  </select>
+  <div class="dropdown-wrapper">
+    <select
+      class="sort-dropdown dropdown"
+      :value="modelValue"
+      :disabled="disabled"
+      @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
+    >
+      <option v-for="opt in options" :key="opt.key" :value="opt.key">
+        {{ opt.label }}
+      </option>
+    </select>
+    
+    <!-- <span class="dropdown-icon">▾</span> -->
+
+  </div>
 </template>
 
-<!-- sort-dropdown class styled globally in utilities.css -->

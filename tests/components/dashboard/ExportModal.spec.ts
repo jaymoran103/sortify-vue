@@ -3,7 +3,6 @@ import { mount, flushPromises, disableAutoUnmount } from '@vue/test-utils'
 import ExportModal from '@/components/dashboard/ExportModal.vue'
 import * as registry from '@/adapters/registry'
 import type { Playlist } from '@/types/models'
-import { deprecate } from 'util'
 
 const mockExport = vi.fn()
 
@@ -67,12 +66,13 @@ describe('ExportModal', () => {
     expect(wrapper.text()).toContain('Profile')
   })
 
-  it('hides profile dropdown for JSON format', async () => {
+  it('disables profile dropdown when JSON format selected', async () => {
     const wrapper = mount(ExportModal, mountOptions())
     await toOptionsStep(wrapper)
     const selects = wrapper.findAll('select')
     await selects[0]!.setValue('json')
-    expect(wrapper.text()).not.toContain('Profile')
+    // Profile is the second select; it should be disabled when JSON is chosen
+    expect((selects[1]!.element as HTMLSelectElement).disabled).toBe(true)
   })
 
   it('calls getExporter with selected format on export click', async () => {
