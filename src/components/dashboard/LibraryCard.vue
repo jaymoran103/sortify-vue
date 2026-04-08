@@ -132,6 +132,7 @@ function showManagementMenu(event: MouseEvent): void {
         <button
           class="library-card__toggle-btn"
           :class="{ 'library-card__toggle-btn--active': activeView === 'playlists' }"
+          toggle-mode="tracks-playlists"
           @click="activeView = 'playlists'"
         >
           Playlists
@@ -139,6 +140,7 @@ function showManagementMenu(event: MouseEvent): void {
         <button
           class="library-card__toggle-btn"
           :class="{ 'library-card__toggle-btn--active': activeView === 'tracks' }"
+          toggle-mode="tracks-view"
           @click="activeView = 'tracks'"
         >
           Tracks
@@ -166,6 +168,7 @@ function showManagementMenu(event: MouseEvent): void {
       <template #actions>
         <button
           class="btn btn--secondary library-card__menu-btn"
+          toggle-mode="management-menu"
           title="Manage library"
           @click="showManagementMenu"
         >
