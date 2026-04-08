@@ -4,14 +4,21 @@ import { getImporter } from '@/adapters/registry'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import type { ImportResult } from '@/types/adapters'
 
+type Step = 'source' | 'files' | 'progress' | 'done'
+
 const emit = defineEmits<{
   cancel: []
 }>()
 
-const isImporting = ref(false)
+// State variables to track current step of the import process, progress percentage, import results, and any error messages.
+const step = ref<Step>('source')
 const progress = ref<number>(-1)
 const result = ref<ImportResult | null>(null)
 const errorMsg = ref<string | null>(null)
+
+function selectLocalFiles(): void {
+  step.value = 'files'
+}
 
 // Main file handling function: CSVs are batched into one adapter call; each JSON is imported individually.
 // Handles UI state for importing process and any errors that occur.
@@ -33,7 +40,7 @@ async function handleFiles(e: Event): Promise<void> {
     return
   }
 
-  isImporting.value = true
+  step.value = 'progress'
   errorMsg.value = null
   progress.value = -1
 
@@ -84,33 +91,56 @@ async function handleFiles(e: Event): Promise<void> {
     }
 
     result.value = accumulated
+    step.value = 'done'
   } catch (err) {
     errorMsg.value = (err as Error).message
-  } finally {
-    isImporting.value = false
+    step.value = 'files'
   }
 }
 </script>
 
 <template>
-  <div class="import-modal">
-    <h2 class="import-modal__title">Import Tracks</h2>
+  <div class="io-modal">
+    <h2 class="io-modal__title">Import</h2>
 
-    <div v-if="!isImporting && !result" class="import-modal__body">
-      <label class="btn btn--secondary import-modal__file-label">
+    <!-- Step: source picker -->
+    <div v-if="step === 'source'" class="io-modal__body">
+      <p class="text-muted text-sm">Where are you importing from?</p>
+      <div class="source-card-grid">
+
+        <!-- Local Files Option -->
+        <button class="source-card" @click="selectLocalFiles">
+          <span class="source-card__label">Local Files</span>
+          <span class="source-card__hint">CSV or JSON</span>
+        </button>
+
+        <!-- Spotify Option: disabled stub-->
+        <button class="source-card" disabled>
+          <span class="source-card__label">Spotify</span>
+          <!-- <span class="source-card__badge">Coming soon</span> -->
+          <span class="source-card__hint">(Coming soon)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step: file picker -->
+    <div v-else-if="step === 'files'" class="io-modal__body">
+      <label class="btn btn--secondary io-modal__file-label">
         Choose Files
         <input type="file" accept=".csv,.json" multiple hidden @change="handleFiles" />
       </label>
-      <p class="text-muted import-modal__hint">Supported formats: CSV, JSON.</p>
-      <p v-if="errorMsg" class="import-modal__error">{{ errorMsg }}</p>
+      <p class="text-muted text-sm">Supported formats: CSV, JSON.</p>
+      <p v-if="errorMsg" class="io-modal__error">{{ errorMsg }}</p>
     </div>
 
-    <div v-else-if="isImporting" class="import-modal__body">
+    <!-- Step: progress -->
+    <div v-else-if="step === 'progress'" class="io-modal__body">
       <p class="text-muted">Importing&hellip;</p>
       <ProgressBar :progress="progress" />
     </div>
 
-    <div v-else-if="result" class="import-modal__body">
+    <!-- Step: done -->
+    <div v-else-if="step === 'done' && result" class="io-modal__body">
       <p>
         Imported <strong>{{ result.tracksImported }}</strong> track{{
           result.tracksImported !== 1 ? 's' : ''
@@ -121,53 +151,24 @@ async function handleFiles(e: Event): Promise<void> {
           result.playlistsImported !== 1 ? 's' : ''
         }}
       </p>
-      <p v-if="result.errors.length > 0" class="import-modal__error">
+      <p v-if="result.errors.length > 0" class="io-modal__error">
         {{ result.errors.length }} error(s) during import
       </p>
     </div>
 
-    <div class="import-modal__footer">
+    <div class="io-modal__footer">
+      <button v-if="step !== 'source' && step !== 'done'" class="btn btn--ghost" @click="step = 'source'">
+        Back
+      </button>
       <button class="btn btn--secondary" @click="emit('cancel')">
-        {{ result ? 'Done' : 'Cancel' }}
+        {{ step === 'done' ? 'Done' : 'Cancel' }}
       </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.import-modal {
-  padding: var(--space-5);
-  min-width: 360px;
-}
-
-.import-modal__title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-4);
-}
-
-.import-modal__body {
-  margin-bottom: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.import-modal__hint {
-  font-size: var(--font-size-sm);
-}
-
-.import-modal__error {
-  color: var(--color-danger);
-  font-size: var(--font-size-sm);
-}
-
-.import-modal__footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.import-modal__file-label {
+.io-modal__file-label {
   cursor: pointer;
   align-self: flex-start;
 }
