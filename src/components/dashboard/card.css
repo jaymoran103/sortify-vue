@@ -27,8 +27,8 @@
 
 .dashboard-card__footer {
   flex-shrink: 0;
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: var(--space-3);
+  /* border-top: 1px solid var(--color-border-subtle); */
+  padding-top: var(--space-1);
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   display: flex;

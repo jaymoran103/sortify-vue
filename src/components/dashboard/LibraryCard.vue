@@ -122,11 +122,12 @@ function showManagementMenu(event: MouseEvent): void {
 <template>
   <div class="dashboard-card library-card">
 
-    <!-- Header Section-->
+    <!-- Card Header-->
     <div class="dashboard-card__header">
       <h2 class="dashboard-card__title">Library</h2>
-      
-      
+
+      <!-- View toggle: Playlists / Tracks -->
+      <!-- Moved from control bar for better spacing, header may not be a permanent home if 'open' button is reintroduced here -->
       <div class="library-card__view-toggle">
         <button
           class="library-card__toggle-btn"
@@ -249,6 +250,27 @@ function showManagementMenu(event: MouseEvent): void {
   min-height: 300px;
 }
 
+.library-card .control-bar {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-0);
+  border-bottom: none;
+}
+
+.library-card .control-bar__controls {
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.library-card .search-bar {
+  flex: 1;
+  min-width: 0;
+}
+
+.library-card .search-bar__input {
+  min-width: 0;
+}
+
 .library-card__open-btn {
   font-size: var(--font-size-sm);
   padding: var(--space-1) var(--space-3);
@@ -256,11 +278,14 @@ function showManagementMenu(event: MouseEvent): void {
 
 .library-card__list {
   flex: 1;
-  min-height: 120px;
+  min-height: 140px;
 }
 
 /* ── View toggle ── */
 .library-card__view-toggle {
+  display: flex;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
@@ -296,7 +321,7 @@ function showManagementMenu(event: MouseEvent): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2);
+  padding: var(--space-5);
   font-size: var(--font-size-sm);
 }
 
@@ -319,9 +344,24 @@ function showManagementMenu(event: MouseEvent): void {
   flex-shrink: 0;
 }
 
-.library-card__list  {
+.library-card__empty {
+  width: 100%;
+  min-height: 5rem;
+  padding: var(--space-1);
+  text-align: left;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.library-card__list .scrollable-list__empty {
   align-items: flex-start;
   justify-content: flex-start;
   padding: var(--space-4);
+}
+.library-card__empty p {
+  margin: 0 0 var(--space-2);
+}
+.library-card__empty p:last-child {
+  margin-bottom: 0;
 }
 </style>

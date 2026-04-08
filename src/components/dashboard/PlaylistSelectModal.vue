@@ -160,6 +160,8 @@ function confirmSelection(): void {
 .playlist-select__list {
   height: 320px;
   overflow: hidden;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .playlist-select__footer {

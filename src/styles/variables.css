@@ -42,6 +42,7 @@
   --color-focus-ring: var(--green-400);
 
   /* ── Spacing Scale (4px base) ── */
+  --space-0: 0rem;   /* 0px */
   --space-1: 0.25rem;   /* 4px */
   --space-2: 0.5rem;    /* 8px */
   --space-3: 0.75rem;   /* 12px */

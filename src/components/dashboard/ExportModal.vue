@@ -241,10 +241,11 @@ async function handleExport(): Promise<void> {
 }
 
 .io-modal__list {
-  flex: 1;
   min-height: 0;
   height: 220px;
   overflow: hidden;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .io-modal__select-all {
