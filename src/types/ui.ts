@@ -3,7 +3,7 @@ import type { Component } from 'vue'
 /** Generic filter function — consumers define domain-specific matching logic */
 export type FilterFn<T> = (item: T, query: string) => boolean
 
-/** Sort option for SortDropdown — consumers define their own sort menus */
+/** Sort option for SelectDropdown — consumers define their own sort menus */
 export interface SortOption<T> {
   key: string
   label: string

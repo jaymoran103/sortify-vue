@@ -1,8 +1,10 @@
+<!-- Renamed to SelectDropdown: contains no inherent sort logic or affordance -->
 <script setup lang="ts">
 defineProps<{
   modelValue: string
   options: Array<{ key: string; label: string }>
   disabled?: boolean
+  title?: string
 }>()
 
 const emit = defineEmits<{
@@ -11,9 +13,10 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="dropdown-wrapper">
+  <div class="dropdown-wrapper" 
+  :title="title">
     <select
-      class="sort-dropdown dropdown"
+      class="dropdown"
       :value="modelValue"
       :disabled="disabled"
       @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
@@ -22,9 +25,5 @@ const emit = defineEmits<{
         {{ opt.label }}
       </option>
     </select>
-    
-    <!-- <span class="dropdown-icon">▾</span> -->
-
   </div>
 </template>
-

@@ -5,7 +5,7 @@ import { usePlaylistStore } from '@/stores/playlists'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
-import SortDropdown from '@/components/common/SortDropdown.vue'
+import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
 import SelectableItem from '@/components/common/SelectableItem.vue'
@@ -152,7 +152,7 @@ async function handleExport(): Promise<void> {
     <div v-else-if="step === 'playlists'" class="io-modal__body io-modal__body--playlists">
       <div class="io-modal__list-controls">
         <SearchBar v-model="query" placeholder="Filter playlists…" />
-        <SortDropdown v-model="currentSort" :options="sortOptions" />
+        <SelectDropdown v-model="currentSort" :options="sortOptions" />
       </div>
       <div class="io-modal__list">
         <ScrollableList :items="displayItems" key-field="id" :estimate-size="48">
@@ -175,11 +175,11 @@ async function handleExport(): Promise<void> {
     <div v-else-if="step === 'options'" class="io-modal__body">
       <div class="io-modal__field">
         <label class="io-modal__label">Format</label>
-        <SortDropdown v-model="format" :options="formatOptions" />
+        <SelectDropdown v-model="format" :options="formatOptions" />
       </div>
       <div class="io-modal__field">
         <label class="io-modal__label">Profile</label>
-        <SortDropdown v-model="profile" 
+        <SelectDropdown v-model="profile" 
           :options="profileOptions" 
           :disabled="!enableProfile" 
           :title="!enableProfile ? 'JSON Bundles include all fields' : ''" 

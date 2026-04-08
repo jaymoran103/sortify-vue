@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import SortDropdown from '@/components/common/SortDropdown.vue'
+import SelectDropdown from '@/components/common/SelectDropdown.vue'
 
 const options = [
   { key: 'name-asc', label: 'Name A–Z' },
@@ -8,9 +8,9 @@ const options = [
   { key: 'date', label: 'Date added' },
 ]
 
-describe('SortDropdown', () => {
+describe('SelectDropdown', () => {
   it('renders all options', () => {
-    const wrapper = mount(SortDropdown, {
+    const wrapper = mount(SelectDropdown, {
       props: { modelValue: 'name-asc', options },
     })
     const optionEls = wrapper.findAll('option')
@@ -21,7 +21,7 @@ describe('SortDropdown', () => {
   })
 
   it('selected value matches modelValue prop', () => {
-    const wrapper = mount(SortDropdown, {
+    const wrapper = mount(SelectDropdown, {
       props: { modelValue: 'date', options },
     })
     const select = wrapper.find('select').element as HTMLSelectElement
@@ -29,7 +29,7 @@ describe('SortDropdown', () => {
   })
 
   it('emits update:modelValue on change', async () => {
-    const wrapper = mount(SortDropdown, {
+    const wrapper = mount(SelectDropdown, {
       props: { modelValue: 'name-asc', options },
     })
     await wrapper.find('select').setValue('name-desc')

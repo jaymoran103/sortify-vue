@@ -7,7 +7,7 @@ import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
 
 import ControlBar from '@/components/common/ControlBar.vue'
-import SortDropdown from '@/components/common/SortDropdown.vue'
+import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
 import SelectableItem from '@/components/common/SelectableItem.vue'
@@ -103,7 +103,7 @@ function confirmSelection(): void {
 
     <ControlBar>
       <SearchBar v-model="query" placeholder="Filter playlists…" />
-      <SortDropdown v-model="currentSort" :options="sortOptions" />
+      <SelectDropdown v-model="currentSort" :options="sortOptions" />
     </ControlBar>
 
     <div class="playlist-select__list">
