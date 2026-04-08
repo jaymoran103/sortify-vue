@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { vi } from 'vitest'
 import { createRouter, createWebHashHistory } from 'vue-router'
@@ -15,11 +15,17 @@ let mockTracks: unknown[] = []
 let mockPlaylists: Playlist[] = []
 
 vi.mock('@/stores/tracks', () => ({
-  useTrackStore: () => ({ tracks: mockTracks }),
+  useTrackStore: () => ({ tracks: mockTracks, clearTracks: vi.fn() }),
 }))
 
+const mockUpdatePlaylist = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('@/stores/playlists', () => ({
-  usePlaylistStore: () => ({ playlists: mockPlaylists }),
+  usePlaylistStore: () => ({
+    playlists: mockPlaylists,
+    deletePlaylists: vi.fn(),
+    clearPlaylists: vi.fn(),
+    updatePlaylist: mockUpdatePlaylist,
+  }),
 }))
 
 // Make debounce a pass-through so filter tests run synchronously
@@ -36,6 +42,11 @@ vi.mock('@/composables/useContextMenu', () => ({
     position: { value: { x: 0, y: 0 } },
     entries: { value: [] },
   }),
+}))
+
+const mockModalOpen = vi.hoisted(() => vi.fn().mockResolvedValue(null))
+vi.mock('@/composables/useModal', () => ({
+  useModal: () => ({ open: mockModalOpen, close: vi.fn() }),
 }))
 
 const ScrollableListStub = {
@@ -82,6 +93,9 @@ describe('LibraryCard', () => {
     mockTracks = []
     mockPlaylists = []
     mockContextMenuShow.mockClear()
+    mockModalOpen.mockClear()
+    mockModalOpen.mockResolvedValue(null)
+    mockUpdatePlaylist.mockClear()
   })
 
   it('displays track count from store', () => {
@@ -220,5 +234,33 @@ describe('LibraryCard', () => {
     const wrapper = mountCard()
     await wrapper.find('[toggle-mode="management-menu"]').trigger('click')
     expect(mockContextMenuShow).toHaveBeenCalledOnce()
+  })
+
+  // ── Rename ─────────────────────────────────────────────────────────────────
+  it('renders a rename button for each playlist row', () => {
+    mockPlaylists = [
+      { id: 1, name: 'Blues Mix', trackIDs: [] },
+      { id: 2, name: 'Rock Mix', trackIDs: [] },
+    ]
+    const wrapper = mountCard()
+    expect(wrapper.findAll('.library-card__rename-btn')).toHaveLength(2)
+  })
+
+  it('clicking rename opens modal with the correct playlist', async () => {
+    mockPlaylists = [{ id: 3, name: 'Jazz Night', trackIDs: [] }]
+    const wrapper = mountCard()
+    await wrapper.find('.library-card__rename-btn').trigger('click')
+    expect(mockModalOpen).toHaveBeenCalledOnce()
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { playlist: Playlist }]
+    expect(props.playlist.name).toBe('Jazz Night')
+  })
+
+  it('calls updatePlaylist when modal returns a new name', async () => {
+    mockPlaylists = [{ id: 3, name: 'Jazz Night', trackIDs: [] }]
+    mockModalOpen.mockResolvedValueOnce('Renamed Jazz')
+    const wrapper = mountCard()
+    await wrapper.find('.library-card__rename-btn').trigger('click')
+    await flushPromises()
+    expect(mockUpdatePlaylist).toHaveBeenCalledWith(3, { name: 'Renamed Jazz' })
   })
 })
