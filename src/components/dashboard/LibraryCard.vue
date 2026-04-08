@@ -331,6 +331,7 @@ function showManagementMenu(event: MouseEvent): void {
   justify-content: space-between;
   padding: var(--space-5);
   font-size: var(--font-size-sm);
+  gap: var(--space-3);
 }
 
 .library-card__row:hover {
@@ -342,14 +343,26 @@ function showManagementMenu(event: MouseEvent): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.library-card__meta {
+  flex: 0 1 auto;
+  min-width: 10ch;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .library-card__row-end {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .library-card__empty {
