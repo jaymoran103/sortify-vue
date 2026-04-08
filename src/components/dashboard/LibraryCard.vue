@@ -1,65 +1,244 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useTrackStore } from '@/stores/tracks'
 import { usePlaylistStore } from '@/stores/playlists'
-import ScrollableList from '@/components/common/ScrollableList.vue'
-import type { Playlist } from '@/types/models'
-
-//TODO: for UI placeholder for library view, use of modal probably isn't permanent
 import { useModal } from '@/composables/useModal'
-import ConfirmModal from '../modals/ConfirmModal.vue';
-const modal = useModal()
+import { useContextMenu } from '@/composables/useContextMenu'
+import { useDebounce } from '@/composables/useDebounce'
+import { useListSort } from '@/composables/useListSort'
+import ControlBar from '@/components/common/ControlBar.vue'
+import SearchBar from '@/components/common/SearchBar.vue'
+import SelectDropdown from '@/components/common/SelectDropdown.vue'
+import ScrollableList from '@/components/common/ScrollableList.vue'
+import ConfirmModal from '@/components/modals/ConfirmModal.vue'
+import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
+import type { Playlist, Track } from '@/types/models'
+import type { SortOption } from '@/types/ui'
 
 const trackStore = useTrackStore()
 const playlistStore = usePlaylistStore()
+const modal = useModal()
+const contextMenu = useContextMenu()
 
-const trackCount = computed(() => trackStore.tracks?.length ?? 0)
-const playlists = computed((): Playlist[] => playlistStore.playlists ?? [])
-const playlistCount = computed(() => playlists.value.length)
+// ── View toggle ──────────────────────────────────────────────────────────────
+const activeView = ref<'playlists' | 'tracks'>('playlists')
 
-//TODO: for UI placeholder for library view, use of modal probably isn't permanent
-function openLibrary(): void {
-  modal.open(ConfirmModal, {
-    title: 'Not implemented yet',
-    message: 'Coming soon!',
-    confirmText: 'Ok',
-  })
+// ── Search ───────────────────────────────────────────────────────────────────
+const query = ref('')
+const debouncedQuery = useDebounce(query, 200)
+
+// ── Playlist sort + filter ────────────────────────────────────────────────────
+const playlistSortOptions: SortOption<Playlist>[] = [
+  { key: 'name-asc',   label: 'Name',      compareFn: (a, b) => a.name.localeCompare(b.name) },
+  // { key: 'name-desc',  label: 'Name Z-A',  compareFn: (a, b) => b.name.localeCompare(a.name) },
+  { key: 'count-desc', label: 'Size',   compareFn: (a, b) => b.trackIDs.length - a.trackIDs.length },
+]
+
+const { currentSort: playlistSort, sorted: sortedPlaylists } = useListSort(
+  computed((): Playlist[] => playlistStore.playlists ?? []),
+  playlistSortOptions,
+)
+
+const filteredPlaylists = computed(() => {
+  const q = debouncedQuery.value.trim().toLowerCase()
+  if (!q) return sortedPlaylists.value
+  return sortedPlaylists.value.filter((p) => p.name.toLowerCase().includes(q))
+})
+
+// ── Track sort + filter ───────────────────────────────────────────────────────
+const trackSortOptions: SortOption<Track>[] = [
+  { key: 'title-asc',  label: 'Title',   compareFn: (a, b) => a.title.localeCompare(b.title) },
+  { key: 'artist-asc', label: 'Artist',  compareFn: (a, b) => a.artist.localeCompare(b.artist) },
+]
+
+const { currentSort: trackSort, sorted: sortedTracks } = useListSort(
+  computed((): Track[] => trackStore.tracks ?? []),
+  trackSortOptions,
+)
+
+// Filter tracks by title or artist matching the query
+const filteredTracks = computed(() => {
+  const q = debouncedQuery.value.trim().toLowerCase()
+  if (!q) return sortedTracks.value
+  return sortedTracks.value.filter(
+    (t) =>
+      t.title.toLowerCase().includes(q) ||
+      t.artist.toLowerCase().includes(q),
+      // t.album.toLowerCase().includes(q), // FUTURE: Add album option? this would work now, but album field isn't displayed so results may appear confusing
+  )
+})
+
+// ── Derive active sort/options for template ───────────────────────────────────
+const currentSort = computed({
+  get: () => (activeView.value === 'playlists' ? playlistSort.value : trackSort.value),
+  set: (val) => {
+    if (activeView.value === 'playlists') playlistSort.value = val
+    else trackSort.value = val
+  },
+})
+const sortOptions = computed(() =>
+  activeView.value === 'playlists' ? playlistSortOptions : trackSortOptions,
+)
+
+// ── Footer stats ──────────────────────────────────────────────────────────────
+const playlistCount = computed(() => (playlistStore.playlists ?? []).length)
+const uniqueTrackCount = computed(
+  () => new Set((playlistStore.playlists ?? []).flatMap((p) => p.trackIDs)).size,
+)
+const totalTrackSlots = computed(() =>
+  (playlistStore.playlists ?? []).reduce((n, p) => n + p.trackIDs.length, 0),
+)
+
+// ── Management actions ────────────────────────────────────────────────────────
+async function openDeletePlaylists(): Promise<void> {
+  const ids = await modal.open<number[]>(PlaylistSelectModal, { mode: 'delete' })
+  if (!ids?.length) return
+  await playlistStore.deletePlaylists(ids)
 }
 
+// Action handler for "Clear Library" option: destructive action with confirmation modal
+async function openClearLibrary(): Promise<void> {
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Clear Library',
+    message: 'This will permanently delete all tracks and playlists. This cannot be undone.',
+    confirmLabel: 'Clear everything',
+    danger: true,
+  })
+  if (!confirmed) return
+  await trackStore.clearTracks()
+  await playlistStore.clearPlaylists()
+}
+
+// Open context menu with simple options for library management
+function showManagementMenu(event: MouseEvent): void {
+  contextMenu.show(event, [
+    { label: 'Delete Playlists…', action: openDeletePlaylists },
+    { divider: true },
+    { label: 'Clear Library…',    action: openClearLibrary },
+  ])
+}
 </script>
 
 <template>
   <div class="dashboard-card library-card">
+
+    <!-- Header Section-->
     <div class="dashboard-card__header">
       <h2 class="dashboard-card__title">Library</h2>
-      <span class="dashboard-card__count">
-        {{ trackCount }} tracks &middot; {{ playlistCount }} playlists
-      </span>
+      
+      
+      <div class="library-card__view-toggle">
+        <button
+          class="library-card__toggle-btn"
+          :class="{ 'library-card__toggle-btn--active': activeView === 'playlists' }"
+          @click="activeView = 'playlists'"
+        >
+          Playlists
+        </button>
+        <button
+          class="library-card__toggle-btn"
+          :class="{ 'library-card__toggle-btn--active': activeView === 'tracks' }"
+          @click="activeView = 'tracks'"
+        >
+          Tracks
+        </button>
+      </div>
+
+      <!-- TODO: Open button is currently hidden; no library tab to navigate to, and track/playlist toggle is a better use of the space -->
+      <button 
+        class="btn btn--secondary library-card__open-btn" 
+        disabled 
+        title="Library view coming soon"
+        hidden
+        >
+        Open
+      </button>
     </div>
 
-    <div class="library-card__list">
-      <ScrollableList :items="playlists" key-field="id" :estimate-size="40">
+
+    <!-- Control bar -->
+    <ControlBar>
+      
+      <SearchBar v-model="query" :placeholder="`Filter ${activeView}…`" />
+      <SelectDropdown v-model="currentSort" :options="sortOptions" />
+
+      <template #actions>
+        <button
+          class="btn btn--secondary library-card__menu-btn"
+          title="Manage library"
+          @click="showManagementMenu"
+        >
+          ⋯
+        </button>
+      </template>
+    </ControlBar>
+
+    <!-- Scroll zone -->
+    <div class="dashboard-card__scroll-zone library-card__list">
+      <!-- Playlists view -->
+      <ScrollableList
+        v-if="activeView === 'playlists'"
+        :items="filteredPlaylists"
+        key-field="id"
+        :estimate-size="40"
+      >
         <template #item="{ item }">
           <div class="library-card__row">
             <span class="library-card__name">{{ (item as Playlist).name }}</span>
-            <span class="library-card__meta text-muted text-sm">
-              {{ (item as Playlist).trackIDs.length }} tracks
+            <span class="library-card__row-end">
+              <span class="library-card__meta text-muted text-sm">
+                {{ (item as Playlist).trackIDs.length }} tracks
+              </span>
             </span>
           </div>
         </template>
         <template #empty>
-          <p class="text-muted">No playlists yet. Import some tracks to get started.</p>
+          <div class="library-card__empty">
+            <p class="text-muted" v-if="query">
+              No playlists match search "{{ query }}"
+            </p>
+            <template v-else>
+              <p class="text-muted">No playlists yet.</p>
+              <p class="text-muted">Import some tracks to get started.</p>
+            </template>
+          </div>
+        </template>
+      </ScrollableList>
+
+      <!-- Tracks view -->
+      <ScrollableList
+        v-else
+        :items="filteredTracks"
+        key-field="trackID"
+        :estimate-size="40"
+      >
+        <template #item="{ item }">
+          <div class="library-card__row">
+            <span class="library-card__name">{{ (item as Track).title }}</span>
+            <span class="library-card__meta text-muted text-sm">{{ (item as Track).artist }}</span>
+          </div>
+        </template>
+        <template #empty>
+          <div class="library-card__empty">
+            <p class="text-muted" v-if="query"> No tracks match search "{{ query }}" </p>
+
+            <template v-else>
+              <p class="text-muted">No tracks yet.</p>
+              <p class="text-muted">Import playlists to get started.</p>
+            </template>
+          </div>
         </template>
       </ScrollableList>
     </div>
-    <!-- TODO temporary modal to avoid navigating to a stub page -->
-    <button class="btn btn--secondary library-card__link" @click="openLibrary">View Library</button>
-    <!-- 
-    <router-link to="/library" class="btn btn--secondary library-card__link">
-      View Library
-    </router-link>
-    -->
-  
+
+    <!-- Footer stats -->
+    <div class="dashboard-card__footer">
+      <span>{{ playlistCount }} playlists</span>
+      <span>·</span>
+      <span>{{ totalTrackSlots }} total tracks</span>
+      <span>·</span>
+      <span>{{ uniqueTrackCount }} unique tracks</span>
+    </div>
   </div>
 </template>
 
@@ -67,15 +246,52 @@ function openLibrary(): void {
 @import './card.css';
 
 .library-card {
-  min-height: 240px;
+  min-height: 300px;
+}
+
+.library-card__open-btn {
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-3);
 }
 
 .library-card__list {
   flex: 1;
   min-height: 120px;
+}
+
+/* ── View toggle ── */
+.library-card__view-toggle {
   overflow: hidden;
 }
 
+.library-card__toggle-btn {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-sm);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default);
+}
+
+.library-card__toggle-btn + .library-card__toggle-btn {
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.library-card__toggle-btn--active {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+/* ── Management button ── */
+.library-card__menu-btn {
+  font-size: var(--font-size-lg);
+  padding: var(--space-1) var(--space-2);
+  line-height: 1;
+  letter-spacing: 0.05em;
+}
+
+/* ── Rows ── */
 .library-card__row {
   display: flex;
   align-items: center;
@@ -84,13 +300,28 @@ function openLibrary(): void {
   font-size: var(--font-size-sm);
 }
 
+.library-card__row:hover {
+  background: var(--color-row-hover);
+  opacity: 1;
+}
+
 .library-card__name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
 }
 
-.library-card__link {
-  align-self: flex-start;
+.library-card__row-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.library-card__list  {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: var(--space-4);
 }
 </style>
