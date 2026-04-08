@@ -234,11 +234,19 @@ function showManagementMenu(event: MouseEvent): void {
 
     <!-- Footer stats -->
     <div class="dashboard-card__footer">
-      <span>{{ playlistCount }} playlists</span>
-      <span>·</span>
-      <span>{{ totalTrackSlots }} total tracks</span>
-      <span>·</span>
-      <span>{{ uniqueTrackCount }} unique tracks</span>
+      <div class="dashboard-card__stat">
+        <span class="dashboard-card__stat-number">{{ playlistCount }}</span>
+        <span class="dashboard-card__stat-label">Playlists</span>
+      </div>
+      <div class="dashboard-card__stat">
+        <span class="dashboard-card__stat-number">{{ uniqueTrackCount }}</span>
+        <span class="dashboard-card__stat-label">Unique Tracks</span>
+      </div>
+      <div class="dashboard-card__stat">
+        <span class="dashboard-card__stat-number">{{ totalTrackSlots }}</span>
+        <span class="dashboard-card__stat-label">Total Tracks</span>
+      </div>
+      
     </div>
   </div>
 </template>
@@ -363,5 +371,26 @@ function showManagementMenu(event: MouseEvent): void {
 }
 .library-card__empty p:last-child {
   margin-bottom: 0;
+}
+
+.dashboard-card__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.dashboard-card__stat-number {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.dashboard-card__stat-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  /* text-transform: uppercase; */
+  letter-spacing: 0.06em;
 }
 </style>
