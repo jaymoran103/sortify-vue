@@ -6,6 +6,10 @@ import type { MenuItem } from '@/types/ui'
 
 const ctx = useContextMenu()
 const menuEl = ref<HTMLElement | null>(null)
+  
+// State management for outside click listener
+let removeClickListener: (() => void) | null = null
+let attachTimer: number | null = null
 
 // Handle menu item click
 function handleClick(entry: MenuItem): void {
@@ -20,21 +24,40 @@ function handleOutsideClick(e: MouseEvent): void {
   }
 }
 
+// Attach click listener on next tick after menu opens, avoiding immediate trigger from the click that opened the menu. 
+// Remove listener when menu closes.
+function attachOutsideClickListener(): void {
+  removeClickListener = () => document.removeEventListener('click', handleOutsideClick)
+  document.addEventListener('click', handleOutsideClick)
+}
+
+// Clear any pending timers and listeners when menu state changes or component unmounts
+function cancelAttachTimer(): void {
+  if (attachTimer !== null) {
+    clearTimeout(attachTimer)
+    attachTimer = null
+  }
+}
+
 // Add/remove event listener for outside clicks when menu opens/closes
 watch(
   () => ctx.isOpen.value,
   (open) => {
     if (open) {
-      document.addEventListener('click', handleOutsideClick)
+      cancelAttachTimer()
+      attachTimer = window.setTimeout(attachOutsideClickListener, 0)
     } else {
-      document.removeEventListener('click', handleOutsideClick)
+      cancelAttachTimer()
+      removeClickListener?.()
+      removeClickListener = null
     }
   },
   { immediate: true },
 )
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', handleOutsideClick)
+  cancelAttachTimer()
+  removeClickListener?.()
 })
 
 useKeyboardShortcuts({

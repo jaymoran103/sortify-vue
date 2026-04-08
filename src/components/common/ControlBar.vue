@@ -24,7 +24,8 @@ defineSlots<{
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-subtle);
+  /* Bottom border should be handled by parent component if needed */
+  /* border-bottom: 1px solid var(--color-border-subtle); */
   flex-shrink: 0;
 }
 

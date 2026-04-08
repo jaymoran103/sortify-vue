@@ -15,7 +15,7 @@ import type { Playlist } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
 const props = withDefaults(defineProps<{
-  mode?: 'workspace' | 'export'
+  mode?: 'workspace' | 'export' | 'delete'
 }>(), {
   mode: 'workspace',
 })
@@ -86,7 +86,7 @@ function toggleSelectAll(): void {
 }
 
 function confirmSelection(): void {
-  if (props.mode === 'export') {
+  if (props.mode === 'export' || props.mode === 'delete') {
     const ids = [...selection.selectedIds.value].map(Number)
     emit('confirm', ids)
   } else {
@@ -131,11 +131,12 @@ function confirmSelection(): void {
       <div class="playlist-select__footer-actions">
         <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
         <button
-        class="btn btn--primary"
-        :disabled="selection.selectedIds.value.size === 0"
-        @click="confirmSelection"
-      >
-          Open ({{ selection.selectedCount.value }})
+          class="btn"
+          :class="props.mode === 'delete' ? 'btn--danger' : 'btn--primary'"
+          :disabled="selection.selectedIds.value.size === 0"
+          @click="confirmSelection"
+        >
+          {{ props.mode === 'delete' ? 'Delete' : 'Open' }} ({{ selection.selectedCount.value }})
         </button>
       </div>
     </div>
@@ -159,6 +160,8 @@ function confirmSelection(): void {
 .playlist-select__list {
   height: 320px;
   overflow: hidden;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .playlist-select__footer {
