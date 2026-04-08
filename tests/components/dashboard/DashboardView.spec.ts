@@ -1,12 +1,20 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import DashboardView from '@/components/dashboard/DashboardView.vue'
+import { createPinia, setActivePinia } from 'pinia'
 
 // Stub child cards so DashboardView test is isolated
 const StubCard = defineComponent({ template: '<div />' })
 
 describe('DashboardView', () => {
+    let pinia: ReturnType<typeof createPinia>
+
+    beforeEach(() => {
+    pinia = createPinia()
+    setActivePinia(pinia)
+  })
+  
   it('renders all three cards', () => {
     const wrapper = mount(DashboardView, {
       global: {

@@ -14,8 +14,15 @@ import SelectableItem from '@/components/common/SelectableItem.vue'
 import type { Playlist } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
+const props = withDefaults(defineProps<{
+  mode?: 'workspace' | 'export'
+}>(), {
+  mode: 'workspace',
+})
+
 const emit = defineEmits<{
   cancel: []
+  confirm: [ids: number[]]
 }>()
 
 const router = useRouter()
@@ -79,9 +86,14 @@ function toggleSelectAll(): void {
 }
 
 function confirmSelection(): void {
-  const ids = [...selection.selectedIds.value].join(',')
-  router.push({ path: '/workspace', query: { playlists: ids } })
-  emit('cancel')
+  if (props.mode === 'export') {
+    const ids = [...selection.selectedIds.value].map(Number)
+    emit('confirm', ids)
+  } else {
+    const ids = [...selection.selectedIds.value].join(',')
+    router.push({ path: '/workspace', query: { playlists: ids } })
+    emit('cancel')
+  }
 }
 </script>
 
