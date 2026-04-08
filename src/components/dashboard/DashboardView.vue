@@ -3,37 +3,28 @@ import IOCard from './IOCard.vue'
 import LibraryCard from './LibraryCard.vue'
 import WorkspaceCard from './WorkspaceCard.vue'
 
-// Prototype cards for I/O revision comparison
-import ProtoACard from './prototypes/ProtoACard.vue'
-import ProtoBCard from './prototypes/ProtoBCard.vue'
-import ProtoCLocalCard from './prototypes/ProtoCLocalCard.vue'
-import ProtoCSpotifyCard from './prototypes/ProtoCSpotifyCard.vue'
 </script>
 
 <template>
   <div class="dashboard">
     <h1 class="dashboard__title">Dashboard</h1>
 
-    <!-- Real dashboard cards (unchanged) -->
+    <!-- Main Dashboard Section -->
     <section class="dash-section">
+
+      <!-- No section heading needed while a single section exists -->
       <!-- <h2 class="dash-section__heading ">Current Implementation</h2> -->
+
       <div class="dashboard__grid">
         <IOCard />
         <LibraryCard />
         <WorkspaceCard />
       </div>
+
     </section>
 
-    <!-- Prototype comparison section -->
-    <section class="dash-section">
-      <h2 class="dash-section__heading">I/O Card Prototypes</h2>
-      <div class="dash-grid">
-        <ProtoACard />
-        <ProtoBCard />
-        <ProtoCLocalCard />
-        <ProtoCSpotifyCard />
-      </div>
-    </section>
+    <!-- Additional sections would go here -->
+    <!-- <section class="dash-section"> </section> -->
 
   </div>
 </template>

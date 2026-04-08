@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises, disableAutoUnmount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import ExportModal from '@/components/dashboard/ExportModal.vue'
 import * as registry from '@/adapters/registry'
 import type { Playlist } from '@/types/models'
