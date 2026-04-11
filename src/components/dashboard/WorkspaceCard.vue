@@ -1,12 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useModal } from '@/composables/useModal'
 import { useSessionStore } from '@/stores/sessions'
+import { usePlaylistStore } from '@/stores/playlists'
 import PlaylistSelectModal from './PlaylistSelectModal.vue'
 
 const modal = useModal()
 const router = useRouter()
 const sessionStore = useSessionStore()
+
+// Access playlist store to determine if there are any playlists available. If not, "Choose Playlists" button is disabled withn a tooltip.
+const playlistStore = usePlaylistStore()
+const hasPlaylists = computed(() => (playlistStore.playlists ?? []).length > 0)
 
 // When the user clicks "Choose Playlists", open the PlaylistSelectModal.
 async function openPlaylistSelect(): Promise<void> {
@@ -25,7 +31,16 @@ async function openPlaylistSelect(): Promise<void> {
 
     <p class="text-muted">Select playlists to start comparing and sorting tracks.</p>
 
-    <button class="btn btn--primary" @click="openPlaylistSelect">Choose Playlists</button>
+    <!-- Open Button: disabled if library is empty -->
+    <button 
+      class="btn btn--primary" 
+      @click="openPlaylistSelect"
+      :disabled="!hasPlaylists"
+      :title="!hasPlaylists ? 'No playlists available, import some to get started' : ''"
+    >
+      Choose Playlists
+    </button>
+
   </div>
 </template>
 

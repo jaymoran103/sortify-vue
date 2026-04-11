@@ -203,7 +203,7 @@ function showManagementMenu(event: MouseEvent): void {
             </p>
             <template v-else>
               <p class="text-muted">No playlists yet.</p>
-              <p class="text-muted">Import some tracks to get started.</p>
+              <p class="text-muted">Import some to get started.</p>
             </template>
           </div>
         </template>
