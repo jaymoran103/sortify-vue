@@ -1,0 +1,1 @@
+import{_ as s,o,c,b as r}from"./index-D6tPfGpp.js";const t={},a={class:"workspace-view"};function n(_,e){return o(),c("div",a,[...e[0]||(e[0]=[r("h1",null,"Workspace",-1)])])}const l=s(t,[["render",n]]);export{l as default};
