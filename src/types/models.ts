@@ -19,10 +19,18 @@ export interface Track {
 }
 
 export interface Playlist {
-  id?: number
+  id?: number             // auto-incremented by Dexie
   name: string
   trackIDs: string[]
   playlistURI?: string
-  timeAdded?: number
-  lastModified?: number
+  timeAdded?: number        // Date.now() when track was added to playlist
+  lastModified?: number     // Date.now() when playlist was last modified (tracks added/removed)
+}
+
+export interface WorkspaceSession {
+  id?: number                // auto-incremented by Dexie
+  name?: string              // optional user label, auto-generated if absent
+  playlistIds: number[]      // references to library playlist IDs
+  createdAt: number          // Date.now() at creation
+  lastOpened: number         // Date.now(), updated on each load
 }
