@@ -613,5 +613,65 @@ describe('Workspace Store', () => {
 
     expect(store.hasUnsavedChanges).toBe(false)
   })
+
+  // ─── movePlaylist ──────────────────────────────────────────────────────────
+
+  it('movePlaylist swaps adjacent playlists when moving right', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    expect(store.playlists[0]?.id).toBe(pl1Id)
+    expect(store.playlists[1]?.id).toBe(pl2Id)
+
+    store.movePlaylist(pl1Id, 1)
+
+    expect(store.playlists[0]?.id).toBe(pl2Id)
+    expect(store.playlists[1]?.id).toBe(pl1Id)
+  })
+
+  it('movePlaylist swaps adjacent playlists when moving left', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.movePlaylist(pl2Id, -1)
+
+    expect(store.playlists[0]?.id).toBe(pl2Id)
+    expect(store.playlists[1]?.id).toBe(pl1Id)
+  })
+
+  it('movePlaylist is a no-op when already at the left boundary', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.movePlaylist(pl1Id, -1)
+
+    expect(store.playlists[0]?.id).toBe(pl1Id)
+    expect(store.playlists[1]?.id).toBe(pl2Id)
+  })
+
+  it('movePlaylist is a no-op when already at the right boundary', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.movePlaylist(pl2Id, 1)
+
+    expect(store.playlists[0]?.id).toBe(pl1Id)
+    expect(store.playlists[1]?.id).toBe(pl2Id)
+  })
+
+  it('movePlaylist is a no-op for an unknown playlist ID', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    expect(() => store.movePlaylist(99999, 1)).not.toThrow()
+    expect(store.playlists[0]?.id).toBe(pl1Id)
+    expect(store.playlists[1]?.id).toBe(pl2Id)
+  })
 })
+
 

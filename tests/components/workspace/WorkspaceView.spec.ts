@@ -22,6 +22,10 @@ const mockWorkspaceStore = reactive({
   loadSession: vi.fn().mockResolvedValue(undefined),
   toggleTrack: vi.fn(),
   save: vi.fn().mockResolvedValue(undefined),
+  renamePlaylist: vi.fn(),
+  removePlaylist: vi.fn(),
+  duplicatePlaylist: vi.fn(),
+  movePlaylist: vi.fn(),
   $reset: vi.fn(),
 })
 
@@ -94,6 +98,10 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.loadSession.mockResolvedValue(undefined)
     mockWorkspaceStore.toggleTrack.mockReset()
     mockWorkspaceStore.save.mockResolvedValue(undefined)
+    mockWorkspaceStore.renamePlaylist.mockReset()
+    mockWorkspaceStore.removePlaylist.mockReset()
+    mockWorkspaceStore.duplicatePlaylist.mockReset()
+    mockWorkspaceStore.movePlaylist.mockReset()
     mockWorkspaceStore.$reset.mockReset()
   })
 
@@ -140,7 +148,7 @@ describe('WorkspaceView', () => {
     ]
     mockWorkspaceStore.trackList = []
     const wrapper = mountWorkspace()
-    const headers = wrapper.findAll('.workspace__th--playlist')
+    const headers = wrapper.findAll('.playlist-col-header__name')
     expect(headers).toHaveLength(2)
     expect(headers[0]?.text()).toBe('Morning Mix')
     expect(headers[1]?.text()).toBe('Evening Chill')
@@ -153,7 +161,7 @@ describe('WorkspaceView', () => {
       makeTrack('t2', 'Song B', 'Artist 2'),
     ]
     const wrapper = mountWorkspace()
-    expect(wrapper.findAll('.workspace__row')).toHaveLength(2)
+    expect(wrapper.findAll('.track-row')).toHaveLength(2)
     expect(wrapper.text()).toContain('Song A')
     expect(wrapper.text()).toContain('Song B')
   })
@@ -170,7 +178,7 @@ describe('WorkspaceView', () => {
     ]
 
     const wrapper = mountWorkspace()
-    const titles = wrapper.findAll('.workspace__track-title').map((node) => node.text())
+    const titles = wrapper.findAll('.track-row__title').map((node) => node.text())
     expect(titles).toEqual(['Song B', 'Song A', 'Song C'])
   })
 
@@ -221,7 +229,7 @@ describe('WorkspaceView', () => {
     await checkboxes[2]!.trigger('change')
     await nextTick()
 
-    const titles = wrapper.findAll('.workspace__track-title').map((node) => node.text())
+    const titles = wrapper.findAll('.track-row__title').map((node) => node.text())
     expect(titles).toEqual(['Song A', 'Song C', 'Song B'])
   })
 

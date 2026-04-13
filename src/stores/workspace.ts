@@ -232,6 +232,28 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   /**
+   * Swap a playlist one position left (-1) or right (+1) in the current column order.
+   * No-op if already at the boundary or the playlist is not found.
+   */
+  function movePlaylist(playlistId: PlaylistId, direction: -1 | 1): void {
+    const idx = playlists.value.findIndex((p) => p.id === playlistId)
+
+    // Exit early if playlist not found. This should not happen in normal operation since move controls are only rendered for existing playlists;.
+    if (idx === -1) return
+    const newIdx = idx + direction
+
+    // exit early if new index is out of bounds (already at leftmost or rightmost position)
+    if (newIdx < 0 || newIdx >= playlists.value.length) return
+
+    // Swap the two playlists in the array, mark both as modified for dirty tracking.
+    const arr = [...playlists.value]
+    const temp = arr[idx]!
+    arr[idx] = arr[newIdx]!
+    arr[newIdx] = temp
+    playlists.value = arr
+  }
+
+  /**
    * Create a new empty playlist in the workspace buffer with a temporary pending ID.
    * FUTURE: save() will write it to IDB and replace the pending ID with a real number.
    */
@@ -367,6 +389,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     removePlaylist,
     renamePlaylist,
     duplicatePlaylist,
+    movePlaylist,
     createEmptyPlaylist,
     toggleTrack,
     save,
