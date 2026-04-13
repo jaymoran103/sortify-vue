@@ -22,21 +22,30 @@ const ctx = useContextMenu()
 // Show context menu with playlist actions
 function showDropdown(event: MouseEvent): void {
   const id = props.playlist.id!
+
   const items: MenuEntry[] = [
+    // Basic playlist management actions
     { label: 'Rename', action: () => emit('rename', id) },
     { label: 'Duplicate', action: () => emit('duplicate', id) },
-  ]
-  if (props.canMoveLeft) {
-    items.push({ label: 'Move Left', action: () => emit('moveLeft', id) })
-  }
-  if (props.canMoveRight) {
-    items.push({ label: 'Move Right', action: () => emit('moveRight', id) })
-  } else {
-  }
+    {divider: true},
 
-  
-  items.push({ divider: true })
-  items.push({ label: 'Remove from Workspace', action: () => emit('remove', id) })
+    // Movement actions, conditionally enabled based on position in playlist order
+    {   
+        label: 'Move Right', 
+        action: props.canMoveRight? () => emit('moveRight', id) : () => {}, 
+        disabled: !props.canMoveRight,
+    },
+    { 
+        label: 'Move Left', 
+        action: props.canMoveLeft? () => emit('moveLeft', id) : () => {}, 
+        disabled: !props.canMoveLeft,
+    },
+    {divider: true},
+
+    // Destructive/high-impact actions
+    { label: 'Remove from Workspace', action: () => emit('remove', id) }
+
+  ]
   ctx.show(event, items)
 }
 </script>

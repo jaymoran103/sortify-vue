@@ -86,6 +86,7 @@ useKeyboardShortcuts({
           v-else
           class="context-menu__item"
           role="menuitem"
+          :disabled="entry.disabled"
           @click="handleClick(entry as MenuItem)"
         >
           {{ (entry as MenuItem).label }}
@@ -119,6 +120,11 @@ useKeyboardShortcuts({
 
 .context-menu__item:hover {
   background: var(--color-row-hover);
+}
+
+.context-menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .context-menu__divider {

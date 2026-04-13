@@ -14,6 +14,7 @@ export interface SortOption<T> {
 export interface MenuItem {
   label: string
   action: () => void
+  disabled?: boolean
 }
 
 export interface MenuDivider {
