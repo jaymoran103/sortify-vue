@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useSessionStore } from '@/stores/sessions'
@@ -538,6 +538,25 @@ describe('Workspace Store', () => {
 
     const updated = await playlistStore.getPlaylist(pl1Id)
     expect(updated?.name).toBe('Renamed After Save')
+  })
+
+  it('save uses batchUpdatePlaylists for modified library playlists', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const playlistStore = usePlaylistStore()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    const spy = vi.spyOn(playlistStore, 'batchUpdatePlaylists')
+    store.renamePlaylist(pl1Id, 'Batch Rename')
+
+    await store.save()
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    const firstCall = spy.mock.calls[0]!
+    expect(firstCall[0]).toEqual([
+      { id: pl1Id, changes: { name: 'Batch Rename', trackIDs: ['track-1', 'track-2'] } },
+    ])
+    spy.mockRestore()
   })
 
   it('save clears modifiedIds after successful save', async () => {

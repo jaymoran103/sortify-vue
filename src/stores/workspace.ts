@@ -313,16 +313,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
     }
 
-    // Step 2: update modified library playlists
+    // Step 2: update modified library playlists in a single batched transaction.
+    const batchUpdates: Array<{ id: number; changes: { name: string; trackIDs: string[] } }> = []
     for (const modId of modifiedIds.value) {
       // After pending resolution above, only numeric IDs remain in modifiedIds
       const pl = playlists.value.find((p) => p.id === modId)
       if (!pl) continue
-      await playlistStore.updatePlaylist(pl.id as number, {
-        name: pl.name,
-        trackIDs: [...pl.trackIDs],
-      })
+      batchUpdates.push({ id: pl.id as number, changes: { name: pl.name, trackIDs: [...pl.trackIDs] } })
     }
+    await playlistStore.batchUpdatePlaylists(batchUpdates)
 
     // Step 3: update session record with current (now all-numeric) playlist IDs
     if (sessionId.value !== null) {
