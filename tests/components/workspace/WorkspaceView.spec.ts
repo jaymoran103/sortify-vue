@@ -218,7 +218,7 @@ describe('WorkspaceView', () => {
 
     const wrapper = mountWorkspace()
     const checkboxes = wrapper.findAll('input[type="checkbox"]')
-    await checkboxes[2].trigger('change')
+    await checkboxes[2]!.trigger('change')
     await nextTick()
 
     const titles = wrapper.findAll('.workspace__track-title').map((node) => node.text())
@@ -248,6 +248,14 @@ describe('WorkspaceView', () => {
     expect((checkbox0!.element as HTMLInputElement).checked).toBe(true)
     // Row 1, PL1 → t2 NOT in trackIdSet → unchecked
     expect((checkbox1!.element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('checkboxes are interactive (not disabled)', () => {
+    mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
+    mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist 1')]
+    const wrapper = mountWorkspace()
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    expect((checkbox.element as HTMLInputElement).disabled).toBe(false)
   })
 
   it('displays session name in header', () => {

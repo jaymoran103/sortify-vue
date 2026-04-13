@@ -153,6 +153,33 @@ describe('Workspace Store', () => {
     expect(store.trackList).toHaveLength(0)
   })
 
+  it('trackList order is stable after toggleTrack removes and re-adds a track', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // Remove track-1 from pl1 then add it back — should stay at index 0, not jump to the end
+    store.toggleTrack(pl1Id, 'track-1')
+    store.toggleTrack(pl1Id, 'track-1')
+
+    const ids = store.trackList.map((t) => t.trackID)
+    expect(ids).toEqual(['track-1', 'track-2', 'track-3'])
+  })
+
+  it('trackList still shows a track after it is removed from all playlists via toggleTrack', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // track-1 only exists in pl1 — removing it means it belongs to no playlist
+    store.toggleTrack(pl1Id, 'track-1')
+
+    const ids = store.trackList.map((t) => t.trackID)
+    // track-1 must still be visible — only removeTrackFromWorkspace should hide it
+    expect(ids).toContain('track-1')
+    expect(ids).toEqual(['track-1', 'track-2', 'track-3'])
+  })
+
   // ─── addPlaylist ──────────────────────────────────────────────────────────
 
   it('addPlaylist adds to playlists and fetches novel tracks', async () => {

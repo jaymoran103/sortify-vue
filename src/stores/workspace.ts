@@ -21,22 +21,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // Reset on $reset() so new sessions always start at pending-1.
   const pendingCounter = ref(0)
 
-  // Flat, deduplicated track list in first-seen order (stable display order).
-  // Iterates playlists in order, yielding each trackID only the first time it appears.
-  const trackList = computed<Track[]>(() => {
-    const seen = new Set<string>()
-    const result: Track[] = []
-    for (const pl of playlists.value) {
-      for (const tid of pl.trackIDs) {
-        if (!seen.has(tid)) {
-          seen.add(tid)
-          const track = tracks.value.get(tid)
-          if (track) result.push(track)
-        }
-      }
-    }
-    return result
-  })
+  // Stable, first-seen arrival order for all tracks in the workspace.
+  // Established once on session load; updated only when the track set changes:
+  //   - addPlaylist appends novel track IDs
+  //   - FUTURE: removeTrackFromWorkspace() removes specific IDs
+  // toggleTrack should NOT affect this — membership changes don't reorder or hide tracks.
+  const stableOrder = ref<string[]>([])
+
+  // Flat track list in stable arrival order — derived from stableOrder, not from playlist trackIDs.
+  // This means toggleTrack cannot cause reordering or track disappearance from the view.
+  // A track only leaves trackList when explicitly removed from the workspace.
+  const trackList = computed<Track[]>(() =>
+    stableOrder.value
+      .map((id) => tracks.value.get(id))
+      .filter((t): t is Track => t !== undefined),
+  )
 
   const hasUnsavedChanges = computed(() => modifiedIds.value.size > 0)
 
@@ -110,6 +109,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       sessionName.value = session.name ?? ''
       playlists.value = loadedPlaylists
       tracks.value = tracksMap
+      stableOrder.value = stableIds
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load session.'
     } finally {
@@ -151,6 +151,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         newMap.set(track.trackID, track)
       }
       tracks.value = newMap
+    }
+
+    // Extend stable display order with any track IDs novel to this playlist.
+    // Checked against stableOrder (not tracks.value) to be robust against any edge cases.
+    const currentOrderSet = new Set(stableOrder.value)
+    const novelOrderIds = workspacePl.trackIDs.filter((tid) => !currentOrderSet.has(tid))
+    if (novelOrderIds.length > 0) {
+      stableOrder.value = [...stableOrder.value, ...novelOrderIds]
     }
 
     // Sync session playlistIds to IDB, derived from current in-memory state to avoid read-modify-write races when addPlaylist is called concurrently.
@@ -303,10 +311,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         modifiedIds.value.delete(oldId)
         // freshly written, no need to add to modifiedIds
       }
-      // TODO need this check?
-      else {
-        error.value = `Unexpected non-string ID for playlist ${pl.name}`
-      }
     }
 
     // Step 2: update modified library playlists
@@ -342,6 +346,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     sessionName.value = ''
     playlists.value = []
     tracks.value = new Map()
+    stableOrder.value = []
     modifiedIds.value = new Set()
     isLoading.value = false
     error.value = null
