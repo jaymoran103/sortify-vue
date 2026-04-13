@@ -95,6 +95,59 @@ describe('Workspace Store', () => {
     expect(ids).toEqual(['track-1', 'track-2', 'track-3'])
   })
 
+  it('trackList order remains stable when playlist membership changes and the track stays in workspace', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+
+    await store.loadSession(sessionId)
+    expect(store.trackList.map((t) => t.trackID)).toEqual(['track-1', 'track-2', 'track-3'])
+
+    // Remove track-2 from the first playlist while it still exists in the second playlist.
+    store.toggleTrack(pl1Id, 'track-2')
+
+    expect(store.trackList.map((t) => t.trackID)).toEqual(['track-1', 'track-2', 'track-3'])
+  })
+
+  it('trackList preserves stable initial order when an earlier playlist drops a track that appears later', async () => {
+    const trackStore = useTrackStore()
+    const playlistStore = usePlaylistStore()
+    const sessionStore = useSessionStore()
+
+    await trackStore.addTracks([
+      { trackID: 'track-1', title: 'Song A', artist: 'Artist 1', album: 'Album 1', source: 'csv' },
+      { trackID: 'track-2', title: 'Song B', artist: 'Artist 2', album: 'Album 2', source: 'csv' },
+      { trackID: 'track-3', title: 'Song C', artist: 'Artist 3', album: 'Album 3', source: 'csv' },
+    ])
+
+    const pl1Id = await playlistStore.addPlaylist({ name: 'Playlist A', trackIDs: ['track-1', 'track-2'] })
+    const pl2Id = await playlistStore.addPlaylist({ name: 'Playlist B', trackIDs: ['track-3', 'track-2'] })
+    const sessionId = await sessionStore.createSession([pl1Id, pl2Id], 'Stable Order Session')
+
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    expect(store.trackList.map((t) => t.trackID)).toEqual(['track-1', 'track-2', 'track-3'])
+
+    store.toggleTrack(pl1Id, 'track-2')
+
+    expect(store.trackList.map((t) => t.trackID)).toEqual(['track-1', 'track-2', 'track-3'])
+  })
+
+  it('trackList retains tracks removed from all playlists until an explicit workspace removal action', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+
+    await store.loadSession(sessionId)
+    expect(store.trackList.map((t) => t.trackID)).toContain('track-1')
+    expect(store.tracks.has('track-1')).toBe(true)
+
+    // Remove track-1 from the only playlist that contains it.
+    store.toggleTrack(pl1Id, 'track-1')
+
+    expect(store.trackList.map((t) => t.trackID)).toContain('track-1')
+    expect(store.tracks.has('track-1')).toBe(true)
+  })
+
   it('trackList is empty before session is loaded', () => {
     const store = useWorkspaceStore()
     expect(store.trackList).toHaveLength(0)
@@ -371,6 +424,148 @@ describe('Workspace Store', () => {
 
     expect(store.playlists).toHaveLength(2)
     expect(store.modifiedIds.has(newPl.id)).toBe(false)
+  })
+
+  // ─── toggleTrack ──────────────────────────────────────────────────────────
+
+  it('toggleTrack adds a track to the playlist when absent', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // pl1 starts with track-1 and track-2; add track-3
+    store.toggleTrack(pl1Id, 'track-3')
+
+    const pl = store.playlists.find((p) => p.id === pl1Id)
+    expect(pl?.trackIDs).toContain('track-3')
+    expect(pl?.trackIdSet.has('track-3')).toBe(true)
+  })
+
+  it('toggleTrack removes a track from the playlist when present', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.toggleTrack(pl1Id, 'track-1')
+
+    const pl = store.playlists.find((p) => p.id === pl1Id)
+    expect(pl?.trackIDs).not.toContain('track-1')
+    expect(pl?.trackIdSet.has('track-1')).toBe(false)
+  })
+
+  it('toggleTrack keeps trackIDs array and trackIdSet in sync', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // Add track-3 then remove it
+    store.toggleTrack(pl1Id, 'track-3')
+    store.toggleTrack(pl1Id, 'track-3')
+
+    const pl = store.playlists.find((p) => p.id === pl1Id)
+    expect(pl?.trackIDs.includes('track-3')).toBe(false)
+    expect(pl?.trackIdSet.has('track-3')).toBe(false)
+    expect(pl?.trackIDs.length).toBe(pl?.trackIdSet.size)
+  })
+
+  it('toggleTrack marks the playlist as modified', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    expect(store.modifiedIds.has(pl1Id)).toBe(false)
+    store.toggleTrack(pl1Id, 'track-3')
+    expect(store.modifiedIds.has(pl1Id)).toBe(true)
+  })
+
+  it('toggleTrack is a no-op for an unknown playlist ID', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    expect(() => store.toggleTrack(99999, 'track-1')).not.toThrow()
+    expect(store.modifiedIds.size).toBe(0)
+  })
+
+  // ─── save ─────────────────────────────────────────────────────────────────
+
+  it('save is a no-op when hasUnsavedChanges is false', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    await store.save()  // no changes made
+
+    // modifiedIds still empty, no error
+    expect(store.modifiedIds.size).toBe(0)
+  })
+
+  it('save writes modified library playlists to IDB', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const playlistStore = usePlaylistStore()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.renamePlaylist(pl1Id, 'Renamed After Save')
+    await store.save()
+
+    const updated = await playlistStore.getPlaylist(pl1Id)
+    expect(updated?.name).toBe('Renamed After Save')
+  })
+
+  it('save clears modifiedIds after successful save', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.renamePlaylist(pl1Id, 'New Name')
+    expect(store.hasUnsavedChanges).toBe(true)
+
+    await store.save()
+
+    expect(store.hasUnsavedChanges).toBe(false)
+    expect(store.modifiedIds.size).toBe(0)
+  })
+
+  it('save resolves pending playlists to real numeric IDs', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    const pending = store.createEmptyPlaylist('New Pending')
+    expect(typeof pending.id).toBe('string')
+
+    await store.save()
+
+    const inMemory = store.playlists.find((p) => p.name === 'New Pending')
+    expect(inMemory).toBeDefined()
+    expect(typeof inMemory?.id).toBe('number')
+  })
+
+  it('save updates the session record with current playlist IDs', async () => {
+    const { sessionId } = await setupData()
+    const sessionStore = useSessionStore()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    const pending = store.createEmptyPlaylist('Extra Playlist')
+    await store.save()
+
+    const session = await sessionStore.getSession(sessionId)
+    expect(session?.playlistIds).toContain(pending.id as number)
+  })
+
+  it('hasUnsavedChanges is false after save', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.toggleTrack(pl1Id, 'track-3')
+    expect(store.hasUnsavedChanges).toBe(true)
+
+    await store.save()
+
+    expect(store.hasUnsavedChanges).toBe(false)
   })
 })
 

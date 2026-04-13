@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useModal } from '@/composables/useModal'
+import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import type { Track } from '@/types/models'
 
 const route = useRoute()
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
+const modal = useModal()
 
 // Configure virtualizer: use the track list length, scroll container, and estimated row height. 
 // Set overscan to 10 rows for now to balance performance and smoothness during scrolling.
@@ -30,8 +33,41 @@ onBeforeUnmount(() => {
   workspaceStore.$reset()
 })
 
+// Before navigating away from the workspace, check for unsaved changes and warn user if necessary.
+onBeforeRouteLeave(async (_to, _from, next) => {
+
+  // If there are no unsaved changes, reset the store and navigate away.
+  if (!workspaceStore.hasUnsavedChanges) {
+    workspaceStore.$reset()
+    next()
+    return
+  }
+
+  // Build and show confirmation modal if there are unsaved changes, await user response.
+  // FUTURE: Give option to save changes here as well. 
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Unsaved Changes',
+    message: 'You have unsaved changes. Leave without saving?',
+    confirmLabel: 'Leave',
+    cancelLabel: 'Stay',
+  })
+
+  // If confirmed,reset the store and navigate away. Otherwise stay on page.
+  if (confirmed) {
+    workspaceStore.$reset()
+    next()
+  } else {
+    next(false)
+  }
+})
+
 function goBack(): void {
   router.push('/')
+}
+
+// Handle save action: call the store's save method, which persists the session to IndexedDB.
+async function handleSave(): Promise<void> {
+  await workspaceStore.save()
 }
 
 // Helper to get track at a given index. Virtualizer provides the index, and we look up the track in the store's track list. 
@@ -54,23 +90,36 @@ function trackAt(index: number): Track {
       <span class="workspace__meta text-muted">
         {{ workspaceStore.playlists.length }} playlists · {{ workspaceStore.trackList.length }} tracks
       </span>
+      <!-- Actions/Save Section -->
+      <div class="workspace__header-actions">
+        <span v-if="workspaceStore.hasUnsavedChanges" class="workspace__unsaved-indicator">
+          Unsaved changes
+        </span>
+        <button
+          class="btn btn--primary"
+          :disabled="!workspaceStore.hasUnsavedChanges"
+          @click="handleSave"
+        >
+          Save
+        </button>
+      </div>
     </header>
 
-    <!-- Error state -->
+    <!-- Error Display -->
     <div v-if="workspaceStore.error" class="workspace__error">
       <p>{{ workspaceStore.error }}</p>
       <button class="btn btn--primary" @click="goBack">Back to Dashboard</button>
     </div>
 
-    <!-- Loading state -->
+    <!-- Loading Display -->
     <div v-else-if="workspaceStore.isLoading" class="workspace__loading">
       <p>Loading session...</p>
     </div>
 
-    <!-- Track table -->
+    <!-- Main Workspace Table -->
     <div v-else ref="scrollContainer" class="workspace__body">
 
-      <!-- Table Header: Titles for info columns and playlist titles  -->
+      <!-- Workspace Table Header: Titles for info columns and playlist titles  -->
       <div class="workspace__table-header">
         <div class="workspace__th workspace__th--index">#</div>
         <div class="workspace__th workspace__th--track">Track</div>
@@ -83,8 +132,7 @@ function trackAt(index: number): Track {
           {{ pl.name }}
         </div>
       </div>
-
-      <!-- Virtualized track list:  -->
+      <!-- Workspace Table Body: Virtualized track display -->
       <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
         <div
           v-for="row in virtualizer.getVirtualItems()"
@@ -113,7 +161,7 @@ function trackAt(index: number): Track {
           </div>
 
           <!-- Playlist header columns: one generated per playlist in store.  -->
-          <!-- TODO: currently disabled until save functionality is implemented/wired -->
+          <!-- on change, trigger membership toggle with playlist column and track row, determined by sources, not the DOM/virtualizer -->
           <!-- FUTURE: Key field can facilitate column specific styling like row coloring -->
           <div
             v-for="pl in workspaceStore.playlists"
@@ -123,7 +171,7 @@ function trackAt(index: number): Track {
             <input
               type="checkbox"
               :checked="pl.trackIdSet.has(trackAt(row.index).trackID)"
-              disabled
+              @change="workspaceStore.toggleTrack(pl.id, trackAt(row.index).trackID)"
               :aria-label="`${trackAt(row.index).title} in ${pl.name}`"
             />
           </div>
@@ -156,6 +204,17 @@ function trackAt(index: number): Track {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   flex: 1;
+}
+
+.workspace__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.workspace__unsaved-indicator {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 .workspace__error,

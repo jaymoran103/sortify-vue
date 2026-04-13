@@ -82,13 +82,22 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         }
       }
 
-      // Collect unique track IDs across all loaded playlists to minimize DB queries
-      const allTrackIds = new Set<string>()
+      // Collect unique track IDs in first-seen order to establish stable display order.
+      // This ordered array is the base reference for display, sort, and filter: updated only when tracks are added/removed from the workspace, not on toggleTrack.
+      const stableIds: string[] = []
+      const seenIds = new Set<string>()
+      // For each loaded playlist in order,
       for (const pl of loadedPlaylists) {
-        for (const tid of pl.trackIDs) allTrackIds.add(tid)
+        // Iterate trackIDs in order, adding novel IDs to the stable list and seen set.
+        for (const tid of pl.trackIDs) {
+          if (!seenIds.has(tid)) {
+            seenIds.add(tid)
+            stableIds.push(tid)
+          }
+        }
       }
 
-      const loadedTracks = await trackStore.getTracksByIds([...allTrackIds])
+      const loadedTracks = await trackStore.getTracksByIds(stableIds)
       const tracksMap = new Map<string, Track>()
       for (const track of loadedTracks) {
         tracksMap.set(track.trackID, track)
@@ -234,14 +243,93 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return newPl
   }
 
-  // TODO Stub Method
+  /**
+   * Toggle a track's membership in a playlist. 
+   * 
+   * Keeps trackIDs in sync within playlist lookup set and ordered array.
+   * Marks the playlist as modified for dirty tracking.
+   * Works for both library and workspace-created (pending) playlists.
+   */
   function toggleTrack(playlistId: PlaylistId, trackId: string): void {
-    console.log('workspace.toggleTrack stub: ', playlistId, trackId)
+    const playlist = playlists.value.find((p) => p.id === playlistId)
+    if (!playlist) return
+
+    if (playlist.trackIdSet.has(trackId)) {
+      // Remove: update both array and set
+      playlist.trackIDs = playlist.trackIDs.filter((id) => id !== trackId)
+      playlist.trackIdSet.delete(trackId)
+    } else {
+      // Add: update both array and set
+      playlist.trackIDs.push(trackId)
+      playlist.trackIdSet.add(trackId)
+    }
+
+    modifiedIds.value.add(playlist.id)
   }
 
-  // TODO Stub Method
+  /**
+   * Persist all in-memory changes back to IDB .No-op if there are no unsaved changes.
+   * 
+   * Steps:
+   * 1. Revolve pending workspace-created playlists. Write as new IDB records, patching "pending-N" IDs to real auto-increment numbers.
+   * 2. Update modified library playlists in IDB (via playlistStore).
+   * 3. Update session record to reflect current playlist IDs (all numeric, corresponding to IDB)
+   * 4. modifiedIds is cleared.
+   */
   async function save(): Promise<void> {
-    console.log('workspace.save() stub: not yet implemented')
+    // Exit early if no changes to save
+    if (!hasUnsavedChanges.value) return
+
+    const playlistStore = usePlaylistStore()
+    const sessionStore = useSessionStore()
+
+    // Step 1: resolve pending playlists (write to IDB, patch IDs)
+    for (const pl of playlists.value) {
+      if (typeof pl.id === 'string') {
+
+        // Strip workspace-only fields and the temp id before writing to IDB
+        const { trackIdSet: _set, origin: _origin, id: _tempId, ...rest } = pl
+
+        // Clone the trackIDs array to ensure the Proxy is unwrapped before IDB write
+        const forDb: Omit<WorkspacePlaylist, 'id' | 'trackIdSet' | 'origin'> = {
+          ...rest,
+          trackIDs: [...pl.trackIDs],
+        }
+        const realId = await playlistStore.addPlaylist(forDb)
+
+        // Patch the in-memory object with the real persistent ID
+        const oldId = pl.id
+        pl.id = realId
+        modifiedIds.value.delete(oldId)
+        // freshly written, no need to add to modifiedIds
+      }
+      // TODO need this check?
+      else {
+        error.value = `Unexpected non-string ID for playlist ${pl.name}`
+      }
+    }
+
+    // Step 2: update modified library playlists
+    for (const modId of modifiedIds.value) {
+      // After pending resolution above, only numeric IDs remain in modifiedIds
+      const pl = playlists.value.find((p) => p.id === modId)
+      if (!pl) continue
+      await playlistStore.updatePlaylist(pl.id as number, {
+        name: pl.name,
+        trackIDs: [...pl.trackIDs],
+      })
+    }
+
+    // Step 3: update session record with current (now all-numeric) playlist IDs
+    if (sessionId.value !== null) {
+      await sessionStore.updateSession(sessionId.value, {
+        playlistIds: playlists.value
+          .filter((p) => typeof p.id === 'number')
+          .map((p) => p.id as number),
+      })
+    }
+
+    modifiedIds.value.clear()
   }
 
   /**

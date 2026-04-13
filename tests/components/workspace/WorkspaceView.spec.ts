@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { reactive, nextTick } from 'vue'
 import WorkspaceView from '@/components/workspace/WorkspaceView.vue'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 import type { Track } from '@/types/models'
 
 // ─── Mock workspace store ────────────────────────────────────────────────────
 
-const mockWorkspaceStore = {
+const mockWorkspaceStore = reactive({
   isLoading: false,
   error: null as string | null,
   playlists: [] as WorkspacePlaylist[],
@@ -16,10 +17,13 @@ const mockWorkspaceStore = {
   sessionId: null as number | null,
   sessionName: '',
   modifiedIds: new Set<PlaylistId>(),
+  hasUnsavedChanges: false,
   tracks: new Map<string, Track>(),
   loadSession: vi.fn().mockResolvedValue(undefined),
+  toggleTrack: vi.fn(),
+  save: vi.fn().mockResolvedValue(undefined),
   $reset: vi.fn(),
-}
+})
 
 vi.mock('@/stores/workspace', () => ({
   useWorkspaceStore: () => mockWorkspaceStore,
@@ -84,9 +88,12 @@ describe('WorkspaceView', () => {
       sessionId: null,
       sessionName: '',
       modifiedIds: new Set<PlaylistId>(),
+      hasUnsavedChanges: false,
       tracks: new Map(),
     })
     mockWorkspaceStore.loadSession.mockResolvedValue(undefined)
+    mockWorkspaceStore.toggleTrack.mockReset()
+    mockWorkspaceStore.save.mockResolvedValue(undefined)
     mockWorkspaceStore.$reset.mockReset()
   })
 
@@ -151,6 +158,73 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).toContain('Song B')
   })
 
+  it('renders tracks in the DOM in the same order as workspaceStore.trackList', () => {
+    mockWorkspaceStore.playlists = [
+      makePlaylist(1, 'PL1', ['t1', 't2']),
+      makePlaylist(2, 'PL2', ['t3']),
+    ]
+    mockWorkspaceStore.trackList = [
+      makeTrack('t2', 'Song B', 'Artist 2'),
+      makeTrack('t1', 'Song A', 'Artist 1'),
+      makeTrack('t3', 'Song C', 'Artist 3'),
+    ]
+
+    const wrapper = mountWorkspace()
+    const titles = wrapper.findAll('.workspace__track-title').map((node) => node.text())
+    expect(titles).toEqual(['Song B', 'Song A', 'Song C'])
+  })
+
+  it('updates the rendered row order when trackList order changes after toggleTrack', async () => {
+    mockWorkspaceStore.playlists = [
+      makePlaylist(1, 'PL1', ['t1', 't2']),
+      makePlaylist(2, 'PL2', ['t3', 't2']),
+    ]
+    mockWorkspaceStore.tracks = new Map([
+      ['t1', makeTrack('t1', 'Song A', 'Artist 1')],
+      ['t2', makeTrack('t2', 'Song B', 'Artist 2')],
+      ['t3', makeTrack('t3', 'Song C', 'Artist 3')],
+    ])
+    mockWorkspaceStore.trackList = [
+      makeTrack('t1', 'Song A', 'Artist 1'),
+      makeTrack('t2', 'Song B', 'Artist 2'),
+      makeTrack('t3', 'Song C', 'Artist 3'),
+    ]
+
+    mockWorkspaceStore.toggleTrack = vi.fn((playlistId: PlaylistId, trackId: string) => {
+      const playlist = mockWorkspaceStore.playlists.find((p) => p.id === playlistId)
+      if (!playlist) return
+
+      if (playlist.trackIdSet.has(trackId)) {
+        playlist.trackIDs = playlist.trackIDs.filter((id) => id !== trackId)
+        playlist.trackIdSet.delete(trackId)
+      } else {
+        playlist.trackIDs.push(trackId)
+        playlist.trackIdSet.add(trackId)
+      }
+
+      const seen = new Set<string>()
+      const nextTrackList: Track[] = []
+      for (const pl of mockWorkspaceStore.playlists) {
+        for (const id of pl.trackIDs) {
+          if (!seen.has(id)) {
+            seen.add(id)
+            const track = mockWorkspaceStore.tracks.get(id)
+            if (track) nextTrackList.push(track)
+          }
+        }
+      }
+      mockWorkspaceStore.trackList = nextTrackList
+    })
+
+    const wrapper = mountWorkspace()
+    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    await checkboxes[2].trigger('change')
+    await nextTick()
+
+    const titles = wrapper.findAll('.workspace__track-title').map((node) => node.text())
+    expect(titles).toEqual(['Song A', 'Song C', 'Song B'])
+  })
+
   it('uses trackIdSet.has() for checkbox checked state', () => {
     const pl = makePlaylist(1, 'PL1', ['t1', 't2'])
     // Override trackIdSet so only t1 is "checked"
@@ -201,5 +275,50 @@ describe('WorkspaceView', () => {
     const wrapper = mountWorkspace()
     wrapper.unmount()
     expect(mockWorkspaceStore.$reset).toHaveBeenCalled()
+  })
+
+  it('clicking a checkbox calls workspaceStore.toggleTrack with the correct ids', async () => {
+    const pl = makePlaylist(1, 'PL1', ['t1'])
+    mockWorkspaceStore.playlists = [pl]
+    mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist 1')]
+    const wrapper = mountWorkspace()
+
+    await wrapper.find('input[type="checkbox"]').trigger('change')
+
+    expect(mockWorkspaceStore.toggleTrack).toHaveBeenCalledWith(1, 't1')
+  })
+
+  it('save button is disabled when hasUnsavedChanges is false', () => {
+    mockWorkspaceStore.hasUnsavedChanges = false
+    const wrapper = mountWorkspace()
+    const btn = wrapper.find('button.btn--primary')
+    expect((btn.element as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('save button is enabled when hasUnsavedChanges is true', () => {
+    mockWorkspaceStore.hasUnsavedChanges = true
+    const wrapper = mountWorkspace()
+    const btn = wrapper.find('button.btn--primary')
+    expect((btn.element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('unsaved changes indicator is visible when hasUnsavedChanges is true', () => {
+    mockWorkspaceStore.hasUnsavedChanges = true
+    const wrapper = mountWorkspace()
+    expect(wrapper.find('.workspace__unsaved-indicator').exists()).toBe(true)
+    expect(wrapper.find('.workspace__unsaved-indicator').text()).toContain('Unsaved changes')
+  })
+
+  it('unsaved changes indicator is hidden when hasUnsavedChanges is false', () => {
+    mockWorkspaceStore.hasUnsavedChanges = false
+    const wrapper = mountWorkspace()
+    expect(wrapper.find('.workspace__unsaved-indicator').exists()).toBe(false)
+  })
+
+  it('clicking save button calls workspaceStore.save', async () => {
+    mockWorkspaceStore.hasUnsavedChanges = true
+    const wrapper = mountWorkspace()
+    await wrapper.find('button.btn--primary').trigger('click')
+    expect(mockWorkspaceStore.save).toHaveBeenCalled()
   })
 })
