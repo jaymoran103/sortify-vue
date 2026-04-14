@@ -78,6 +78,12 @@ describe('PlaylistColumnHeader', () => {
       expect(mockShow).toHaveBeenCalledOnce()
     })
 
+    it('opens context menu on right-click anywhere on the header', async () => {
+      currentWrapper = mountHeader(makePlaylist(1, 'PL1'))
+      await currentWrapper.find('.playlist-col-header').trigger('contextmenu')
+      expect(mockShow).toHaveBeenCalledOnce()
+    })
+
     it('always includes Rename and Duplicate items', async () => {
       currentWrapper = mountHeader(makePlaylist(1, 'PL1'))
       await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')

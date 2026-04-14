@@ -100,6 +100,13 @@ describe('TrackRow', () => {
     expect((wrapper.emitted('contextMenu')![0] as unknown[])[0]).toBe('t1')
   })
 
+  it('track info ellipsis button emits contextMenu with trackId and event', async () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [])
+    await wrapper.find('.track-row__menu-btn').trigger('click')
+    expect(wrapper.emitted('contextMenu')).toBeDefined()
+    expect((wrapper.emitted('contextMenu')![0] as unknown[])[0]).toBe('t1')
+  })
+
   it('has track-row--selected class when selected is true', () => {
     const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [], true)
     expect(wrapper.find('.track-row').classes()).toContain('track-row--selected')
@@ -116,5 +123,13 @@ describe('TrackRow', () => {
     await wrapper.find('.track-row__checkbox').trigger('click')
     // The row-level select should not fire from a checkbox container click
     expect(wrapper.emitted('select')).toBeUndefined()
+  })
+
+  it('clicking anywhere in a playlist cell emits toggleTrack', async () => {
+    const pl = makePlaylist(42, 'PL1', [])
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [pl])
+    await wrapper.find('.track-row__checkbox').trigger('click')
+    expect(wrapper.emitted('toggleTrack')).toBeDefined()
+    expect(wrapper.emitted('toggleTrack')![0]).toEqual([42, 't1'])
   })
 })
