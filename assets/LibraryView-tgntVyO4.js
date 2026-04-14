@@ -1,0 +1,1 @@
+import{_ as r,o,c as s,b as t}from"./index-HJ3AAnuT.js";const a={},c={class:"library-view"};function n(i,e){return o(),s("div",c,[...e[0]||(e[0]=[t("h1",null,"Library Module",-1)])])}const _=r(a,[["render",n]]);export{_ as default};
