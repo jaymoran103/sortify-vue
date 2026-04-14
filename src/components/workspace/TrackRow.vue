@@ -30,7 +30,10 @@ defineEmits<{
     <div class="track-row__info">
       <div class="track-row__info-content">
         <span class="track-row__title">{{ track.title }}</span>
-        <span class="track-row__artist text-muted">{{ track.artist }}</span>
+        <div class="track-row__meta">
+          <span class="track-row__artist text-muted">{{ track.artist }}</span>
+          <span class="track-row__album text-muted">{{ track.album }}</span>
+        </div>
       </div>
       <button
         class="track-row__menu-btn"
@@ -148,6 +151,27 @@ defineEmits<{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.track-row__album {
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.track-row__album::before {
+  content: '\A0\B7\A0';
+}
+
+.track-row__meta {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .track-row__checkbox {

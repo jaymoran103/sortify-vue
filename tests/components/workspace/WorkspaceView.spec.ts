@@ -77,8 +77,8 @@ function makePlaylist(id: PlaylistId, name: string, trackIDs: string[]): Workspa
   }
 }
 
-function makeTrack(trackID: string, title: string, artist: string): Track {
-  return { trackID, title, artist, album: 'Album', source: 'csv' }
+function makeTrack(trackID: string, title: string, artist: string, album = 'Album'): Track {
+  return { trackID, title, artist, album, source: 'csv' }
 }
 
 function mountWorkspace() {
@@ -352,5 +352,69 @@ describe('WorkspaceView', () => {
     const wrapper = mountWorkspace()
     await wrapper.find('button.btn--primary').trigger('click')
     expect(mockWorkspaceStore.save).toHaveBeenCalled()
+  })
+
+  describe('track row display', () => {
+    it('renders track title, artist, and album in separate elements', () => {
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'My Song', 'My Artist', 'My Album')]
+      const wrapper = mountWorkspace()
+      expect(wrapper.find('.track-row__title').text()).toBe('My Song')
+      expect(wrapper.find('.track-row__artist').text()).toBe('My Artist')
+      expect(wrapper.find('.track-row__album').text()).toBe('My Album')
+    })
+
+    it('artist and album are not concatenated', () => {
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'Song', 'ArtistName', 'AlbumName')]
+      const wrapper = mountWorkspace()
+      const artistEl = wrapper.find('.track-row__artist')
+      const albumEl = wrapper.find('.track-row__album')
+      expect(artistEl.text()).not.toContain('AlbumName')
+      expect(albumEl.text()).not.toContain('ArtistName')
+    })
+  })
+
+  describe('sort options', () => {
+    it('sort dropdown includes album option', () => {
+      const wrapper = mountWorkspace()
+      const options = wrapper.findAll('select.dropdown option')
+      const labels = options.map((o) => o.text())
+      expect(labels).toContain('Album')
+    })
+
+    it('sort dropdown includes title, artist, and order-added options', () => {
+      const wrapper = mountWorkspace()
+      const options = wrapper.findAll('select.dropdown option')
+      const labels = options.map((o) => o.text())
+      expect(labels).toContain('Title')
+      expect(labels).toContain('Artist')
+      expect(labels).toContain('Order Added')
+    })
+
+    it('selecting album sort orders rows by album name', async () => {
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'Song 1', 'Artist', 'Zebra'),
+        makeTrack('t2', 'Song 2', 'Artist', 'Apple'),
+        makeTrack('t3', 'Song 3', 'Artist', 'Mango'),
+      ]
+      const wrapper = mountWorkspace()
+      const select = wrapper.find<HTMLSelectElement>('select.dropdown')
+      await select.setValue('album')
+      await nextTick()
+      const titles = wrapper.findAll('.track-row__title').map((n) => n.text())
+      expect(titles).toEqual(['Song 2', 'Song 3', 'Song 1'])
+    })
+
+    it('selecting title sort orders rows by title', async () => {
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'Zebra Song', 'Artist', 'Album'),
+        makeTrack('t2', 'Apple Song', 'Artist', 'Album'),
+      ]
+      const wrapper = mountWorkspace()
+      const select = wrapper.find<HTMLSelectElement>('select.dropdown')
+      await select.setValue('title')
+      await nextTick()
+      const titles = wrapper.findAll('.track-row__title').map((n) => n.text())
+      expect(titles).toEqual(['Apple Song', 'Zebra Song'])
+    })
   })
 })

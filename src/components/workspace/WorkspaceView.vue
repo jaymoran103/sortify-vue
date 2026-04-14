@@ -27,12 +27,11 @@ const modal = useModal()
 const ctx = useContextMenu()
 
 // Sort options for workspace tracks.
-// NOTE: Album is currenrly omitted since it's not displayed in the track rows, but remains fully functional.
 const sortOptions: SortOption<Track>[] = [
   { key: 'order-added', label: 'Order Added', compareFn: () => 0 },
   { key: 'title', label: 'Title', compareFn: (a, b) => a.title.localeCompare(b.title) },
   { key: 'artist', label: 'Artist', compareFn: (a, b) => a.artist.localeCompare(b.artist) },
-  // { key: 'album', label: 'Album', compareFn: (a, b) => a.album.localeCompare(b.album) },
+  { key: 'album', label: 'Album', compareFn: (a, b) => a.album.localeCompare(b.album) },
 ]
 
 // Chain: trackList -> filtered -> sorted -> displayTracks

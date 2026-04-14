@@ -6,8 +6,8 @@ import type { WorkspacePlaylist } from '@/types/models'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function makeTrack(trackID: string, title: string, artist: string): Track {
-  return { trackID, title, artist, album: 'Album', source: 'csv' }
+function makeTrack(trackID: string, title: string, artist: string, album = 'Test Album'): Track {
+  return { trackID, title, artist, album, source: 'csv' }
 }
 
 function makePlaylist(id: number, name: string, trackIDs: string[]): WorkspacePlaylist {
@@ -34,6 +34,17 @@ describe('TrackRow', () => {
   it('renders track artist', () => {
     const wrapper = mountRow(makeTrack('t1', 'My Song', 'My Artist'), 0, [])
     expect(wrapper.find('.track-row__artist').text()).toBe('My Artist')
+  })
+
+  it('renders track album', () => {
+    const wrapper = mountRow(makeTrack('t1', 'My Song', 'My Artist', 'My Album'), 0, [])
+    expect(wrapper.find('.track-row__album').text()).toBe('My Album')
+  })
+
+  it('artist and album are in separate elements', () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist', 'Album'), 0, [])
+    expect(wrapper.find('.track-row__artist').text()).toBe('Artist')
+    expect(wrapper.find('.track-row__album').text()).toBe('Album')
   })
 
   it('renders 1-based row index', () => {
