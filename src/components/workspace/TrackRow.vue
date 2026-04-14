@@ -2,21 +2,27 @@
 import type { Track } from '@/types/models'
 import type { WorkspacePlaylist } from '@/types/models'
 
-
 defineProps<{
   track: Track
   index: number
   playlists: WorkspacePlaylist[]
+  selected: boolean
 }>()
 
 defineEmits<{
   toggleTrack: [playlistId: number | string, trackId: string]
+  select: [trackId: string, event: MouseEvent]
+  contextMenu: [trackId: string, event: MouseEvent]
 }>()
-
 </script>
 
 <template>
-  <div class="track-row">
+  <div
+    class="track-row"
+    :class="{ 'track-row--selected': selected }"
+    @click="$emit('select', track.trackID, $event)"
+    @contextmenu.prevent="$emit('contextMenu', track.trackID, $event)"
+  >
     <!-- Index Cell: just display the track's position in the displayed order -->
     <div class="track-row__index">{{ index + 1 }}</div>
 
@@ -29,11 +35,12 @@ defineEmits<{
 
     <!-- Playlist Checkbox Cells: one rendered per playlist column, reflecting membership.  -->
     <!-- @change emits toggleTrack with playlist ID and track ID, parent component handles membership update -->
-    <!-- FUTURE: clicking cell (outside of checkbox) should trigger the same action -->
+    <!-- Stop propagation so checkbox clicks don't trigger row selection -->
     <div
       v-for="pl in playlists"
       :key="pl.id"
       class="track-row__checkbox"
+      @click.stop
     >
       <input
         type="checkbox"
@@ -52,6 +59,20 @@ defineEmits<{
   align-items: center;
   height: 48px;
   border-bottom: 1px solid var(--color-border-subtle);
+  cursor: default;
+  user-select: none;
+}
+
+.track-row:hover {
+  background: var(--color-row-hover);
+}
+
+.track-row--selected {
+  background: var(--color-row-selected);
+}
+
+.track-row--selected:hover {
+  background: var(--color-row-selected);
 }
 
 .track-row__index {

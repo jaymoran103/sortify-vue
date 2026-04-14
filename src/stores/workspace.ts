@@ -24,7 +24,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // Stable, first-seen arrival order for all tracks in the workspace.
   // Established once on session load; updated only when the track set changes:
   //   - addPlaylist appends novel track IDs
-  //   - FUTURE: removeTrackFromWorkspace() removes specific IDs
+  //   - removeTrackFromWorkspace removes specific IDs
   // toggleTrack should NOT affect this — membership changes don't reorder or hide tracks.
   const stableOrder = ref<string[]>([])
 
@@ -274,6 +274,72 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   /**
+   * Add a track to every playlist in the workspace that does not already contain it.
+   * Marks each affected playlist as modified.
+   */
+  function addTrackToAll(trackId: string): void {
+    for (const pl of playlists.value) {
+      if (!pl.trackIdSet.has(trackId)) {
+        pl.trackIDs.push(trackId)
+        pl.trackIdSet.add(trackId)
+        modifiedIds.value.add(pl.id!)
+      }
+    }
+  }
+
+  /**
+   * Remove a track from every playlist in the workspace that contains it, marking each affected playlist as modified. 
+   * Does NOT remove the track from the workspace track map or stable order — use removeTrackFromWorkspace for that.
+   * 
+   * Serves as helper for removeTrackFromWorkspace action.
+   */
+  function removeTrackFromAll(trackId: string): void {
+    for (const pl of playlists.value) {
+      if (pl.trackIdSet.has(trackId)) {
+        pl.trackIDs = pl.trackIDs.filter((id) => id !== trackId)
+        pl.trackIdSet.delete(trackId)
+        modifiedIds.value.add(pl.id!)
+      }
+    }
+  }
+
+  /**
+   * Remove a track from all playlists, from the workspace track map, and from the stable display order.
+   * The track row disappears from the workspace table.
+   */
+  function removeTrackFromWorkspace(trackId: string): void {
+    removeTrackFromAll(trackId)
+    tracks.value.delete(trackId)
+    stableOrder.value = stableOrder.value.filter((id) => id !== trackId)
+  }
+
+  /**
+   * Bulk version of addTrackToAll — operates on a set of track IDs.
+   */
+  function bulkAddToAll(trackIds: Set<string>): void {
+    for (const tid of trackIds) addTrackToAll(tid)
+  }
+
+  /**
+   * Bulk version of removeTrackFromAll — operates on a set of track IDs.
+   */
+  function bulkRemoveFromAll(trackIds: Set<string>): void {
+    for (const tid of trackIds) removeTrackFromAll(tid)
+  }
+
+  /**
+   * Remove multiple tracks from all playlists, from the workspace track map, and
+   * from the stable display order in a single stableOrder filter pass (O(n+m)).
+   */
+  function bulkRemoveFromWorkspace(trackIds: Set<string>): void {
+    for (const tid of trackIds) {
+      removeTrackFromAll(tid)
+      tracks.value.delete(tid)
+    }
+    stableOrder.value = stableOrder.value.filter((id) => !trackIds.has(id))
+  }
+
+  /**
    * Toggle a track's membership in a playlist. 
    * 
    * Keeps trackIDs in sync within playlist lookup set and ordered array.
@@ -391,6 +457,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     duplicatePlaylist,
     movePlaylist,
     createEmptyPlaylist,
+    addTrackToAll,
+    removeTrackFromAll,
+    removeTrackFromWorkspace,
+    bulkAddToAll,
+    bulkRemoveFromAll,
+    bulkRemoveFromWorkspace,
     toggleTrack,
     save,
     $reset,

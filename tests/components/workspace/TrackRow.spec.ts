@@ -18,8 +18,9 @@ function mountRow(
   track: Track,
   index: number,
   playlists: WorkspacePlaylist[],
+  selected = false,
 ) {
-  return mount(TrackRow, { props: { track, index, playlists } })
+  return mount(TrackRow, { props: { track, index, playlists, selected } })
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -83,5 +84,37 @@ describe('TrackRow', () => {
     const wrapper = mountRow(makeTrack('t1', 'Great Song', 'Artist'), 0, [pl])
     const checkbox = wrapper.find('input[type="checkbox"]')
     expect(checkbox.attributes('aria-label')).toBe('Great Song in My Playlist')
+  })
+
+  it('row click emits select with trackId and event', async () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [])
+    await wrapper.find('.track-row').trigger('click')
+    expect(wrapper.emitted('select')).toBeDefined()
+    expect((wrapper.emitted('select')![0] as unknown[])[0]).toBe('t1')
+  })
+
+  it('row right-click emits contextMenu with trackId and event', async () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [])
+    await wrapper.find('.track-row').trigger('contextmenu')
+    expect(wrapper.emitted('contextMenu')).toBeDefined()
+    expect((wrapper.emitted('contextMenu')![0] as unknown[])[0]).toBe('t1')
+  })
+
+  it('has track-row--selected class when selected is true', () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [], true)
+    expect(wrapper.find('.track-row').classes()).toContain('track-row--selected')
+  })
+
+  it('does not have track-row--selected class when selected is false', () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [], false)
+    expect(wrapper.find('.track-row').classes()).not.toContain('track-row--selected')
+  })
+
+  it('checkbox click does not emit select (propagation stopped)', async () => {
+    const pl = makePlaylist(1, 'PL1', ['t1'])
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [pl])
+    await wrapper.find('.track-row__checkbox').trigger('click')
+    // The row-level select should not fire from a checkbox container click
+    expect(wrapper.emitted('select')).toBeUndefined()
   })
 })

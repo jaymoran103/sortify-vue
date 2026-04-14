@@ -6,19 +6,24 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useModal } from '@/composables/useModal'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSort } from '@/composables/useListSort'
+import { useListSelection } from '@/composables/useListSelection'
+import { useContextMenu } from '@/composables/useContextMenu'
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
+import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import TrackRow from './TrackRow.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
 import type { Track } from '@/types/models'
-import type { SortOption } from '@/types/ui'
+import type { SortOption, MenuEntry } from '@/types/ui'
 
 const route = useRoute()
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 const modal = useModal()
+const ctx = useContextMenu()
 
 // Sort options for workspace tracks.
 // NOTE: Album is currenrly omitted since it's not displayed in the track rows, but remains fully functional.
@@ -42,6 +47,15 @@ const { query, filtered } = useListFilter<Track>(
   },
 )
 const { currentSort, sorted: displayTracks } = useListSort<Track>(filtered, sortOptions)
+
+// Row selection: single-click selects, shift extends, cmd togglesss.
+// validItems uses full trackList so filter changes do not deselect.
+const rowSelection = useListSelection<Track>(
+  displayTracks,
+  (track) => track.trackID,
+  { selectMultiple: false },
+  computed(() => workspaceStore.trackList),
+)
 
 // Dynamic CSS grid column template: index + track info + one column per playlist.
 // TODO refactor: this feels hacky
@@ -134,6 +148,125 @@ function handleRemove(playlistId: number | string): void {
 function handleDuplicate(playlistId: number | string): void {
   workspaceStore.duplicatePlaylist(playlistId)
 }
+
+// ─── Row selection + context menu handlers ────────────────────
+
+function handleRowSelect(trackId: string, event: MouseEvent): void {
+  rowSelection.toggle(trackId, event)
+}
+
+function handleTrackContextMenu(trackId: string, event: MouseEvent): void {
+  // If right-clicked track isn't selected, select only it
+  if (!rowSelection.isSelected(trackId)) {
+    rowSelection.clear()
+    rowSelection.toggle(trackId)
+  }
+
+  const selectedCount = rowSelection.selectedCount.value
+  const items: MenuEntry[] = []
+
+  if (selectedCount === 1) {
+    items.push({ label: 'Add to All Playlists', action: () => handleAddToAll(trackId) })
+    items.push({ label: 'Remove from All Playlists', action: () => handleRemoveFromAll(trackId) })
+    items.push({ divider: true })
+    items.push({ label: 'Remove from Workspace', action: () => handleDeleteTrack(trackId) })
+  } else {
+    items.push({
+      label: `Add ${selectedCount} Tracks to All Playlists`,
+      action: () => handleBulkAddToAll(),
+    })
+    items.push({
+      label: `Remove ${selectedCount} Tracks from All Playlists`,
+      action: () => handleBulkRemoveFromAll(),
+    })
+    items.push({ divider: true })
+    items.push({
+      label: `Remove ${selectedCount} Tracks from Workspace`,
+      action: () => handleBulkDelete(),
+    })
+  }
+
+  ctx.show(event, items)
+}
+
+// ─── Single track actions -------------------------------
+
+function handleAddToAll(trackId: string): void {
+  workspaceStore.addTrackToAll(trackId)
+}
+
+function handleRemoveFromAll(trackId: string): void {
+  workspaceStore.removeTrackFromAll(trackId)
+}
+
+function handleDeleteTrack(trackId: string): void {
+  workspaceStore.removeTrackFromWorkspace(trackId)
+  rowSelection.clear()
+}
+
+// ─── Bulk track actions ---------––––––––––––––––––––––––––––––––––––
+
+function handleBulkAddToAll(): void {
+  workspaceStore.bulkAddToAll(rowSelection.selectedIds.value)
+  rowSelection.clear()
+}
+
+async function handleBulkRemoveFromAll(): Promise<void> {
+  const count = rowSelection.selectedCount.value
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Remove from All Playlists',
+    message: `Remove ${count} track(s) from all playlists in this workspace?`,
+    confirmLabel: 'Remove',
+  })
+  if (confirmed) {
+    workspaceStore.bulkRemoveFromAll(rowSelection.selectedIds.value)
+    rowSelection.clear()
+  }
+}
+
+async function handleBulkDelete(): Promise<void> {
+  const count = rowSelection.selectedCount.value
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Remove from Workspace',
+    message: `Remove ${count} track(s) from the workspace entirely?`,
+    confirmLabel: 'Remove',
+  })
+  if (confirmed) {
+    workspaceStore.bulkRemoveFromWorkspace(rowSelection.selectedIds.value)
+    rowSelection.clear()
+  }
+}
+
+// ─── Add playlist / create playlist ──────────────
+
+async function handleAddPlaylistToWorkspace(): Promise<void> {
+  const result = await modal.open<number[]>(PlaylistSelectModal, { mode: 'export' })
+  if (result && Array.isArray(result)) {
+    for (const id of result) {
+      await workspaceStore.addPlaylist(id)
+    }
+  }
+}
+
+async function handleCreatePlaylist(): Promise<void> {
+  // window.prompt is a temporary scaffold — replace with modal in polish pass
+  const name = window.prompt('New playlist name:')
+  if (name && name.trim()) {
+    workspaceStore.createEmptyPlaylist(name.trim())
+  }
+}
+
+// ─── Keyboard shortcuts ────────────────────
+
+useKeyboardShortcuts({
+  'ctrl+s': (e) => { e.preventDefault(); void handleSave() },
+  'meta+s': (e) => { e.preventDefault(); void handleSave() },
+  'ctrl+a': (e) => { e.preventDefault(); rowSelection.selectAll() },
+  'meta+a': (e) => { e.preventDefault(); rowSelection.selectAll() },
+  'escape': () => { rowSelection.clear() },
+  'delete': () => { if (rowSelection.selectedCount.value > 0) void handleBulkDelete() },
+  'backspace': () => { if (rowSelection.selectedCount.value > 0) void handleBulkDelete() },
+})
 </script>
 
 <template>
@@ -150,6 +283,8 @@ function handleDuplicate(playlistId: number | string): void {
       </span>
       <!-- Actions/Save Section -->
       <div class="workspace__header-actions">
+        <button class="btn btn--secondary" @click="handleAddPlaylistToWorkspace">+ Add Playlist</button>
+        <button class="btn btn--secondary" @click="handleCreatePlaylist">+ New Playlist</button>
         <span v-if="workspaceStore.hasUnsavedChanges" class="workspace__unsaved-indicator">
           Unsaved changes
         </span>
@@ -183,8 +318,12 @@ function handleDuplicate(playlistId: number | string): void {
         <SearchBar v-model="query" placeholder="Search tracks…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
 
-        <!-- Track Count: display number of shown tracks, out of total -->
+        <!-- Track Count: display number of shown tracks, plus selection count if active -->
         <template #actions>
+          <span v-if="rowSelection.selectedCount.value > 0" class="workspace__selection-count">
+            {{ rowSelection.selectedCount.value }} selected
+            <button class="btn btn--ghost btn--sm" @click="rowSelection.clear()">Clear</button>
+          </span>
           <span class="text-muted text-sm">
             {{ displayTracks.length }}{{ query ? ` of ${workspaceStore.trackList.length}` : '' }} tracks
           </span>
@@ -226,6 +365,7 @@ function handleDuplicate(playlistId: number | string): void {
               :track="trackAt(row.index)"
               :index="row.index"
               :playlists="workspaceStore.playlists"
+              :selected="rowSelection.isSelected(trackAt(row.index).trackID)"
               :style="{
                 position: 'absolute',
                 top: 0,
@@ -235,6 +375,8 @@ function handleDuplicate(playlistId: number | string): void {
                 transform: `translateY(${row.start}px)`,
               }"
               @toggle-track="workspaceStore.toggleTrack"
+              @select="handleRowSelect"
+              @context-menu="handleTrackContextMenu"
             />
           </div>
 
@@ -341,6 +483,14 @@ function handleDuplicate(playlistId: number | string): void {
 
 .workspace__th--track {
   min-width: 0;
+}
+
+.workspace__selection-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 </style>
 

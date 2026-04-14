@@ -26,6 +26,14 @@ const mockWorkspaceStore = reactive({
   removePlaylist: vi.fn(),
   duplicatePlaylist: vi.fn(),
   movePlaylist: vi.fn(),
+  addPlaylist: vi.fn().mockResolvedValue(undefined),
+  createEmptyPlaylist: vi.fn(),
+  addTrackToAll: vi.fn(),
+  removeTrackFromAll: vi.fn(),
+  removeTrackFromWorkspace: vi.fn(),
+  bulkAddToAll: vi.fn(),
+  bulkRemoveFromAll: vi.fn(),
+  bulkRemoveFromWorkspace: vi.fn(),
   $reset: vi.fn(),
 })
 
@@ -102,6 +110,14 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.removePlaylist.mockReset()
     mockWorkspaceStore.duplicatePlaylist.mockReset()
     mockWorkspaceStore.movePlaylist.mockReset()
+    mockWorkspaceStore.addPlaylist.mockResolvedValue(undefined)
+    mockWorkspaceStore.createEmptyPlaylist.mockReset()
+    mockWorkspaceStore.addTrackToAll.mockReset()
+    mockWorkspaceStore.removeTrackFromAll.mockReset()
+    mockWorkspaceStore.removeTrackFromWorkspace.mockReset()
+    mockWorkspaceStore.bulkAddToAll.mockReset()
+    mockWorkspaceStore.bulkRemoveFromAll.mockReset()
+    mockWorkspaceStore.bulkRemoveFromWorkspace.mockReset()
     mockWorkspaceStore.$reset.mockReset()
   })
 

@@ -1,8 +1,24 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PlaylistColumnHeader from '@/components/workspace/PlaylistColumnHeader.vue'
-import { useContextMenu } from '@/composables/useContextMenu'
 import type { WorkspacePlaylist } from '@/types/models'
+import type { MenuEntry } from '@/types/ui'
+
+// ─── Mock useContextMenu ──────────────────────────────────────────────────────
+// Replace the singleton with a fresh mock per test to avoid cross-test contamination.
+
+const mockShow = vi.fn()
+const mockClose = vi.fn()
+
+vi.mock('@/composables/useContextMenu', () => ({
+  useContextMenu: () => ({
+    show: mockShow,
+    close: mockClose,
+    isOpen: { value: false },
+    entries: { value: [] },
+    position: { value: { x: 0, y: 0 } },
+  }),
+}))
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -14,6 +30,12 @@ function mountHeader(playlist: WorkspacePlaylist, canMoveLeft = false, canMoveRi
   return mount(PlaylistColumnHeader, {
     props: { playlist, canMoveLeft, canMoveRight },
   })
+}
+
+function getLastShowLabels(): string[] {
+  const lastCall = mockShow.mock.calls[mockShow.mock.calls.length - 1]
+  const items: MenuEntry[] = lastCall?.[1] ?? []
+  return items.filter((e): e is { label: string; action: () => void } => 'label' in e).map((e) => e.label)
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -39,126 +61,115 @@ describe('PlaylistColumnHeader', () => {
   })
 
   describe('context menu items', () => {
-    let ctx: ReturnType<typeof useContextMenu>
+    let currentWrapper: ReturnType<typeof mountHeader> | null = null
 
     beforeEach(() => {
-      ctx = useContextMenu()
-      ctx.close()
+      mockShow.mockClear()
+    })
+
+    afterEach(() => {
+      currentWrapper?.unmount()
+      currentWrapper = null
     })
 
     it('opens context menu on button click', async () => {
-      const wrapper = mountHeader(makePlaylist(1, 'PL1'))
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      expect(ctx.isOpen.value).toBe(true)
+      currentWrapper = mountHeader(makePlaylist(1, 'PL1'))
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(mockShow).toHaveBeenCalledOnce()
     })
 
     it('always includes Rename and Duplicate items', async () => {
-      const wrapper = mountHeader(makePlaylist(1, 'PL1'))
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const labels = ctx.entries.value
-        .filter((e) => 'label' in e)
-        .map((e) => ('label' in e ? e.label : ''))
+      currentWrapper = mountHeader(makePlaylist(1, 'PL1'))
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      const labels = getLastShowLabels()
       expect(labels).toContain('Rename')
       expect(labels).toContain('Duplicate')
     })
 
     it('always includes Remove from Workspace item', async () => {
-      const wrapper = mountHeader(makePlaylist(1, 'PL1'))
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const labels = ctx.entries.value
-        .filter((e) => 'label' in e)
-        .map((e) => ('label' in e ? e.label : ''))
-      expect(labels).toContain('Remove from Workspace')
+      currentWrapper = mountHeader(makePlaylist(1, 'PL1'))
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(getLastShowLabels()).toContain('Remove from Workspace')
     })
 
     it('includes Move Left when canMoveLeft is true', async () => {
-      const wrapper = mountHeader(makePlaylist(1, 'PL1'), true, false)
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const labels = ctx.entries.value
-        .filter((e) => 'label' in e)
-        .map((e) => ('label' in e ? e.label : ''))
-      expect(labels).toContain('Move Left')
+      currentWrapper = mountHeader(makePlaylist(1, 'PL1'), true, false)
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(getLastShowLabels()).toContain('Move Left')
     })
 
     it('excludes Move Left when canMoveLeft is false', async () => {
-      const wrapper = mountHeader(makePlaylist(1, 'PL1'), false, false)
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const labels = ctx.entries.value
-        .filter((e) => 'label' in e)
-        .map((e) => ('label' in e ? e.label : ''))
-      expect(labels).not.toContain('Move Left')
+      currentWrapper = mountHeader(makePlaylist(1, 'PL1'), false, false)
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(getLastShowLabels()).not.toContain('Move Left')
     })
 
     it('includes Move Right when canMoveRight is true', async () => {
-      const wrapper = mountHeader(makePlaylist(1, 'PL1'), false, true)
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const labels = ctx.entries.value
-        .filter((e) => 'label' in e)
-        .map((e) => ('label' in e ? e.label : ''))
-      expect(labels).toContain('Move Right')
+      currentWrapper = mountHeader(makePlaylist(1, 'PL1'), false, true)
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(getLastShowLabels()).toContain('Move Right')
     })
 
     it('excludes Move Right when canMoveRight is false', async () => {
-      const wrapper = mountHeader(makePlaylist(1, 'PL1'), false, false)
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const labels = ctx.entries.value
-        .filter((e) => 'label' in e)
-        .map((e) => ('label' in e ? e.label : ''))
-      expect(labels).not.toContain('Move Right')
+      currentWrapper = mountHeader(makePlaylist(1, 'PL1'), false, false)
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(getLastShowLabels()).not.toContain('Move Right')
     })
 
     it('Rename action emits rename event with playlist id', async () => {
-      const wrapper = mountHeader(makePlaylist(7, 'PL'))
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const renameItem = ctx.entries.value.find((e) => 'label' in e && e.label === 'Rename')
+      currentWrapper = mountHeader(makePlaylist(7, 'PL'))
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      const items: MenuEntry[] = mockShow.mock.calls[0]![1]!
+      const renameItem = items.find((e) => 'label' in e && e.label === 'Rename')
       expect(renameItem).toBeDefined()
       if (renameItem && 'action' in renameItem) renameItem.action()
-      expect(wrapper.emitted('rename')).toBeDefined()
-      expect(wrapper.emitted('rename')![0]).toEqual([7])
+      expect(currentWrapper.emitted('rename')).toBeDefined()
+      expect(currentWrapper.emitted('rename')![0]).toEqual([7])
     })
 
     it('Duplicate action emits duplicate event with playlist id', async () => {
-      const wrapper = mountHeader(makePlaylist(7, 'PL'))
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const item = ctx.entries.value.find((e) => 'label' in e && e.label === 'Duplicate')
+      currentWrapper = mountHeader(makePlaylist(7, 'PL'))
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      const items: MenuEntry[] = mockShow.mock.calls[0]![1]!
+      const item = items.find((e) => 'label' in e && e.label === 'Duplicate')
       if (item && 'action' in item) item.action()
-      expect(wrapper.emitted('duplicate')![0]).toEqual([7])
+      expect(currentWrapper.emitted('duplicate')![0]).toEqual([7])
     })
 
     it('Remove action emits remove event with playlist id', async () => {
-      const wrapper = mountHeader(makePlaylist(7, 'PL'))
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const item = ctx.entries.value.find(
-        (e) => 'label' in e && e.label === 'Remove from Workspace',
-      )
+      currentWrapper = mountHeader(makePlaylist(7, 'PL'))
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      const items: MenuEntry[] = mockShow.mock.calls[0]![1]!
+      const item = items.find((e) => 'label' in e && e.label === 'Remove from Workspace')
       if (item && 'action' in item) item.action()
-      expect(wrapper.emitted('remove')![0]).toEqual([7])
+      expect(currentWrapper.emitted('remove')![0]).toEqual([7])
     })
 
     it('Move Left action emits moveLeft event', async () => {
-      const wrapper = mountHeader(makePlaylist(7, 'PL'), true, false)
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const item = ctx.entries.value.find((e) => 'label' in e && e.label === 'Move Left')
+      currentWrapper = mountHeader(makePlaylist(7, 'PL'), true, false)
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      const items: MenuEntry[] = mockShow.mock.calls[0]![1]!
+      const item = items.find((e) => 'label' in e && e.label === 'Move Left')
       if (item && 'action' in item) item.action()
-      expect(wrapper.emitted('moveLeft')![0]).toEqual([7])
+      expect(currentWrapper.emitted('moveLeft')![0]).toEqual([7])
     })
 
     it('Move Right action emits moveRight event', async () => {
-      const wrapper = mountHeader(makePlaylist(7, 'PL'), false, true)
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const item = ctx.entries.value.find((e) => 'label' in e && e.label === 'Move Right')
+      currentWrapper = mountHeader(makePlaylist(7, 'PL'), false, true)
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      const items: MenuEntry[] = mockShow.mock.calls[0]![1]!
+      const item = items.find((e) => 'label' in e && e.label === 'Move Right')
       if (item && 'action' in item) item.action()
-      expect(wrapper.emitted('moveRight')![0]).toEqual([7])
+      expect(currentWrapper.emitted('moveRight')![0]).toEqual([7])
     })
 
     it('includes a divider before Remove from Workspace', async () => {
-      const wrapper = mountHeader(makePlaylist(1, 'PL'))
-      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
-      const entries = ctx.entries.value
-      const removeIdx = entries.findIndex((e) => 'label' in e && e.label === 'Remove from Workspace')
+      currentWrapper = mountHeader(makePlaylist(1, 'PL'))
+      await currentWrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      const items: MenuEntry[] = mockShow.mock.calls[0]![1]!
+      const removeIdx = items.findIndex((e) => 'label' in e && e.label === 'Remove from Workspace')
       expect(removeIdx).toBeGreaterThan(0)
-      const beforeRemove = entries[removeIdx - 1]
-      expect(beforeRemove).toHaveProperty('divider', true)
+      expect(items[removeIdx - 1]).toHaveProperty('divider', true)
     })
   })
 })

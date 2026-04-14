@@ -672,6 +672,143 @@ describe('Workspace Store', () => {
     expect(store.playlists[0]?.id).toBe(pl1Id)
     expect(store.playlists[1]?.id).toBe(pl2Id)
   })
+
+  // ─── addTrackToAll ────────────────────────────────────────────────────────
+
+  it('addTrackToAll adds a track to all playlists that do not contain it', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // track-3 is only in pl2; add it to all
+    store.addTrackToAll('track-3')
+
+    const pl1 = store.playlists.find((p) => p.id === pl1Id)
+    const pl2 = store.playlists.find((p) => p.id === pl2Id)
+    expect(pl1?.trackIDs).toContain('track-3')
+    expect(pl1?.trackIdSet.has('track-3')).toBe(true)
+    expect(pl2?.trackIDs.filter((id) => id === 'track-3')).toHaveLength(1) // not duplicated
+  })
+
+  it('addTrackToAll marks affected playlists as modified', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.addTrackToAll('track-3')
+
+    expect(store.modifiedIds.has(pl1Id)).toBe(true)
+  })
+
+  it('addTrackToAll does not duplicate track in playlist that already has it', async () => {
+    const { pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // pl2 already contains track-3
+    const pl2 = store.playlists.find((p) => p.id === pl2Id)
+    const countBefore = pl2!.trackIDs.filter((id) => id === 'track-3').length
+
+    store.addTrackToAll('track-3')
+
+    const countAfter = pl2!.trackIDs.filter((id) => id === 'track-3').length
+    expect(countAfter).toBe(countBefore)
+  })
+
+  // ─── removeTrackFromAll ───────────────────────────────────────────────────
+
+  it('removeTrackFromAll removes track from all playlists that contain it', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // track-2 is in both pl1 and pl2
+    store.removeTrackFromAll('track-2')
+
+    for (const pl of store.playlists) {
+      expect(pl.trackIDs).not.toContain('track-2')
+      expect(pl.trackIdSet.has('track-2')).toBe(false)
+    }
+  })
+
+  it('removeTrackFromAll marks affected playlists as modified', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.removeTrackFromAll('track-2')
+
+    expect(store.modifiedIds.has(pl1Id)).toBe(true)
+    expect(store.modifiedIds.has(pl2Id)).toBe(true)
+  })
+
+  it('removeTrackFromAll does not remove track from stableOrder or tracks map', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.removeTrackFromAll('track-1')
+
+    expect(store.trackList.map((t) => t.trackID)).toContain('track-1')
+    expect(store.tracks.has('track-1')).toBe(true)
+  })
+
+  // ─── removeTrackFromWorkspace ─────────────────────────────────────────────
+
+  it('removeTrackFromWorkspace removes track from all playlists, tracks map, and trackList', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.removeTrackFromWorkspace('track-1')
+
+    expect(store.tracks.has('track-1')).toBe(false)
+    expect(store.trackList.map((t) => t.trackID)).not.toContain('track-1')
+    const pl1 = store.playlists.find((p) => p.id === pl1Id)
+    expect(pl1?.trackIDs).not.toContain('track-1')
+  })
+
+  // ─── bulkAddToAll ─────────────────────────────────────────────────────────
+
+  it('bulkAddToAll adds multiple tracks to all playlists', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // track-3 is only in pl2; add it and track-1 (already in pl1) to all
+    store.bulkAddToAll(new Set(['track-3']))
+
+    const pl1 = store.playlists.find((p) => p.id === pl1Id)
+    expect(pl1?.trackIDs).toContain('track-3')
+  })
+
+  // ─── bulkRemoveFromWorkspace ──────────────────────────────────────────────
+
+  it('bulkRemoveFromWorkspace removes all specified tracks from workspace', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.bulkRemoveFromWorkspace(new Set(['track-1', 'track-3']))
+
+    expect(store.tracks.has('track-1')).toBe(false)
+    expect(store.tracks.has('track-3')).toBe(false)
+    const ids = store.trackList.map((t) => t.trackID)
+    expect(ids).not.toContain('track-1')
+    expect(ids).not.toContain('track-3')
+    expect(ids).toContain('track-2')
+  })
+
+  it('bulkRemoveFromWorkspace updates stableOrder in a single pass', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.bulkRemoveFromWorkspace(new Set(['track-1', 'track-2']))
+
+    expect(store.trackList).toHaveLength(1)
+    expect(store.trackList[0]?.trackID).toBe('track-3')
+  })
 })
 
 
