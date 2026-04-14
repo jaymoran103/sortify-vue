@@ -10,6 +10,7 @@ import { useListSelection } from '@/composables/useListSelection'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
+import PromptModal from '@/components/modals/PromptModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
@@ -134,10 +135,14 @@ function trackAt(index: number): Track {
 async function handleRename(playlistId: number | string): Promise<void> {
   const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
   if (!pl) return
-  // FUTURE: window.prompt is a temporary scaffold, replace with a proper modal in a polish pass
-  const newName = window.prompt('Rename playlist:', pl.name)
-  if (newName && newName.trim()) {
-    workspaceStore.renamePlaylist(playlistId, newName.trim())
+  const newName = await modal.open<string>(PromptModal, {
+    title: 'Rename Playlist',
+    label: 'New name',
+    initialValue: pl.name,
+    confirmLabel: 'Rename',
+  })
+  if (newName) {
+    workspaceStore.renamePlaylist(playlistId, newName)
   }
 }
 
