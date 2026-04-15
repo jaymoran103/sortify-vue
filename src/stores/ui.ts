@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { ref, markRaw, type Ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { ModalConfig } from '@/types/ui'
 
@@ -13,7 +13,9 @@ export const useUiStore = defineStore('ui', () => {
   function openModal(config: ModalConfig): Promise<unknown> {
     if (activeModal.value) activeModal.value.resolve(null)
     return new Promise((resolve) => {
-      activeModal.value = { config, resolve }
+      
+      // markRaw prevents Vue from making the component object itself reactive, which would cause a runtime warning and unnecessary performance overhead.
+      activeModal.value = { config: { ...config, component: markRaw(config.component) }, resolve }
     })
   }
 

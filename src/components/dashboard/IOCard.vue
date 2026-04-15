@@ -1,9 +1,15 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useModal } from '@/composables/useModal'
+import { usePlaylistStore } from '@/stores/playlists'
 import ImportModal from './ImportModal.vue'
 import ExportModal from './ExportModal.vue'
 
 const modal = useModal()
+
+// Access playlist store to determine if there are any playlists available. If not, "Choose Playlists" button is disabled withn a tooltip.
+const playlistStore = usePlaylistStore()
+const hasPlaylists = computed(() => (playlistStore.playlists ?? []).length > 0)
 
 function openImportModal() {
   modal.open(ImportModal)
@@ -22,7 +28,7 @@ function openExportModal() {
 
     <div class="io-card__actions">
       <button id="import-button" class="btn btn--primary" @click="openImportModal">Import</button>
-      <button id="export-button" class="btn btn--primary" @click="openExportModal">Export</button>
+      <button id="export-button" class="btn btn--primary" @click="openExportModal" :disabled="!hasPlaylists" :title="hasPlaylists ? '' : 'No playlists available'">Export</button>
     </div>
 
     <div class="io-card__spotify-status">

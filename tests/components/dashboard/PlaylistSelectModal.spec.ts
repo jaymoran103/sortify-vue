@@ -121,9 +121,7 @@ describe('PlaylistSelectModal', () => {
     expect(openBtn.text()).toContain('1')
   })
 
-  it('confirm navigates to /workspace with selected IDs and emits cancel', async () => {
-    const pushSpy = vi.spyOn(router, 'push')
-
+  it('confirm emits confirm with selected playlist IDs', async () => {
     const wrapper = mountModal()
     const items = wrapper.findAll('.selectable-item')
     await items[0]!.trigger('click')
@@ -131,13 +129,8 @@ describe('PlaylistSelectModal', () => {
     const openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
     await openBtn.trigger('click')
 
-    expect(pushSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        path: '/workspace',
-        query: expect.objectContaining({ playlists: '1' }),
-      }),
-    )
-    expect(wrapper.emitted('cancel')).toBeTruthy()
+    expect(wrapper.emitted('confirm')).toBeTruthy()
+    expect(wrapper.emitted('confirm')![0]).toEqual([[1]])
   })
 
   it('search filters playlists by name', async () => {

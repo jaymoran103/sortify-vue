@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
@@ -25,7 +24,6 @@ const emit = defineEmits<{
   confirm: [ids: number[]]
 }>()
 
-const router = useRouter()
 const playlistStore = usePlaylistStore()
 
 // Get all playlists from the store, then chain filter and sort composables.
@@ -86,14 +84,8 @@ function toggleSelectAll(): void {
 }
 
 function confirmSelection(): void {
-  if (props.mode === 'export' || props.mode === 'delete') {
-    const ids = [...selection.selectedIds.value].map(Number)
-    emit('confirm', ids)
-  } else {
-    const ids = [...selection.selectedIds.value].join(',')
-    router.push({ path: '/workspace', query: { playlists: ids } })
-    emit('cancel')
-  }
+  const ids = [...selection.selectedIds.value].map(Number)
+  emit('confirm', ids)
 }
 </script>
 
