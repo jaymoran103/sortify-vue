@@ -5,6 +5,7 @@ import { usePlaylistStore } from '@/stores/playlists'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import ImportModal from './ImportModal.vue'
 import ExportModal from './ExportModal.vue'
+import ConfirmModal from '../modals/ConfirmModal.vue'
 
 const modal = useModal()
 
@@ -13,7 +14,7 @@ const playlistStore = usePlaylistStore()
 const hasPlaylists = computed(() => (playlistStore.playlists ?? []).length > 0)
 
 // Access Spotify auth state for status indicator and login action
-const { isAuthenticated, user, isLoading, error, login } = useSpotifyAuth()
+const { isAuthenticated, user, isLoading, error, login, logout } = useSpotifyAuth()
 
 function openImportModal() {
   modal.open(ImportModal)
@@ -21,6 +22,20 @@ function openImportModal() {
 
 function openExportModal() {
   modal.open(ExportModal)
+}
+// Use modal to ask user to confirm logout action, then call logout function from useSpotifyAuth if confirmed. This is necessary because Spotify tokens are long-lived and there is no "soft" disconnect option.
+async function offerLogout() {
+
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Disconnect Spotify',
+    message: 'Are you sure you want to disconnect from Spotify? This will not delete any playlists, but you will need to log in again to access them.',
+    confirmLabel: 'Disconnect',
+    cancelText: 'Stay Connected',
+  })
+
+  if (confirmed) {
+    logout()
+  }
 }
 </script>
 
@@ -37,6 +52,7 @@ function openExportModal() {
     </div>
 
     <!-- Spotify Status Indicator -->
+    <!-- FUTURE: Review @click / nested lambda functions. Logic works and looks alright, but might not be necessary if logout happens another way -->
     <button
       class="io-card__spotify-status"
       :class="{
@@ -44,9 +60,15 @@ function openExportModal() {
         'io-card__spotify-status--loading': isLoading,
         'io-card__spotify-status--error': error,
       }"
-      @click="!isAuthenticated && !isLoading ? login() : undefined"
-      :aria-label="isAuthenticated ? 'Spotify connected' : 'Connect to Spotify'"
+      @click="
+      isAuthenticated ? offerLogout()
+                      : isLoading ? undefined
+                                  : login()
+      "
+      :aria-label="isAuthenticated ? 'Spotify Connected' : 'Connect to Spotify'"
+
     >
+    <!-- @click="!isAuthenticated && !isLoading ? login() : undefined" -->
       <span
         class="io-card__spotify-dot"
         :class="{
@@ -98,7 +120,7 @@ function openExportModal() {
 }
 
 .io-card__spotify-status--connected {
-  cursor: default;
+  cursor: pointer;
 }
 
 .io-card__spotify-status--loading {

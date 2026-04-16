@@ -11,7 +11,7 @@ export function generateCodeVerifier(length = 64): string {
 export async function generateCodeChallenge(verifier: string): Promise<string> {
   const encoder = new TextEncoder()
   const data = encoder.encode(verifier)
-  const hashed = await window.crypto.subtle.digest('SHA-256', data)
+  const hashed = await crypto.subtle.digest('SHA-256', data)
   return btoa(String.fromCharCode(...new Uint8Array(hashed)))
     .replace(/=/g, '')
     .replace(/\+/g, '-')
