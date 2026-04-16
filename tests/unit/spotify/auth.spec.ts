@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { SpotifyAuth } from '@/spotify/auth'
 
-let originalLocalStorage: Storage | undefined
 const localStorageData: Record<string, string> = {}
 const localStorageMock: Storage = {
   getItem(key: string) {
@@ -28,80 +27,19 @@ const localStorageMock: Storage = {
   },
 }
 
-function clearStorage() {
-  sessionStorage.clear()
-  localStorageMock.clear()
-}
-
 describe('SpotifyAuth', () => {
   let auth: SpotifyAuth
 
   beforeEach(() => {
-    originalLocalStorage = globalThis.localStorage
-
-    try {
-      Object.defineProperty(globalThis, 'localStorage', {
-        configurable: true,
-        writable: true,
-        value: localStorageMock,
-      })
-    } catch {
-      // ignore if localStorage is non-configurable
-    }
-    try {
-      ;(globalThis as unknown as { localStorage?: Storage }).localStorage = localStorageMock
-    } catch {
-      // ignore assignment errors
-    }
-
-    if (typeof window !== 'undefined') {
-      try {
-        Object.defineProperty(window, 'localStorage', {
-          configurable: true,
-          writable: true,
-          value: localStorageMock,
-        })
-      } catch {
-        // ignore if window.localStorage is non-configurable
-      }
-      try {
-        ;(window as unknown as { localStorage?: Storage }).localStorage = localStorageMock
-      } catch {
-        // ignore assignment errors
-      }
-    }
-
     vi.stubGlobal('localStorage', localStorageMock)
-    clearStorage()
+    localStorageMock.clear()
+    sessionStorage.clear()
     auth = new SpotifyAuth()
   })
 
   afterEach(() => {
-    clearStorage()
+    vi.unstubAllGlobals()
     vi.restoreAllMocks()
-    if (originalLocalStorage) {
-      try {
-        Object.defineProperty(globalThis, 'localStorage', {
-          configurable: true,
-          writable: true,
-          value: originalLocalStorage,
-        })
-      } catch {
-        ;(globalThis as unknown as { localStorage?: Storage }).localStorage = originalLocalStorage
-      }
-
-      if (typeof window !== 'undefined') {
-        try {
-          Object.defineProperty(window, 'localStorage', {
-            configurable: true,
-            writable: true,
-            value: originalLocalStorage,
-          })
-        } catch {
-          ;(window as unknown as { localStorage?: Storage }).localStorage = originalLocalStorage
-        }
-      }
-    }
   })
 
   // isAuthenticated

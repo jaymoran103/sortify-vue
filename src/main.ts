@@ -28,9 +28,11 @@ app.mount('#app')
 
 // After mount: check if this is a Spotify PKCE callback.
 // The redirect lands on the base URL with ?code= in the search portion
-if (window.location.search.includes('code=')) {
-  import('@/composables/useSpotifyAuth').then(({ useSpotifyAuth }) => {
-    useSpotifyAuth().handleCallback()
+if (new URLSearchParams(window.location.search).has('code')) {
+  import('@/composables/useSpotifyAuth').then(({ handleSpotifyCallback }) => {
+    handleSpotifyCallback().catch((err: unknown) => {
+      console.error('Spotify callback failed:', err)
+    })
   })
 }
 

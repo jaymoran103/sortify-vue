@@ -53,17 +53,23 @@ export class SpotifyApi {
     body: unknown,
     onRateLimit?: (seconds: number) => void,
   ): Promise<T> {
-    const token = this.auth.getAccessToken()
-    if (!token) {
+    // Fail fast if not currently authenticated
+    if (!this.auth.getAccessToken()) {
       throw new Error('Not authenticated — no access token available')
     }
 
-    
     let attempts = 0
     const maxAttempts = ABORT_ON_FIRST_429 ? 1 : MAX_RETRIES + 1
 
     // Until a successful response or max retries hit, attempt the request and handle 429 rate limits.
     while (attempts < maxAttempts) {
+      
+      // Re-check token each iteration: a long Retry-After sleep may have expired the token.
+      const token = this.auth.getAccessToken()
+      if (!token) {
+        throw new Error('Not authenticated — token expired during retry wait')
+      }
+
       await this._throttle()
 
       // Execute the HTTP request
@@ -71,7 +77,8 @@ export class SpotifyApi {
         method,
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+
+          ...(body !== undefined && { 'Content-Type': 'application/json' }),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
       })

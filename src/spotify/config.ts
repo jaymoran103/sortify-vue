@@ -1,9 +1,8 @@
 // Client ID for Spotify API. This is a public key, safe to include in client-side code
 export const SPOTIFY_CLIENT_ID = '95ba1274418d436a8540ebee2d22c8ed'
 
-// Redirect URI: Use env var if set, otherwise derive from current location.
-// TODO: format more cleanly
-export const SPOTIFY_REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI ??  `${window.location.origin}${window.location.pathname}`
+// Redirect URI: Use env var if set, otherwise fall back to the fixed app base path.
+export const SPOTIFY_REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI ?? window.location.origin + '/sortify-vue/'
 
 // Permitted Scopes for API access
 export const SPOTIFY_SCOPES = [

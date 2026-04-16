@@ -10,6 +10,34 @@ const _isAuthenticated = ref(spotifyAuth.isAuthenticated())
 const _isLoading = ref(false)
 const _error = ref<string | null>(null)
 
+// Module-level helpers: operate on shared state, safe to call outside a component.
+// Fetches the Spotify user profile from GET /me and updates the cached user ref.
+async function fetchUser(): Promise<void> {
+  try {
+    const profile = await spotifyApi.get<SpotifyUserProfile>('/me')
+    _cachedUser.value = profile
+  } catch (err) {
+    _error.value = err instanceof Error ? err.message : 'Failed to fetch user profile'
+  }
+}
+
+// Exported standalone callback handler: called from main.ts without a component context.
+// Does not use onMounted or any other lifecycle hook.
+export async function handleSpotifyCallback(): Promise<void> {
+  _isLoading.value = true
+  _error.value = null
+  try {
+    await spotifyAuth.handleCallback()
+    _isAuthenticated.value = true
+    await fetchUser()
+  } catch (err) {
+    _error.value = err instanceof Error ? err.message : 'Auth callback failed'
+    _isAuthenticated.value = false
+  } finally {
+    _isLoading.value = false
+  }
+}
+
 // Returns reactive auth state and actions for use in components.
 // All consumers share the same underlying state, so updates propagate immediately.
 export function useSpotifyAuth(): {
@@ -21,23 +49,9 @@ export function useSpotifyAuth(): {
   logout: () => void
   handleCallback: () => Promise<void>
 } {
-  const isAuthenticated = _isAuthenticated
-  const user = _cachedUser
-  const isLoading = _isLoading
-  const error = _error
-
-  // Fetches the Spotify user profile from GET /me and updates the cached user ref.
-  async function fetchUser(): Promise<void> {
-    try {
-      const profile = await spotifyApi.get<SpotifyUserProfile>('/me')
-      _cachedUser.value = profile
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch user profile'
-    }
-  }
-
   // Initiates PKCE login flow — redirects to Spotify authorization page.
   async function login(): Promise<void> {
+    _error.value = null
     await spotifyAuth.authenticate()
   }
 
@@ -49,23 +63,6 @@ export function useSpotifyAuth(): {
     _error.value = null
   }
 
-  // Called on app startup when ?code= is present in the URL.
-  // Exchanges the authorization code for a token, then fetches the user profile.
-  async function handleCallback(): Promise<void> {
-    _isLoading.value = true
-    _error.value = null
-    try {
-      await spotifyAuth.handleCallback()
-      _isAuthenticated.value = true
-      await fetchUser()
-    } catch (err) {
-      _error.value = err instanceof Error ? err.message : 'Auth callback failed'
-      _isAuthenticated.value = false
-    } finally {
-      _isLoading.value = false
-    }
-  }
-
   onMounted(() => {
     _isAuthenticated.value = spotifyAuth.isAuthenticated()
     if (_isAuthenticated.value && !_cachedUser.value) {
@@ -73,5 +70,13 @@ export function useSpotifyAuth(): {
     }
   })
 
-  return { isAuthenticated, user, isLoading, error, login, logout, handleCallback }
+  return {
+    isAuthenticated: _isAuthenticated,
+    user: _cachedUser,
+    isLoading: _isLoading,
+    error: _error,
+    login,
+    logout,
+    handleCallback: handleSpotifyCallback,
+  }
 }

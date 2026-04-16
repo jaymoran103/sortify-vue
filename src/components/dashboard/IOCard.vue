@@ -78,10 +78,10 @@ async function offerLogout() {
         }"
       />
       <!-- Spotify Status Text: Display state based on isLoading, isAuthenticated, and error status -->
-      <!-- TODO how best to handle delay before name is accessed?-->
+       <!-- Display username if authenticated and available -->
       <span v-if="isLoading" class="text-muted text-sm">Connecting...</span>
       <span v-else-if="isAuthenticated" class="text-sm io-card__spotify-label--connected">
-        Spotify Connected - {{ user?.display_name ?? 'username' }}
+        Spotify Connected<template v-if="user?.display_name"> - {{ user.display_name }}</template>
       </span>
       <span v-else-if="error" class="text-sm io-card__spotify-label--error">{{ error }}</span>
       <span v-else class="text-muted text-sm">Spotify not connected</span>
