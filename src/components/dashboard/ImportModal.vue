@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { getImporter } from '@/adapters/registry'
+import { useActivityStore } from '@/stores/activity'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import type { ImportResult } from '@/types/adapters'
+
+const activityStore = useActivityStore()
+const OPERATION_ID = 'file-import'
+
+// TODO HACK: optionally closes modal once import starts
+const CLOSE_MODAL_ON_IMPORT = true
 
 type Step = 'source' | 'files' | 'progress' | 'done'
 
@@ -40,9 +47,21 @@ async function handleFiles(e: Event): Promise<void> {
     return
   }
 
+  // TODO HACK: optionally closes modal once import starts
+  if (CLOSE_MODAL_ON_IMPORT){
+    emit('cancel')
+  }
   step.value = 'progress'
+  
+
+  step.value = 'progress'
+  // step.value = 'done'
+  emit('cancel')
   errorMsg.value = null
   progress.value = -1
+
+  // Start tracking in the activity store so IOCard footer shows progress.
+  activityStore.startOperation(OPERATION_ID, 'Importing files')
 
   // Track progress through input files. JSON and CSV files are currently weighted equally - FUTURE: revisit this approach for more accurate progress reporting,
   const accumulated: ImportResult = { tracksImported: 0, playlistsImported: 0, errors: [] }
@@ -62,7 +81,14 @@ async function handleFiles(e: Event): Promise<void> {
       const r = await csvAdapter.import(
         { files: csvFiles },
         //TODO could save some math by providing totalUnits and incrementing a counter from here, but exposing a single figure is more modular and avoids mismatched progress if units change.
-        (done) => { progress.value = done / totalUnits },
+        (done) => {
+          progress.value = done / totalUnits
+          activityStore.updateProgress(OPERATION_ID, {
+            done: Math.round(done),
+            total: totalUnits,
+            phase: 'Importing CSV',
+          })
+        },
       )
 
       // Accumulate results from CSV import
@@ -84,6 +110,12 @@ async function handleFiles(e: Event): Promise<void> {
         const r = await jsonAdapter.import({ file })
         completedUnits += 1
         progress.value = completedUnits / totalUnits
+        activityStore.updateProgress(OPERATION_ID, {
+          done: completedUnits,
+          total: totalUnits,
+          phase: 'Importing JSON',
+          itemLabel: file.name,
+        })
         accumulated.tracksImported += r.tracksImported
         accumulated.playlistsImported += r.playlistsImported
         accumulated.errors.push(...r.errors)
@@ -92,9 +124,11 @@ async function handleFiles(e: Event): Promise<void> {
 
     result.value = accumulated
     step.value = 'done'
+    activityStore.completeOperation(OPERATION_ID)
   } catch (err) {
     errorMsg.value = (err as Error).message
     step.value = 'files'
+    activityStore.failOperation(OPERATION_ID, (err as Error).message)
   }
 }
 </script>

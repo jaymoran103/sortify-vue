@@ -6,6 +6,7 @@ import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import ImportModal from './ImportModal.vue'
 import ExportModal from './ExportModal.vue'
 import ConfirmModal from '../modals/ConfirmModal.vue'
+import ActivityIndicator from '@/components/common/ActivityIndicator.vue'
 
 const modal = useModal()
 
@@ -86,6 +87,9 @@ async function offerLogout() {
       <span v-else-if="error" class="text-sm io-card__spotify-label--error">{{ error }}</span>
       <span v-else class="text-muted text-sm">Spotify not connected</span>
     </button>
+
+    <!-- Activity progress indicator: shows I/O operation status (import/export). Distinct from the Spotify status row above, which tracks auth state. -->
+    <ActivityIndicator />
   </div>
 </template>
 

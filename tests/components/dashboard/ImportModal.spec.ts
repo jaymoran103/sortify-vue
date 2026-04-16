@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
 import ImportModal from '@/components/dashboard/ImportModal.vue'
 import * as registry from '@/adapters/registry'
 
@@ -12,6 +13,7 @@ async function toFilesStep(wrapper: ReturnType<typeof mount>) {
 
 describe('ImportModal', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     mockImport.mockReset()
     vi.spyOn(registry, 'getImporter').mockReturnValue({
       key: 'csv',
