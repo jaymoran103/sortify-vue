@@ -11,16 +11,17 @@
 
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "deploy": "gh-pages -d dist",
+    "deploy-safe": "pnpm run ci && pnpm run deploy",
 
     "test": "vitest run",
     "test:unit": "vitest run tests/unit tests/components",
     "test:e2e": "playwright test",
-
     "type-check": "vue-tsc --build",
     "typecheck": "pnpm type-check",
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
+
     "format": "prettier --write --experimental-cli src/",
     "preview": "vite preview"
   },

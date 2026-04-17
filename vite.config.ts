@@ -6,6 +6,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 export default defineConfig({
   base: '/sortify-vue/',
+  server: { host: '127.0.0.1' },
   plugins: [
     vue(),
     vueDevTools(),
