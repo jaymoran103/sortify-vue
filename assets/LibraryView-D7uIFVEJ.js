@@ -1,1 +1,0 @@
-import{_ as r,o,b as s,f as t}from"./index-C9oMmLY3.js";const a={},n={class:"library-view"};function c(i,e){return o(),s("div",n,[...e[0]||(e[0]=[t("h1",null,"Library Module",-1)])])}const _=r(a,[["render",c]]);export{_ as default};
