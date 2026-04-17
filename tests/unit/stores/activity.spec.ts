@@ -64,8 +64,8 @@ describe('useActivityStore', () => {
     store.addError('op1', { category: 'missing-data', message: 'no title', items: [] })
     const op = store.operations.get('op1')
     expect(op?.errors).toHaveLength(2)
-    expect(op?.errors[0].category).toBe('network')
-    expect(op?.errors[1].category).toBe('missing-data')
+    expect(op?.errors[0]?.category).toBe('network')
+    expect(op?.errors[1]?.category).toBe('missing-data')
   })
 
   it('completeOperation sets status to done and records completedAt', () => {

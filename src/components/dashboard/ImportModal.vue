@@ -1,21 +1,25 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { getImporter } from '@/adapters/registry'
+import { useModal } from '@/composables/useModal'
+import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import { useActivityStore } from '@/stores/activity'
+import SpotifyPlaylistPickerModal from './SpotifyPlaylistPickerModal.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import type { ImportResult } from '@/types/adapters'
 
+const emit = defineEmits<{
+  cancel: []
+}>()
 const activityStore = useActivityStore()
+const modal = useModal()
+const { isAuthenticated, isLoading, login } = useSpotifyAuth()
 const OPERATION_ID = 'file-import'
 
 // TODO HACK: optionally closes modal once import starts
 const CLOSE_MODAL_ON_IMPORT = true
 
 type Step = 'source' | 'files' | 'progress' | 'done'
-
-const emit = defineEmits<{
-  cancel: []
-}>()
 
 // State variables to track current step of the import process, progress percentage, import results, and any error messages.
 const step = ref<Step>('source')
@@ -25,6 +29,17 @@ const errorMsg = ref<string | null>(null)
 
 function selectLocalFiles(): void {
   step.value = 'files'
+}
+
+async function openSpotifyImport(): Promise<void> {
+  if (!isAuthenticated.value) {
+    await login()
+    return
+  }
+  emit('cancel')
+  modal.open(SpotifyPlaylistPickerModal).catch(() => {
+    // Ignore modal promise rejections from user cancellation.
+  })
 }
 
 // Main file handling function: CSVs are batched into one adapter call; each JSON is imported individually.
@@ -48,15 +63,10 @@ async function handleFiles(e: Event): Promise<void> {
   }
 
   // TODO HACK: optionally closes modal once import starts
-  if (CLOSE_MODAL_ON_IMPORT){
+  if (CLOSE_MODAL_ON_IMPORT) {
     emit('cancel')
   }
   step.value = 'progress'
-  
-
-  step.value = 'progress'
-  // step.value = 'done'
-  emit('cancel')
   errorMsg.value = null
   progress.value = -1
 
@@ -148,11 +158,10 @@ async function handleFiles(e: Event): Promise<void> {
           <span class="source-card__hint">CSV or JSON</span>
         </button>
 
-        <!-- Spotify Option: disabled stub-->
-        <button class="source-card" disabled>
+        <!-- Spotify Option: opens the Spotify playlist picker when authenticated. -->
+        <button class="source-card" type="button" @click="openSpotifyImport" :disabled="isLoading">
           <span class="source-card__label">Spotify</span>
-          <!-- <span class="source-card__badge">Coming soon</span> -->
-          <span class="source-card__hint">(Coming soon)</span>
+          <span class="source-card__hint">{{ isAuthenticated ? 'Browse playlists' : 'Sign in to Spotify' }}</span>
         </button>
       </div>
     </div>

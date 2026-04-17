@@ -13,11 +13,13 @@ import { csvImportAdapter } from '@/adapters/csvImport'
 import { csvExportAdapter } from '@/adapters/csvExport'
 import { jsonImportAdapter } from '@/adapters/jsonImport'
 import { jsonExportAdapter } from '@/adapters/jsonExport'
+import { spotifyImportAdapter } from '@/adapters/spotifyImport'
 
 registerImporter(csvImportAdapter)
 registerExporter(csvExportAdapter)
 registerImporter(jsonImportAdapter)
 registerExporter(jsonExportAdapter)
+registerImporter(spotifyImportAdapter)
 
 const app = createApp(App)
 
