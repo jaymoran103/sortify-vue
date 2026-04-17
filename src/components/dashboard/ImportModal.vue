@@ -91,12 +91,13 @@ async function handleFiles(e: Event): Promise<void> {
       const r = await csvAdapter.import(
         { files: csvFiles },
         //TODO could save some math by providing totalUnits and incrementing a counter from here, but exposing a single figure is more modular and avoids mismatched progress if units change.
-        (done) => {
+        (done, _total, label) => {
           progress.value = done / totalUnits
           activityStore.updateProgress(OPERATION_ID, {
             done: Math.round(done),
             total: totalUnits,
             phase: 'Importing CSV',
+            itemLabel: label,
           })
         },
       )
@@ -117,15 +118,15 @@ async function handleFiles(e: Event): Promise<void> {
       // Call import for each JSON file sequentially, accumulating results.
       // TODO: Settle on better progress approach with JSON imports — currently each file is one unit regardless of size.
       for (const file of jsonFiles) {
-        const r = await jsonAdapter.import({ file })
-        completedUnits += 1
-        progress.value = completedUnits / totalUnits
         activityStore.updateProgress(OPERATION_ID, {
           done: completedUnits,
           total: totalUnits,
           phase: 'Importing JSON',
           itemLabel: file.name,
         })
+        const r = await jsonAdapter.import({ file })
+        completedUnits += 1
+        progress.value = completedUnits / totalUnits
         accumulated.tracksImported += r.tracksImported
         accumulated.playlistsImported += r.playlistsImported
         accumulated.errors.push(...r.errors)

@@ -12,6 +12,22 @@ export interface SpotifyImportOptions {
 
 type SpotifyTrack = NonNullable<SpotifyTrackItem['track']>
 
+function hasEpisode(item: SpotifyTrackItem): boolean {
+  return 'episode' in item && item.episode !== null && item.episode !== undefined
+}
+
+function logInfo(message: string, details?: unknown): void {
+  console.info(`[SpotifyImport] ${message}`, details ?? '')
+}
+
+function logWarning(message: string, details?: unknown): void {
+  console.warn(`[SpotifyImport] ${message}`, details ?? '')
+}
+
+function logError(message: string, details?: unknown): void {
+  console.error(`[SpotifyImport] ${message}`, details ?? '')
+}
+
 // Normalize a spotify track into the internal Track format, extracting relevant fields and flattening artists.
 // FUTURE: Make a note somewhere about artist tracking, storing IDs rather than string names. As artist info is currently display-only, seems better to leave as flattened string for now.
 function normalizeSpotifyTrack(item: SpotifyTrack): Track {
@@ -32,9 +48,10 @@ function normalizeSpotifyTrack(item: SpotifyTrack): Track {
 function getSpotifyEndpoint(next: string): string {
   if (next.startsWith('http')) {
     const url = new URL(next)
-    return `${url.pathname}${url.search}`
+    const path = `${url.pathname}${url.search}`
+    return path.startsWith('/v1/') ? path.slice(3) : path
   }
-  return next
+  return next.startsWith('/v1/') ? next.slice(3) : next
 }
 
 
@@ -49,7 +66,10 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
       throw new Error('Not authenticated - no access token available')
     }
 
-    const totalTracks = options.playlists.reduce(
+    // Log intent to import, with basic stats about the import size
+    logInfo('Starting Spotify import', { playlistCount: options.playlists.length })
+
+    let totalTracks = options.playlists.reduce(
       (sum, playlist) => sum + (playlist.tracks?.total ?? 0),
       0,
     )
@@ -58,19 +78,46 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
     let importedPlaylists = 0
     const errors: string[] = []
 
+    // Loop through each playlist and import tracks
     for (let playlistIndex = 0; playlistIndex < options.playlists.length; playlistIndex += 1) {
       const playlist = options.playlists[playlistIndex]!
       const playlistTrackIds: string[] = []
       let endpoint = `/playlists/${playlist.id}/items?limit=50`
       
       // Paginate through this playlist's tracks, normalizing and writing each to the DB if not already present.
+      const expectedTracks = playlist.tracks?.total ?? 0
+      let resolvedTracks = expectedTracks
+      let resolvedTrackCount = false
+      logInfo('Importing Playlist', {
+        playlistId: playlist.id,
+        playlistName: playlist.name,
+        expectedTracks,
+      })
       try {
         while (endpoint) {
           const page = await spotifyApi.get<SpotifyPaginatedResponse<SpotifyTrackItem>>(endpoint)
+          if (!resolvedTrackCount) {
+            resolvedTrackCount = true
+            resolvedTracks = page.total
+            if (resolvedTracks !== expectedTracks) {
+              totalTracks += resolvedTracks - expectedTracks
+              logInfo('Resolved Spotify playlist track total from API page metadata', {
+                playlistName: playlist.name,
+                expectedTracks,
+                resolvedTracks,
+              })
+            }
+          }
+          let skippedNullTracks = 0
+          let skippedEpisodes = 0
 
           for (const item of page.items) {
             if (!item.track) {
               processedTracks += 1
+              skippedNullTracks += 1
+              if (hasEpisode(item)) {
+                skippedEpisodes += 1
+              }
               continue
             }
 
@@ -87,6 +134,25 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
             importedTracks += 1
           }
 
+          // Log any skipped tracks, with reason.
+          if (skippedNullTracks > 0) {
+            logWarning('Skipped Spotify playlist items with null tracks', {
+              playlistName: playlist.name,
+              skippedNullTracks,
+              skippedEpisodes,
+              skippedUnknownItems: skippedNullTracks - skippedEpisodes,
+            })
+          }
+
+          // Log progress after each page, with stats about how many tracks processed so far and how many total.
+          logInfo('Processed Spotify playlist page', {
+            playlistName: playlist.name,
+            pageSize: page.items.length,
+            processedTracks,
+            totalTracks,
+            resolvedTracks,
+          })
+
           onProgress?.(processedTracks, totalTracks, playlist.name)
           endpoint = page.next ? getSpotifyEndpoint(page.next) : ''
         }
@@ -100,13 +166,29 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
           lastModified: Date.now(),
         })
         importedPlaylists += 1
+        // Log the completion of this playlist's import, with stats about how many tracks were imported.
+        logInfo('Finished Spotify playlist import', {
+          playlistName: playlist.name,
+          playlistTrackCount: playlistTrackIds.length,
+        })
       } catch (err) {
+
+        // Log caught errors and continue with the next playlist. 
+        // Common errors will be caught here and explained concisely for the user.
         const message = err instanceof Error ? err.message : 'Unknown Spotify playlist import error'
         if (message.includes('403')) {
-          console.warn(`Spotify playlist skipped due to permissions: ${playlist.name}`)
+          logWarning('Spotify playlist skipped due to permissions', {
+            playlistName: playlist.name,
+            playlistId: playlist.id,
+          })
           errors.push(`Skipped playlist ${playlist.name}: permission denied`)
           continue
         }
+        logError('Spotify playlist import failed', {
+          playlistName: playlist.name,
+          playlistId: playlist.id,
+          message,
+        })
         throw err
       }
 

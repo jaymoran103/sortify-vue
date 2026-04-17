@@ -29,6 +29,7 @@ const samplePlaylist: SpotifyPlaylistSummary = {
 describe('spotifyImportAdapter', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
+    vi.mocked(spotifyAuth.getAccessToken).mockReturnValue('test-token')
     await db.tracks.clear()
     await db.playlists.clear()
   })
@@ -174,5 +175,80 @@ describe('spotifyImportAdapter', () => {
     await expect(spotifyImportAdapter.import({ playlists: [samplePlaylist] })).rejects.toThrow(
       /not authenticated/i,
     )
+  })
+
+  it('uses Spotify page totals when playlist summaries report zero tracks', async () => {
+    vi.mocked(spotifyApi.get).mockResolvedValue({
+      items: [
+        {
+          track: {
+            uri: 'spotify:track:1',
+            name: 'Track One',
+            album: { name: 'Album One' },
+            artists: [{ name: 'Artist One' }],
+            duration_ms: 123000,
+            popularity: 50,
+            explicit: false,
+          },
+        },
+        {
+          track: {
+            uri: 'spotify:track:2',
+            name: 'Track Two',
+            album: { name: 'Album Two' },
+            artists: [{ name: 'Artist Two' }],
+            duration_ms: 456000,
+            popularity: 60,
+            explicit: false,
+          },
+        },
+      ],
+      total: 2,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+
+    const progress = vi.fn()
+    const zeroTotalPlaylist: SpotifyPlaylistSummary = {
+      ...samplePlaylist,
+      tracks: { total: 0 },
+    }
+
+    await spotifyImportAdapter.import({ playlists: [zeroTotalPlaylist] }, progress)
+
+    expect(progress).toHaveBeenCalledWith(2, 2, 'Road Trip')
+  })
+
+  it('logs episode diagnostics when Spotify returns null track items', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.mocked(spotifyApi.get).mockResolvedValue({
+      items: [
+        {
+          track: null,
+          episode: {
+            uri: 'spotify:episode:1',
+          },
+        },
+      ],
+      total: 1,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+
+    await spotifyImportAdapter.import({ playlists: [samplePlaylist] })
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[SpotifyImport] Skipped Spotify playlist items with null tracks',
+      expect.objectContaining({
+        playlistName: 'Road Trip',
+        skippedNullTracks: 1,
+        skippedEpisodes: 1,
+        skippedUnknownItems: 0,
+      }),
+    )
+
+    warnSpy.mockRestore()
   })
 })

@@ -25,12 +25,15 @@ const emit = defineEmits<{
 
 const activityStore = useActivityStore()
 const { isAuthenticated, login } = useSpotifyAuth()
+const OPERATION_ID = 'spotify-import'
 
 const step = ref<'loading' | 'ready' | 'progress' | 'done' | 'error'>('loading')
 const playlists = ref<SpotifyPlaylistSummary[]>([])
 const displayItems = shallowRef<SpotifyPlaylistSummary[]>([])
 const result = ref<ImportResult | null>(null)
 const errorMsg = ref<string | null>(null)
+const issueMessages = ref<string[]>([])
+const statusMsg = ref('')
 const progress = ref<number>(-1)
 
 const sortOptions: SortOption<SpotifyPlaylistSummary>[] = [
@@ -59,7 +62,85 @@ watch(
 // Extracts Spotify API endpoint from a full URL or path, ensuring it starts with '/v1/' as expected by the spotifyApi instance. 
 // This facilitates handling of 'next' URLs from Spotify's paginated responses
 function parseSpotifyEndpoint(next: string): string {
-  return next.startsWith('http') ? `${new URL(next).pathname}${new URL(next).search}` : next
+  const url = next.startsWith('http') ? new URL(next) : null
+  const path = url ? `${url.pathname}${url.search}` : next
+  return path.startsWith('/v1/') ? path.slice(3) : path
+}
+
+// ----- LOGGING -----
+/** Logging helper functions to standardize log messages and make them easier to filter in the console. */
+
+function logInfo(message: string, details?: unknown): void {
+  console.info(`[SpotifyPicker] ${message}`, details ?? '')
+}
+
+function logWarning(message: string, details?: unknown): void {
+  console.warn(`[SpotifyPicker] ${message}`, details ?? '')
+}
+
+function logError(message: string, details?: unknown): void {
+  console.error(`[SpotifyPicker] ${message}`, details ?? '')
+}
+
+function appendIssue(message: string): void {
+  issueMessages.value = [...issueMessages.value, message]
+}
+
+// normalize playlist data from Spotify API, handling potential missing fields and providing defaults where necessary.
+// This ensures that the playlist data used in the component is consistent and complete enough for display and import purposes, while also logging potential issues with the raw data for debugging.
+function normalizePlaylistSummary(item: unknown): SpotifyPlaylistSummary | null {
+  if (!item || typeof item !== 'object') return null
+
+  // Check for required fields and basic structure. 
+  const candidate = item as Partial<SpotifyPlaylistSummary>
+  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') {
+    return null
+  }
+
+  // Provide defaults for optional fields, handling potential data inconsistencies
+  const trackTotal = typeof candidate.tracks?.total === 'number' ? candidate.tracks.total : 0
+  const ownerName =
+    typeof candidate.owner?.display_name === 'string' && candidate.owner.display_name.trim().length > 0
+      ? candidate.owner.display_name
+      : 'Unknown owner'
+
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    tracks: { total: trackTotal },
+    owner: { display_name: ownerName },
+    images: Array.isArray(candidate.images) ? candidate.images : [],
+  }
+}
+
+function getPlaylistId(item: unknown): string | null {
+  return normalizePlaylistSummary(item)?.id ?? null
+}
+
+function getPlaylistName(item: unknown): string {
+  return normalizePlaylistSummary(item)?.name ?? 'Unknown playlist'
+}
+
+function getPlaylistSubtitle(item: unknown): string {
+  const playlist = normalizePlaylistSummary(item)
+  if (!playlist) return 'Playlist details unavailable'
+  return `${playlist.tracks.total} tracks - ${playlist.owner.display_name}`
+}
+
+function isPlaylistSelected(item: unknown): boolean {
+  const id = getPlaylistId(item)
+  return id ? selection.isSelected(id) : false
+}
+
+function togglePlaylist(item: unknown): void {
+  const id = getPlaylistId(item)
+  if (!id) {
+    const warning = 'Skipped interaction with a playlist row because its data was incomplete.'
+    logWarning(warning, item)
+    appendIssue(warning)
+    return
+  }
+  selection.toggle(id)
 }
 
 // Fetches the user's Spotify playlists, handling pagination and potential data inconsistencies. 
@@ -67,76 +148,127 @@ function parseSpotifyEndpoint(next: string): string {
 async function fetchPlaylists(): Promise<void> {
   step.value = 'loading'
   errorMsg.value = null
+  issueMessages.value = []
+  statusMsg.value = 'Connecting to Spotify and loading playlists...'
 
   if (!isAuthenticated.value) {
     errorMsg.value = 'Spotify is not connected. Please sign in and try again.'
+    logWarning(errorMsg.value)
     step.value = 'error'
     return
   }
 
   const fetched: SpotifyPlaylistSummary[] = []
   try {
+    logInfo('Fetching Spotify playlists')
     let endpoint = '/me/playlists?limit=50'
+    let pageCount = 0
+
     // Loop through paginated results, fetching and normalizing playlist data, and accumulating it in the 'fetched' array.
     // rate throttling is handled by spotifyApi instance, so we can simply loop through pages, awaiting results and trusting the source to manage pacing.
     while (endpoint) {
+      pageCount += 1
       const page = await spotifyApi.get<SpotifyPaginatedResponse<SpotifyPlaylistSummary>>(endpoint)
-      fetched.push(...page.items)
+      const normalizedItems = page.items
+        .map((item) => normalizePlaylistSummary(item))
+        .filter((item): item is SpotifyPlaylistSummary => item !== null)
+
+      // report on skipped playlists if tracked
+      const skippedCount = page.items.length - normalizedItems.length
+      if (skippedCount > 0) {
+        const warning = `Skipped ${skippedCount} playlist entr${skippedCount === 1 ? 'y' : 'ies'} with incomplete Spotify data.`
+        logWarning(warning, { endpoint, page: pageCount })
+        appendIssue(warning)
+      }
+
+      // Accumulate normalized playlists and log progress after each page
+      fetched.push(...normalizedItems)
+      statusMsg.value = `Loaded ${fetched.length} Spotify playlists...`
+      logInfo('Loaded Spotify playlist page', {
+        page: pageCount,
+        fetchedThisPage: normalizedItems.length,
+        totalLoaded: fetched.length,
+      })
       endpoint = page.next ? parseSpotifyEndpoint(page.next) : ''
     }
     playlists.value = fetched
+    statusMsg.value = `Loaded ${fetched.length} Spotify playlists.`
+    logInfo('Finished loading Spotify playlists', { totalLoaded: fetched.length })
     step.value = 'ready'
   } catch (err) {
     errorMsg.value = err instanceof Error ? err.message : 'Failed to fetch playlists'
+    statusMsg.value = 'Spotify playlist loading failed.'
+    logError(errorMsg.value, err)
     step.value = 'error'
   }
 }
 
+/** Initiates the import of the selected Spotify playlists.
+// Handles progress updates, potential errors, and logging throughout the process.
+*/
 async function startImport(): Promise<void> {
   const selected = playlists.value.filter((item) => selection.isSelected(item.id))
   if (selected.length === 0) return
 
+  emit('cancel')
   step.value = 'progress'
   progress.value = -1
   errorMsg.value = null
+  issueMessages.value = []
   result.value = null
+  statusMsg.value = `Starting Spotify import for ${selected.length} playlist${selected.length !== 1 ? 's' : ''}...`
 
-  activityStore.startOperation('spotify-import', 'Importing from Spotify')
+  activityStore.startOperation(OPERATION_ID, 'Importing from Spotify')
+  logInfo('Starting Spotify import', {
+    playlistCount: selected.length,
+    estimatedTracks: selected.reduce((sum, item) => sum + (item.tracks.total ?? 0), 0),
+  })
 
   // Get and validate the Spotify import adapter
   const spotifyAdapter = getImporter<SpotifyImportOptions>('spotify')
   if (!spotifyAdapter) {
     const message = 'Spotify importer not registered'
     errorMsg.value = message
+    statusMsg.value = 'Spotify import setup failed.'
+    logError(message)
     step.value = 'error'
-    activityStore.failOperation('spotify-import', message)
+    activityStore.failOperation(OPERATION_ID, message)
     return
   }
-
-  const totalTracks = selected.reduce((sum, item) => sum + (item.tracks.total ?? 0), 0)
 
   // Call the import method of the Spotify adapter, passing the selected playlists and a progress callback to update the UI and activity store.
   try {
     const response = await spotifyAdapter.import(
       { playlists: selected },
-      (done, _total, label) => {
-        progress.value = totalTracks > 0 ? done / totalTracks : -1
-        activityStore.updateProgress('spotify-import', {
+      (done, total, label) => {
+        progress.value = total > 0 ? done / total : -1
+        statusMsg.value = label
+          ? `Importing Playlist '${label}' (${done}/${total})`
+          : `Importing Playlists (${done}/${total})`
+        activityStore.updateProgress(OPERATION_ID, {
           done,
-          total: totalTracks,
+          total,
           phase: 'Importing Spotify',
           itemLabel: label,
         })
       },
     )
     result.value = response
+    issueMessages.value = response.errors
+    statusMsg.value = `Spotify import complete. Imported ${response.playlistsImported} playlist${response.playlistsImported !== 1 ? 's' : ''} and ${response.tracksImported} track${response.tracksImported !== 1 ? 's' : ''}.`
+    if (response.errors.length > 0) {
+      logWarning('Spotify import completed with issues', response.errors)
+    }
+    logInfo('Spotify import complete', response)
     step.value = 'done'
-    activityStore.completeOperation('spotify-import')
+    activityStore.completeOperation(OPERATION_ID)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Spotify import failed'
     errorMsg.value = message
+    statusMsg.value = 'Spotify import failed.'
+    logError(message, err)
     step.value = 'error'
-    activityStore.failOperation('spotify-import', message)
+    activityStore.failOperation(OPERATION_ID, message)
   }
 }
 
@@ -158,6 +290,7 @@ onMounted(fetchPlaylists)
 <template>
   <div class="spotify-picker-modal">
     <h2 class="spotify-picker-modal__title">Import from Spotify</h2>
+    <p v-if="statusMsg" class="spotify-picker-modal__status text-muted text-sm">{{ statusMsg }}</p>
 
     <div v-if="step === 'loading'" class="spotify-picker-modal__body">
       <p class="text-muted">Loading playlists…</p>
@@ -181,16 +314,23 @@ onMounted(fetchPlaylists)
         <ScrollableList :items="displayItems" key-field="id" :estimate-size="56">
           <template #item="{ item }">
             <SelectableItem
-              :label="(item as SpotifyPlaylistSummary).name"
-              :subtitle="`${(item as SpotifyPlaylistSummary).tracks.total} tracks — ${(item as SpotifyPlaylistSummary).owner.display_name}`"
-              :selected="selection.isSelected((item as SpotifyPlaylistSummary).id)"
-              @toggle="selection.toggle((item as SpotifyPlaylistSummary).id)"
+              :label="getPlaylistName(item)"
+              :subtitle="getPlaylistSubtitle(item)"
+              :selected="isPlaylistSelected(item)"
+              @toggle="togglePlaylist(item)"
             />
           </template>
           <template #empty>
             <p class="text-muted">No matching playlists</p>
           </template>
         </ScrollableList>
+      </div>
+
+      <div v-if="issueMessages.length > 0" class="spotify-picker-modal__issues">
+        <p class="spotify-picker-modal__issues-title">Notable issues</p>
+        <ul class="spotify-picker-modal__issues-list">
+          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
+        </ul>
       </div>
     </div>
 
@@ -209,6 +349,12 @@ onMounted(fetchPlaylists)
       <p v-if="result.errors.length > 0" class="io-modal__error">
         {{ result.errors.length }} error(s) during import
       </p>
+      <div v-if="issueMessages.length > 0" class="spotify-picker-modal__issues">
+        <p class="spotify-picker-modal__issues-title">Import issues</p>
+        <ul class="spotify-picker-modal__issues-list">
+          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
+        </ul>
+      </div>
     </div>
 
     <div class="spotify-picker-modal__footer">
@@ -248,11 +394,35 @@ onMounted(fetchPlaylists)
   gap: var(--space-4);
 }
 
+.spotify-picker-modal__status {
+  margin: 0;
+}
+
 .spotify-picker-modal__list {
   height: 320px;
   overflow: hidden;
   border-top: 1px solid var(--color-border-subtle);
   border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.spotify-picker-modal__issues {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.spotify-picker-modal__issues-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.spotify-picker-modal__issues-list {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
 }
 
 .spotify-picker-modal__footer {

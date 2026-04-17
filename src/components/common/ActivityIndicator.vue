@@ -24,7 +24,10 @@ const statusText = computed((): string => {
   if (status === 'done') return 'Complete'
   if (status === 'error') {
     const count = op.value.errors.length
-    return `Error${count > 1 ? ` (${count} errors)` : ''}`
+    const firstMessage = op.value.errors[0]?.message
+    return firstMessage
+      ? `Error${count > 1 ? ` (${count})` : ''}: ${firstMessage}`
+      : `Error${count > 1 ? ` (${count} errors)` : ''}`
   }
 
   // If no progress info available, just return the operation label

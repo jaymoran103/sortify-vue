@@ -2,9 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import ImportModal from '@/components/dashboard/ImportModal.vue'
+import { useActivityStore } from '@/stores/activity'
 import * as registry from '@/adapters/registry'
 
 const mockImport = vi.fn()
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
 
 // Navigate from initial source step to the file picker step
 async function toFilesStep(wrapper: ReturnType<typeof mount>) {
@@ -100,6 +109,63 @@ describe('ImportModal', () => {
     await flushPromises()
 
     expect(wrapper.find('button.btn--secondary').text()).toBe('Done')
+  })
+
+  it('forwards CSV playlist names into activity progress labels', async () => {
+    const deferred = createDeferred<{ tracksImported: number; playlistsImported: number; errors: string[] }>()
+    mockImport.mockImplementation(async (_options, onProgress) => {
+      onProgress?.(0.5, 1, 'tracks')
+      return deferred.promise
+    })
+
+    const wrapper = mount(ImportModal)
+    const activityStore = useActivityStore()
+    await toFilesStep(wrapper)
+    const input = wrapper.find('input[type="file"]')
+
+    const file = new File(['a,b'], 'tracks.csv', { type: 'text/csv' })
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(activityStore.activeOperation?.progress).toMatchObject({
+      phase: 'Importing CSV',
+      itemLabel: 'tracks',
+      total: 1,
+    })
+
+    deferred.resolve({ tracksImported: 1, playlistsImported: 1, errors: [] })
+    await flushPromises()
+  })
+
+  it('sets determinate JSON progress before a file import resolves', async () => {
+    const deferred = createDeferred<{ tracksImported: number; playlistsImported: number; errors: string[] }>()
+    const jsonImport = vi.fn(() => deferred.promise)
+    vi.spyOn(registry, 'getImporter').mockReturnValue({
+      key: 'json',
+      label: 'JSON Bundle',
+      import: jsonImport,
+    })
+
+    const wrapper = mount(ImportModal)
+    const activityStore = useActivityStore()
+    await toFilesStep(wrapper)
+    const input = wrapper.find('input[type="file"]')
+
+    const file = new File(['{}'], 'bundle.json', { type: 'application/json' })
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(activityStore.activeOperation?.progress).toEqual({
+      done: 0,
+      total: 1,
+      phase: 'Importing JSON',
+      itemLabel: 'bundle.json',
+    })
+
+    deferred.resolve({ tracksImported: 2, playlistsImported: 1, errors: [] })
+    await flushPromises()
   })
 })
 

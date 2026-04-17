@@ -9,12 +9,23 @@ const DONE_CLEAR_DELAY_MS = 5000
 export const useActivityStore = defineStore('activity', () => {
   const operations: Ref<Map<string, ActivityItem>> = ref(new Map())
 
-  // The first operation with status 'active', or null if none exists.
+  // Returns the first active operation, or the most recently completed/failed operation when idle.
   const activeOperation: ComputedRef<ActivityItem | null> = computed(() => {
+    let latestFinished: ActivityItem | null = null
+
     for (const op of operations.value.values()) {
       if (op.status === 'active') return op
+
+      if (op.status === 'done' || op.status === 'error') {
+        const opTime = op.completedAt ?? op.startedAt
+        const latestTime = latestFinished?.completedAt ?? latestFinished?.startedAt ?? -1
+        if (!latestFinished || opTime > latestTime) {
+          latestFinished = op
+        }
+      }
     }
-    return null
+
+    return latestFinished
   })
 
   // Creates a new ActivityItem with status 'active' and null progress.

@@ -23,6 +23,9 @@ export interface SpotifyTrackItem {
     popularity: number
     explicit: boolean
   } | null // null for local files, deleted tracks, podcast episodes
+  episode?: {
+    uri: string
+  } | null
 }
 
 // Response shape for Spotify API endpoints that return paginated lists of tracks, 

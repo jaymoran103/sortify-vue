@@ -35,7 +35,7 @@ describe('useActivityStore', () => {
     expect(store.activeOperation?.id).toBe('op1')
   })
 
-  it('activeOperation returns null when no active operation', () => {
+  it('activeOperation returns null when there are no operations', () => {
     const store = useActivityStore()
     expect(store.activeOperation).toBeNull()
   })
@@ -133,12 +133,24 @@ describe('useActivityStore', () => {
     expect(store.operations.size).toBe(1)
   })
 
-  it('activeOperation is null after completing the only active operation', () => {
+  it('activeOperation returns the completed operation when there is no active operation', () => {
     const store = useActivityStore()
     store.startOperation('op1', 'Test')
     store.completeOperation('op1')
-    // done status, not active — so activeOperation should be null
-    expect(store.activeOperation).toBeNull()
+    expect(store.activeOperation?.id).toBe('op1')
+    expect(store.activeOperation?.status).toBe('done')
     vi.advanceTimersByTime(5000)
+  })
+
+  it('activeOperation returns the most recent error when there is no active operation', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Older')
+    store.failOperation('op1', 'first failure')
+    vi.advanceTimersByTime(1)
+    store.startOperation('op2', 'Newer')
+    store.failOperation('op2', 'second failure')
+
+    expect(store.activeOperation?.id).toBe('op2')
+    expect(store.activeOperation?.status).toBe('error')
   })
 })

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import SpotifyPlaylistPickerModal from '@/components/dashboard/SpotifyPlaylistPickerModal.vue'
+import { useActivityStore } from '@/stores/activity'
 
 const testState = vi.hoisted(() => ({
   mockApiGet: vi.fn(),
@@ -100,7 +101,7 @@ describe('SpotifyPlaylistPickerModal', () => {
     expect(wrapper.text()).toContain('12 tracks')
   })
 
-  it('imports selected playlists and shows the done summary', async () => {
+  it('closes the modal and starts importing selected playlists', async () => {
     testState.mockApiGet.mockResolvedValue({
       items: [
         {
@@ -129,6 +130,7 @@ describe('SpotifyPlaylistPickerModal', () => {
     await wrapper.find('button.btn--primary').trigger('click')
     await flushPromises()
 
+    expect(wrapper.emitted('cancel')).toBeTruthy()
     expect(testState.mockSpotifyImport).toHaveBeenCalledWith(
       {
         playlists: [
@@ -143,7 +145,6 @@ describe('SpotifyPlaylistPickerModal', () => {
       },
       expect.any(Function),
     )
-    expect(wrapper.text()).toContain('Imported 12 track')
   })
 
   it('shows connect action when Spotify is not authenticated', async () => {
@@ -155,5 +156,69 @@ describe('SpotifyPlaylistPickerModal', () => {
     expect(wrapper.text()).toContain('Spotify is not connected')
     await wrapper.find('button.btn--secondary').trigger('click')
     expect(testState.mockLogin).toHaveBeenCalled()
+  })
+
+  it('falls back safely when Spotify returns incomplete playlist data', async () => {
+    testState.mockApiGet.mockResolvedValue({
+      items: [
+        {
+          id: 'pl-1',
+          name: 'Incomplete Mix',
+          owner: {},
+          images: [],
+        },
+      ],
+      total: 1,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+
+    const wrapper = mountModal()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Incomplete Mix')
+    expect(wrapper.text()).toContain('0 tracks - Unknown owner')
+  })
+
+  it('uses adapter-reported Spotify totals for activity progress', async () => {
+    testState.mockApiGet.mockResolvedValue({
+      items: [
+        {
+          id: 'pl-1',
+          name: 'Morning Mix',
+          tracks: { total: 0 },
+          owner: { display_name: 'Alice' },
+          images: [],
+        },
+      ],
+      total: 1,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+    testState.mockSpotifyImport.mockImplementation(async (_options, onProgress) => {
+      onProgress?.(1, 5, 'Morning Mix')
+      return {
+        tracksImported: 5,
+        playlistsImported: 1,
+        errors: [],
+      }
+    })
+
+    const wrapper = mountModal()
+    const activityStore = useActivityStore()
+    await flushPromises()
+
+    await wrapper.find('.selectable-item').trigger('click')
+    await wrapper.find('button.btn--primary').trigger('click')
+    await flushPromises()
+
+    expect(activityStore.activeOperation?.progress).toEqual({
+      done: 1,
+      total: 5,
+      phase: 'Importing Spotify',
+      itemLabel: 'Morning Mix',
+    })
   })
 })

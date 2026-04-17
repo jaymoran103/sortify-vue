@@ -262,7 +262,7 @@ export const csvImportAdapter: ImportAdapter<CsvImportOptions> = {
       const wrappedProgress = onProgress
         ? (rowDone: number, rowTotal: number) => {
             const fraction = rowTotal > 0 ? rowDone / rowTotal : 0
-            onProgress(fileIdx + fraction, options.files.length)
+            onProgress(fileIdx + fraction, options.files.length, playlistName)
           }
         : undefined
       const result = await importCsvText(text, playlistName, wrappedProgress)
