@@ -2,9 +2,11 @@
 import { RouterView } from 'vue-router'
 import BaseModal from '@/components/common/BaseModal.vue'
 import ContextMenu from '@/components/common/ContextMenu.vue'
+import DbStatusBanner from '@/components/common/DbStatusBanner.vue'
 </script>
 
 <template>
+  <DbStatusBanner />
   <RouterView />
   <BaseModal />
   <ContextMenu />
