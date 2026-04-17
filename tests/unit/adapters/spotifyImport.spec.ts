@@ -43,24 +43,24 @@ describe('spotifyImportAdapter', () => {
     vi.mocked(spotifyApi.get).mockResolvedValue({
       items: [
         {
-          track: {
+          item: {
+            type: 'track',
             uri: 'spotify:track:1',
             name: 'Track One',
             album: { name: 'Album One' },
             artists: [{ name: 'Artist One' }],
             duration_ms: 123000,
-            popularity: 50,
             explicit: false,
           },
         },
         {
-          track: {
+          item: {
+            type: 'track',
             uri: 'spotify:track:2',
             name: 'Track Two',
             album: { name: 'Album Two' },
             artists: [{ name: 'Artist Two' }],
             duration_ms: 456000,
-            popularity: 60,
             explicit: false,
           },
         },
@@ -87,6 +87,43 @@ describe('spotifyImportAdapter', () => {
     expect(playlists[0]?.trackIDs).toEqual(['spotify:track:1', 'spotify:track:2'])
   })
 
+  it('skips episode and null items', async () => {
+    vi.mocked(spotifyApi.get).mockResolvedValue({
+      items: [
+        {
+          added_at: '2026-04-17T00:00:00Z',
+          added_by: {
+            external_urls: { spotify: 'https://open.spotify.com/user/test' },
+            href: 'https://api.spotify.com/v1/users/test',
+            id: 'test',
+            type: 'user',
+            uri: 'spotify:user:test',
+          },
+          is_local: false,
+          primary_color: null,
+          item: {
+            type: 'episode',
+            uri: 'spotify:episode:1',
+            name: 'Podcast Episode',
+            duration_ms: 3600000,
+          },
+          video_thumbnail: { url: null },
+        },
+        {
+          item: null,
+        },
+      ],
+      total: 2,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+
+    const result = await spotifyImportAdapter.import({ playlists: [samplePlaylist] })
+
+    expect(result.tracksImported).toBe(0)
+  })
+
   it('skips null track items and reuses existing track ids', async () => {
     await db.tracks.put({
       trackID: 'spotify:track:existing',
@@ -100,15 +137,15 @@ describe('spotifyImportAdapter', () => {
 
     vi.mocked(spotifyApi.get).mockResolvedValue({
       items: [
-        { track: null },
+        { item: null },
         {
-          track: {
+          item: {
+            type: 'track',
             uri: 'spotify:track:existing',
             name: 'Existing',
             album: { name: 'Album' },
             artists: [{ name: 'Artist' }],
             duration_ms: 1000,
-            popularity: 10,
             explicit: false,
           },
         },
@@ -142,13 +179,13 @@ describe('spotifyImportAdapter', () => {
       .mockResolvedValueOnce({
         items: [
           {
-            track: {
+            item: {
+              type: 'track',
               uri: 'spotify:track:ok',
               name: 'Imported',
               album: { name: 'Album' },
               artists: [{ name: 'Artist' }],
               duration_ms: 222000,
-              popularity: 40,
               explicit: false,
             },
           },
@@ -177,28 +214,28 @@ describe('spotifyImportAdapter', () => {
     )
   })
 
-  it('uses Spotify page totals when playlist summaries report zero tracks', async () => {
+  it('reports progress against declared summary totals, not per-page counts', async () => {
     vi.mocked(spotifyApi.get).mockResolvedValue({
       items: [
         {
-          track: {
+          item: {
+            type: 'track',
             uri: 'spotify:track:1',
             name: 'Track One',
             album: { name: 'Album One' },
             artists: [{ name: 'Artist One' }],
             duration_ms: 123000,
-            popularity: 50,
             explicit: false,
           },
         },
         {
-          track: {
+          item: {
+            type: 'track',
             uri: 'spotify:track:2',
             name: 'Track Two',
             album: { name: 'Album Two' },
             artists: [{ name: 'Artist Two' }],
             duration_ms: 456000,
-            popularity: 60,
             explicit: false,
           },
         },
@@ -217,7 +254,7 @@ describe('spotifyImportAdapter', () => {
 
     await spotifyImportAdapter.import({ playlists: [zeroTotalPlaylist] }, progress)
 
-    expect(progress).toHaveBeenCalledWith(2, 2, 'Road Trip')
+    expect(progress).toHaveBeenCalledWith(2, 0, 'Road Trip')
   })
 
   it('logs episode diagnostics when Spotify returns null track items', async () => {
@@ -225,9 +262,10 @@ describe('spotifyImportAdapter', () => {
     vi.mocked(spotifyApi.get).mockResolvedValue({
       items: [
         {
-          track: null,
-          episode: {
+          item: {
+            type: 'episode',
             uri: 'spotify:episode:1',
+            name: 'Podcast Episode',
           },
         },
       ],

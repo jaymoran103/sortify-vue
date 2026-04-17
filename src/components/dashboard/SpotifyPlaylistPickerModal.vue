@@ -8,6 +8,7 @@ import { useActivityStore } from '@/stores/activity'
 import { getImporter } from '@/adapters/registry'
 import type { SpotifyImportOptions } from '@/adapters/spotifyImport'
 import { spotifyApi } from '@/spotify/api'
+import { normalizeSpotifyEndpoint } from '@/spotify/utils'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
@@ -48,24 +49,16 @@ const { query, filtered } = useListFilter<SpotifyPlaylistSummary>(
 const { currentSort, sorted } = useListSort<SpotifyPlaylistSummary>(filtered, sortOptions)
 const selection = useListSelection<SpotifyPlaylistSummary>(sorted, (item) => item.id, { selectMultiple: true }, playlists)
 
+// Watch both sorted list and selection IDs so toggling a playlist immediately bubbles selected items to the top, not just on sort/filter changes.
 watch(
-  sorted,
-  (newSorted) => {
-    const ids = selection.selectedIds.value
+  [sorted, selection.selectedIds],
+  ([newSorted, ids]) => {
     displayItems.value = [...newSorted].sort((a, b) => {
       return (ids.has(a.id) ? 0 : 1) - (ids.has(b.id) ? 0 : 1)
     })
   },
   { immediate: true },
 )
-
-// Extracts Spotify API endpoint from a full URL or path, ensuring it starts with '/v1/' as expected by the spotifyApi instance. 
-// This facilitates handling of 'next' URLs from Spotify's paginated responses
-function parseSpotifyEndpoint(next: string): string {
-  const url = next.startsWith('http') ? new URL(next) : null
-  const path = url ? `${url.pathname}${url.search}` : next
-  return path.startsWith('/v1/') ? path.slice(3) : path
-}
 
 // ----- LOGGING -----
 /** Logging helper functions to standardize log messages and make them easier to filter in the console. */
@@ -91,25 +84,43 @@ function appendIssue(message: string): void {
 function normalizePlaylistSummary(item: unknown): SpotifyPlaylistSummary | null {
   if (!item || typeof item !== 'object') return null
 
-  // Check for required fields and basic structure. 
-  const candidate = item as Partial<SpotifyPlaylistSummary>
-  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') {
+  const raw = item as Record<string, unknown>
+  if (typeof raw['id'] !== 'string' || typeof raw['name'] !== 'string') {
     return null
   }
 
-  // Provide defaults for optional fields, handling potential data inconsistencies
-  const trackTotal = typeof candidate.tracks?.total === 'number' ? candidate.tracks.total : 0
+  // Spotify API may return track count under 'tracks' or 'items' depending on playlist type.
+  // Both shapes carry the count as a .total number property.
+  const tracksSource = raw['tracks'] ?? raw['items']
+  const trackTotal =
+    tracksSource !== null &&
+    typeof tracksSource === 'object' &&
+    typeof (tracksSource as Record<string, unknown>)['total'] === 'number'
+      ? ((tracksSource as Record<string, unknown>)['total'] as number)
+      : 0
+
+  // Warn on empty playlist, this likely indicates an issue.
+  // FUTURE: Decide on proper approach, could exclude to avoid clutter, but may be wanted in some cases
+  if (trackTotal==0){
+    logWarning('Playlist has zero tracks according to Spotify API', { id: raw['id'], name: raw['name'] })
+    appendIssue(`Playlist '${raw['name']}' has zero tracks according to Spotify API`)
+  }
+
+  const ownerSource = raw['owner']
   const ownerName =
-    typeof candidate.owner?.display_name === 'string' && candidate.owner.display_name.trim().length > 0
-      ? candidate.owner.display_name
+    ownerSource !== null &&
+    typeof ownerSource === 'object' &&
+    typeof (ownerSource as Record<string, unknown>)['display_name'] === 'string' &&
+    ((ownerSource as Record<string, unknown>)['display_name'] as string).trim().length > 0
+      ? ((ownerSource as Record<string, unknown>)['display_name'] as string)
       : 'Unknown owner'
 
   return {
-    id: candidate.id,
-    name: candidate.name,
+    id: raw['id'] as string,
+    name: raw['name'] as string,
     tracks: { total: trackTotal },
     owner: { display_name: ownerName },
-    images: Array.isArray(candidate.images) ? candidate.images : [],
+    images: Array.isArray(raw['images']) ? (raw['images'] as Array<{ url: string }>) : [],
   }
 }
 
@@ -189,7 +200,7 @@ async function fetchPlaylists(): Promise<void> {
         fetchedThisPage: normalizedItems.length,
         totalLoaded: fetched.length,
       })
-      endpoint = page.next ? parseSpotifyEndpoint(page.next) : ''
+      endpoint = page.next ? normalizeSpotifyEndpoint(page.next) : ''
     }
     playlists.value = fetched
     statusMsg.value = `Loaded ${fetched.length} Spotify playlists.`
@@ -219,6 +230,12 @@ async function startImport(): Promise<void> {
   statusMsg.value = `Starting Spotify import for ${selected.length} playlist${selected.length !== 1 ? 's' : ''}...`
 
   activityStore.startOperation(OPERATION_ID, 'Importing from Spotify')
+  logInfo('Selected playlists for Spotify import', selected.map((item) => ({
+    id: item.id,
+    name: item.name,
+    trackTotal: item.tracks.total,
+    owner: item.owner.display_name,
+  })))
   logInfo('Starting Spotify import', {
     playlistCount: selected.length,
     estimatedTracks: selected.reduce((sum, item) => sum + (item.tracks.total ?? 0), 0),
@@ -290,7 +307,7 @@ onMounted(fetchPlaylists)
 <template>
   <div class="spotify-picker-modal">
     <h2 class="spotify-picker-modal__title">Import from Spotify</h2>
-    <p v-if="statusMsg" class="spotify-picker-modal__status text-muted text-sm">{{ statusMsg }}</p>
+    <p v-if="statusMsg && step !== 'ready'" class="spotify-picker-modal__status text-muted text-sm">{{ statusMsg }}</p>
 
     <div v-if="step === 'loading'" class="spotify-picker-modal__body">
       <p class="text-muted">Loading playlists…</p>
