@@ -95,7 +95,21 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
       })
       try {
         while (endpoint) {
+          logInfo('Fetching Spotify tracks page', { endpoint, playlistName: playlist.name })
           const page = await spotifyApi.get<SpotifyPaginatedResponse<SpotifyTrackItem>>(endpoint)
+
+          // Log the raw shape of the first item on the first page to diagnose response mismatches.
+          if (!resolvedTrackCount && page.items.length > 0) {
+            const firstItem = page.items[0]
+            logInfo('Raw first track item structure', {
+              playlistName: playlist.name,
+              keys: Object.keys(firstItem as object),
+              hasTrackField: 'track' in (firstItem as object),
+              trackIsNull: (firstItem as SpotifyTrackItem).track === null,
+              hasEpisodeField: 'episode' in (firstItem as object),
+            })
+          }
+
           if (!resolvedTrackCount) {
             resolvedTrackCount = true
             resolvedTracks = page.total
@@ -110,6 +124,7 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
           }
           let skippedNullTracks = 0
           let skippedEpisodes = 0
+          let realTracksThisPage = 0
 
           for (const item of page.items) {
             if (!item.track) {
@@ -132,6 +147,7 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
             playlistTrackIds.push(normalized.trackID)
             processedTracks += 1
             importedTracks += 1
+            realTracksThisPage += 1
           }
 
           // Log any skipped tracks, with reason.
@@ -144,10 +160,26 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
             })
           }
 
-          // Log progress after each page, with stats about how many tracks processed so far and how many total.
+          // Warn explicitly if the entire page had no importable tracks. helps diagnose API shape issues.
+          if (page.items.length > 0 && realTracksThisPage === 0) {
+            const sampleItem = page.items[0] as unknown as Record<string, unknown>
+            logWarning('No importable tracks on this page — all items had null track field', {
+              playlistName: playlist.name,
+              pageSize: page.items.length,
+              skippedEpisodes,
+              skippedUnknownItems: skippedNullTracks - skippedEpisodes,
+              sampleItemKeys: Object.keys(sampleItem),
+              sampleItemTrackType: typeof sampleItem['track'],
+              sampleItemEpisode: sampleItem['episode'] ?? 'absent',
+            })
+          }
+
+          // Log progress after each page.
           logInfo('Processed Spotify playlist page', {
             playlistName: playlist.name,
             pageSize: page.items.length,
+            realTracksThisPage,
+            skippedNullTracks,
             processedTracks,
             totalTracks,
             resolvedTracks,

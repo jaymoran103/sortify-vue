@@ -115,16 +115,19 @@ async function handleFiles(e: Event): Promise<void> {
       const jsonAdapter = getImporter('json')
       if (!jsonAdapter) throw new Error('JSON importer not registered')
 
-      // Call import for each JSON file sequentially, accumulating results.
-      // TODO: Settle on better progress approach with JSON imports — currently each file is one unit regardless of size.
+      // Call import for each JSON file sequentially, reporting per-playlist progress via callback.
       for (const file of jsonFiles) {
-        activityStore.updateProgress(OPERATION_ID, {
-          done: completedUnits,
-          total: totalUnits,
-          phase: 'Importing JSON',
-          itemLabel: file.name,
-        })
-        const r = await jsonAdapter.import({ file })
+        const r = await jsonAdapter.import(
+          { file },
+          (done, total, label) => {
+            activityStore.updateProgress(OPERATION_ID, {
+              done,
+              total,
+              phase: 'Importing JSON',
+              itemLabel: label,
+            })
+          },
+        )
         completedUnits += 1
         progress.value = completedUnits / totalUnits
         accumulated.tracksImported += r.tracksImported

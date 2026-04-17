@@ -138,9 +138,12 @@ describe('ImportModal', () => {
     await flushPromises()
   })
 
-  it('sets determinate JSON progress before a file import resolves', async () => {
+  it('reports per-playlist JSON progress via activity store', async () => {
     const deferred = createDeferred<{ tracksImported: number; playlistsImported: number; errors: string[] }>()
-    const jsonImport = vi.fn(() => deferred.promise)
+    const jsonImport = vi.fn(async (_opts, onProgress) => {
+      onProgress?.(1, 3, 'Road Trip')
+      return deferred.promise
+    })
     vi.spyOn(registry, 'getImporter').mockReturnValue({
       key: 'json',
       label: 'JSON Bundle',
@@ -158,13 +161,13 @@ describe('ImportModal', () => {
     await flushPromises()
 
     expect(activityStore.activeOperation?.progress).toEqual({
-      done: 0,
-      total: 1,
+      done: 1,
+      total: 3,
       phase: 'Importing JSON',
-      itemLabel: 'bundle.json',
+      itemLabel: 'Road Trip',
     })
 
-    deferred.resolve({ tracksImported: 2, playlistsImported: 1, errors: [] })
+    deferred.resolve({ tracksImported: 2, playlistsImported: 3, errors: [] })
     await flushPromises()
   })
 })
