@@ -197,6 +197,75 @@
   font-size: var(--font-size-sm);
 }
 
+/* ── Selection Modal shell (shared by playlist-style selectors) ── */
+.selection-modal {
+  padding: var(--space-5);
+  width: 500px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.selection-modal__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.selection-modal__status {
+  margin: 0;
+}
+
+.selection-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.selection-modal__controls {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.selection-modal__list {
+  min-height: 0;
+  height: 320px;
+  overflow: hidden;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.selection-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.selection-modal__footer-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.selection-modal__issues {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.selection-modal__issues-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.selection-modal__issues-list {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
 /* ── Source Cards ── */
 .source-card-grid {
   display: grid;

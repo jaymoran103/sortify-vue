@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { getExporter } from '@/adapters/registry'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useActivityStore } from '@/stores/activity'
@@ -8,6 +8,7 @@ import type { SpotifyExportOptions } from '@/adapters/spotifyExport'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
+import { useSelectedFirstDisplay } from '@/composables/useSelectedFirstDisplay'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
@@ -72,17 +73,11 @@ const selection = useListSelection<Playlist>(
   { selectMultiple: true },
   allPlaylists,
 )
-
-const displayItems = shallowRef<Playlist[]>([])
-watch(
+// Display selected items first in the list, while maintaining sort order within selected and unselected groups.
+const { displayItems } = useSelectedFirstDisplay(
   sorted,
-  (newSorted) => {
-    const ids = selection.selectedIds.value
-    displayItems.value = [...newSorted].sort((a, b) => {
-      return (ids.has(String(a.id!)) ? 0 : 1) - (ids.has(String(b.id!)) ? 0 : 1)
-    })
-  },
-  { immediate: true },
+  selection.selectedIds,
+  (item) => String(item.id!),
 )
 
 const allSelected = computed(
@@ -229,12 +224,12 @@ async function handleExport(): Promise<void> {
 
     <!-- Step: playlist selection -->
     <div v-else-if="step === 'playlists'" class="io-modal__body io-modal__body--playlists">
-      <div class="io-modal__list-controls">
+      <div class="selection-modal__controls">
         <SearchBar v-model="query" placeholder="Filter playlists…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
       </div>
-      <div class="io-modal__list">
-        <ScrollableList :items="displayItems" key-field="id" :estimate-size="48">
+      <div class="selection-modal__list selection-modal__list--compact">
+        <ScrollableList :items="displayItems" key-field="id" :estimate-size="56">
           <template #item="{ item }">
             <SelectableItem
               :label="(item as Playlist).name"
@@ -269,19 +264,21 @@ async function handleExport(): Promise<void> {
     </div>
 
     <!-- Footer: playlists step has select-all on left + nav on right -->
-    <div v-if="step === 'playlists'" class="io-modal__footer">
+    <div v-if="step === 'playlists'" class="selection-modal__footer">
       <button class="btn btn--ghost io-modal__select-all" @click="toggleSelectAll">
         {{ allSelected ? 'Deselect All' : 'Select All' }}
       </button>
-      <button class="btn btn--ghost" @click="step = 'source'">Back</button>
-      <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
-      <button
-        class="btn btn--primary"
-        :disabled="selection.selectedIds.value.size === 0"
-        @click="confirmPlaylists"
-      >
-        {{ destination === 'spotify' ? `Export (${selection.selectedCount.value})` : `Next (${selection.selectedCount.value})` }}
-      </button>
+      <div class="selection-modal__footer-actions">
+        <button class="btn btn--ghost" @click="step = 'source'">Back</button>
+        <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
+        <button
+          class="btn btn--primary"
+          :disabled="selection.selectedIds.value.size === 0"
+          @click="confirmPlaylists"
+        >
+          Next ({{ selection.selectedCount.value }})
+        </button>
+      </div>
     </div>
 
     <!-- Footer: all other steps -->
@@ -302,30 +299,7 @@ async function handleExport(): Promise<void> {
   min-height: 280px;
 }
 
-.io-modal__list-controls {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.io-modal__list {
-  min-height: 0;
+.selection-modal__list--compact {
   height: 220px;
-  overflow: hidden;
-  border-top: 1px solid var(--color-border-subtle);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.export-modal__spotify-links {
-  margin: 0;
-  padding-left: var(--space-4);
-  font-size: var(--font-size-sm);
-}
-
-.export-modal__spotify-links a {
-  color: var(--color-accent);
-}
-
-.io-modal__select-all {
-  margin-right: auto;
 }
 </style>
