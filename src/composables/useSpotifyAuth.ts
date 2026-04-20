@@ -9,16 +9,25 @@ const _cachedUser = ref<SpotifyUserProfile | null>(null)
 const _isAuthenticated = ref(spotifyAuth.isAuthenticated())
 const _isLoading = ref(false)
 const _error = ref<string | null>(null)
+let _fetchUserInFlight: Promise<void> | null = null
 
 // Module-level helpers: operate on shared state, safe to call outside a component.
 // Fetches the Spotify user profile from GET /me and updates the cached user ref.
+// Uses an in-flight guard so concurrent callers (multiple onMounted hooks) collapse onto a single request instead of firing duplicates.
+// TODO: review caching strategy, clearing more frequently or on certain triggers. 
 async function fetchUser(): Promise<void> {
-  try {
-    const profile = await spotifyApi.get<SpotifyUserProfile>('/me')
-    _cachedUser.value = profile
-  } catch (err) {
-    _error.value = err instanceof Error ? err.message : 'Failed to fetch user profile'
-  }
+  if (_fetchUserInFlight) return _fetchUserInFlight
+  _fetchUserInFlight = (async () => {
+    try {
+      const profile = await spotifyApi.get<SpotifyUserProfile>('/me')
+      _cachedUser.value = profile
+    } catch (err) {
+      _error.value = err instanceof Error ? err.message : 'Failed to fetch user profile'
+    } finally {
+      _fetchUserInFlight = null
+    }
+  })()
+  return _fetchUserInFlight
 }
 
 // Exported standalone callback handler: called from main.ts without a component context.

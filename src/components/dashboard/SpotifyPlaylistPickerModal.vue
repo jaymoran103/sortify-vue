@@ -1,3 +1,16 @@
+<script lang="ts">
+import type { SpotifyPlaylistSummary } from '@/spotify/types'
+
+// Module-level cache: persists across mounts so reopening the picker does not
+// re-fetch the same playlist list. Cleared on explicit retry or after import completes.
+let _playlistCache: SpotifyPlaylistSummary[] | null = null
+
+// Exported so callers can force a fresh fetch.
+export function resetPlaylistCache(): void {
+  _playlistCache = null
+}
+</script>
+
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
@@ -9,6 +22,7 @@ import { useActivityStore } from '@/stores/activity'
 import { getImporter } from '@/adapters/registry'
 import type { SpotifyImportOptions } from '@/adapters/spotifyImport'
 import { spotifyApi } from '@/spotify/api'
+import { normalizeSpotifyEndpoint } from '@/spotify/utils'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
@@ -16,7 +30,7 @@ import ScrollableList from '@/components/common/ScrollableList.vue'
 import SelectableItem from '@/components/common/SelectableItem.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import type { ImportResult } from '@/types/adapters'
-import type { SpotifyPlaylistSummary, SpotifyPaginatedResponse } from '@/spotify/types'
+import type { SpotifyPaginatedResponse } from '@/spotify/types'
 import type { SortOption } from '@/types/ui'
 
 const emit = defineEmits<{
@@ -26,14 +40,12 @@ const emit = defineEmits<{
 
 const activityStore = useActivityStore()
 const { isAuthenticated, login } = useSpotifyAuth()
-const OPERATION_ID = 'spotify-import'
 const LOADING_STEP_LABEL = 'Loading Spotify playlists...'
 
 const step = ref<'loading' | 'ready' | 'progress' | 'done' | 'error'>('loading')
 const playlists = ref<SpotifyPlaylistSummary[]>([])
 const result = ref<ImportResult | null>(null)
 const errorMsg = ref<string | null>(null)
-const issueMessages = ref<string[]>([])
 const statusMsg = ref('')
 const progress = ref<number>(-1)
 const playlistFetchLoaded = ref(0)
@@ -56,14 +68,6 @@ const playlistFetchProgress = computed(() => {
   return Math.min(playlistFetchLoaded.value / playlistFetchTotal.value, 1)
 })
 
-// Extracts Spotify API endpoint from a full URL or path, ensuring it starts with '/v1/' as expected by the spotifyApi instance. 
-// This facilitates handling of 'next' URLs from Spotify's paginated responses
-function parseSpotifyEndpoint(next: string): string {
-  const url = next.startsWith('http') ? new URL(next) : null
-  const path = url ? `${url.pathname}${url.search}` : next
-  return path.startsWith('/v1/') ? path.slice(3) : path
-}
-
 // ----- LOGGING -----
 /** Logging helper functions to standardize log messages and make them easier to filter in the console. */
 
@@ -77,10 +81,6 @@ function logWarning(message: string, details?: unknown): void {
 
 function logError(message: string, details?: unknown): void {
   console.error(`[SpotifyPicker] ${message}`, details ?? '')
-}
-
-function appendIssue(message: string): void {
-  issueMessages.value = [...issueMessages.value, message]
 }
 
 // normalize playlist data from Spotify API, handling potential missing fields and providing defaults where necessary.
@@ -109,7 +109,6 @@ function normalizePlaylistSummary(item: unknown, recordIssues = true): SpotifyPl
   // FUTURE: Decide on proper approach, could exclude to avoid clutter, but may be wanted in some cases
   if (trackTotal === 0 && recordIssues) {
     logWarning('Playlist has zero tracks according to Spotify API', { id: raw['id'], name: raw['name'] })
-    appendIssue(`Playlist '${raw['name']}' has zero tracks according to Spotify API`)
   }
 
   const ownerSource = raw['owner']
@@ -122,11 +121,11 @@ function normalizePlaylistSummary(item: unknown, recordIssues = true): SpotifyPl
       : 'Unknown owner'
 
   return {
-    id: candidate.id,
-    name: candidate.name,
+    id: raw['id'] as string,
+    name: raw['name'] as string,
     tracks: { total: trackTotal },
     owner: { display_name: ownerName },
-    images: Array.isArray(candidate.images) ? candidate.images : [],
+    images: Array.isArray(raw['images']) ? (raw['images'] as Array<{ url: string }>) : [],
   }
 }
 
@@ -154,7 +153,6 @@ function togglePlaylist(item: unknown): void {
   if (!id) {
     const warning = 'Skipped interaction with a playlist row because its data was incomplete.'
     logWarning(warning, item)
-    appendIssue(warning)
     return
   }
   selection.toggle(id)
@@ -165,7 +163,6 @@ function togglePlaylist(item: unknown): void {
 async function fetchPlaylists(): Promise<void> {
   step.value = 'loading'
   errorMsg.value = null
-  issueMessages.value = []
   statusMsg.value = LOADING_STEP_LABEL
   playlistFetchLoaded.value = 0
   playlistFetchTotal.value = 0
@@ -174,6 +171,16 @@ async function fetchPlaylists(): Promise<void> {
     errorMsg.value = 'Spotify is not connected. Please sign in and try again.'
     logWarning(errorMsg.value)
     step.value = 'error'
+    return
+  }
+
+  // Check module-level cache before making API calls. 
+  // This allows for faster reopening of the picker without redundant network requests, while still ensuring that data is fetched fresh on explicit retry or after imports.
+  // FUTURE: Consider adding a timestamp, and invalidating cache after a few minutes, or manual refresh, in case users are actively modifying playlists via spotify while the picked is open. Very much an edge case
+  if (_playlistCache !== null) {
+    playlists.value = _playlistCache
+    statusMsg.value = `Loaded ${_playlistCache.length} Spotify playlists.`
+    step.value = 'ready'
     return
   }
 
@@ -202,7 +209,13 @@ async function fetchPlaylists(): Promise<void> {
       if (skippedCount > 0) {
         const warning = `Skipped ${skippedCount} playlist entr${skippedCount === 1 ? 'y' : 'ies'} with incomplete Spotify data.`
         logWarning(warning, { endpoint, page: pageCount })
-        appendIssue(warning)
+      }
+
+      // Warn about zero-track playlists (fetch time only — not on every render)
+      for (const pl of normalizedItems) {
+        if (pl.tracks.total === 0) {
+          logWarning('Playlist has zero tracks according to Spotify API', { id: pl.id, name: pl.name })
+        }
       }
 
       // Accumulate normalized playlists and log progress after each page
@@ -217,9 +230,10 @@ async function fetchPlaylists(): Promise<void> {
         totalLoaded: fetched.length,
         totalExpected: page.total,
       })
-      endpoint = page.next ? parseSpotifyEndpoint(page.next) : ''
+      endpoint = page.next ? normalizeSpotifyEndpoint(page.next) : ''
     }
     playlists.value = fetched
+    _playlistCache = fetched
     statusMsg.value = `Loaded ${fetched.length} Spotify playlists.`
     logInfo('Finished loading Spotify playlists', { totalLoaded: fetched.length })
     step.value = 'ready'
@@ -238,42 +252,41 @@ async function startImport(): Promise<void> {
   const selected = playlists.value.filter((item) => selection.isSelected(item.id))
   if (selected.length === 0) return
 
+  // Close modal immediately; progress and result display delegate to ActivityIndicator / IOSummaryCard.
   emit('cancel')
-  step.value = 'progress'
-  progress.value = -1
   errorMsg.value = null
-  issueMessages.value = []
-  result.value = null
   statusMsg.value = `Starting Spotify import for ${selected.length} playlist${selected.length !== 1 ? 's' : ''}...`
 
-  activityStore.startOperation(OPERATION_ID, 'Importing from Spotify')
+  // Unique ID per invocation so each operation gets its own history row.
+  const operationId = crypto.randomUUID()
+  activityStore.startOperation(operationId, 'Importing from Spotify', 'spotify-import')
+  logInfo('Selected playlists for Spotify import', selected.map((item) => ({
+    id: item.id,
+    name: item.name,
+    trackTotal: item.tracks.total,
+    owner: item.owner.display_name,
+  })))
   logInfo('Starting Spotify import', {
     playlistCount: selected.length,
     estimatedTracks: selected.reduce((sum, item) => sum + (item.tracks.total ?? 0), 0),
   })
 
-  // Get and validate the Spotify import adapter
   const spotifyAdapter = getImporter<SpotifyImportOptions>('spotify')
   if (!spotifyAdapter) {
     const message = 'Spotify importer not registered'
-    errorMsg.value = message
-    statusMsg.value = 'Spotify import setup failed.'
     logError(message)
-    step.value = 'error'
-    activityStore.failOperation(OPERATION_ID, message)
+    activityStore.failOperation(operationId, message)
     return
   }
 
-  // Call the import method of the Spotify adapter, passing the selected playlists and a progress callback to update the UI and activity store.
   try {
     const response = await spotifyAdapter.import(
       { playlists: selected },
       (done, total, label) => {
-        progress.value = total > 0 ? done / total : -1
         statusMsg.value = label
           ? `Importing Playlist '${label}' (${done}/${total})`
           : `Importing Playlists (${done}/${total})`
-        activityStore.updateProgress(OPERATION_ID, {
+        activityStore.updateProgress(operationId, {
           done,
           total,
           phase: 'Importing Spotify',
@@ -281,26 +294,33 @@ async function startImport(): Promise<void> {
         })
       },
     )
-    result.value = response
-    issueMessages.value = response.errors
-    statusMsg.value = `Spotify import complete. Imported ${response.playlistsImported} playlist${response.playlistsImported !== 1 ? 's' : ''} and ${response.tracksImported} track${response.tracksImported !== 1 ? 's' : ''}.`
+    // Forward per-item warnings to the activity store.
+    for (const msg of response.errors) {
+      activityStore.addError(operationId, { category: 'warning', message: msg, items: [] })
+    }
     if (response.errors.length > 0) {
       logWarning('Spotify import completed with issues', response.errors)
     }
     logInfo('Spotify import complete', response)
-    step.value = 'done'
-    activityStore.completeOperation(OPERATION_ID)
+    activityStore.completeOperation(operationId, {
+      tracks: response.tracksImported,
+      playlists: response.playlistsImported,
+      warnings: response.errors.length,
+    })
+    _playlistCache = null
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Spotify import failed'
-    errorMsg.value = message
-    statusMsg.value = 'Spotify import failed.'
-    logError(message, err)
-    step.value = 'error'
-    activityStore.failOperation(OPERATION_ID, message)
+    const rawMsg = err instanceof Error ? err.message : 'Spotify import failed'
+    const isRateLimit = rawMsg.startsWith('Rate limited')
+    const userMsg = isRateLimit
+      ? 'Spotify rate limit reached. Please wait a few minutes before retrying.'
+      : rawMsg
+    logError(rawMsg, err)
+    activityStore.failOperation(operationId, userMsg, isRateLimit ? 'rate-limit' : 'error')
   }
 }
 
 function handleRetry(): void {
+  _playlistCache = null
   if (!isAuthenticated.value) {
     login()
     return
@@ -336,6 +356,14 @@ onMounted(fetchPlaylists)
       <ControlBar>
         <SearchBar v-model="query" placeholder="Filter playlists…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
+        <template #actions>
+          <button
+            class="btn btn--ghost btn--sm"
+            @click="selection.selectedCount.value === playlists.length ? selection.clear() : selection.selectAll()"
+          >
+            {{ selection.selectedCount.value === playlists.length ? 'Deselect All' : 'Select All' }}
+          </button>
+        </template>
       </ControlBar>
 
       <div class="selection-modal__list">
@@ -354,12 +382,6 @@ onMounted(fetchPlaylists)
         </ScrollableList>
       </div>
 
-      <div v-if="issueMessages.length > 0" class="selection-modal__issues">
-        <p class="selection-modal__issues-title">Notable issues</p>
-        <ul class="selection-modal__issues-list">
-          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
-        </ul>
-      </div>
     </div>
 
     <div v-else-if="step === 'progress'" class="selection-modal__body">
@@ -377,12 +399,6 @@ onMounted(fetchPlaylists)
       <p v-if="result.errors.length > 0" class="io-modal__error">
         {{ result.errors.length }} error(s) during import
       </p>
-      <div v-if="issueMessages.length > 0" class="selection-modal__issues">
-        <p class="selection-modal__issues-title">Import issues</p>
-        <ul class="selection-modal__issues-list">
-          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
-        </ul>
-      </div>
     </div>
 
     <div class="selection-modal__footer">

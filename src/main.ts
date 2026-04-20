@@ -14,6 +14,7 @@ import { csvExportAdapter } from '@/adapters/csvExport'
 import { jsonImportAdapter } from '@/adapters/jsonImport'
 import { jsonExportAdapter } from '@/adapters/jsonExport'
 import { spotifyImportAdapter } from '@/adapters/spotifyImport'
+import { spotifyExportAdapter } from '@/adapters/spotifyExport'
 import { initDatabase } from '@/db/dbInit'
 
 registerImporter(csvImportAdapter)
@@ -21,6 +22,7 @@ registerExporter(csvExportAdapter)
 registerImporter(jsonImportAdapter)
 registerExporter(jsonExportAdapter)
 registerImporter(spotifyImportAdapter)
+registerExporter(spotifyExportAdapter)
 
 // Open SortifyDB before mounting so stores never query an unopened database.
 await initDatabase()
