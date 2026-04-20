@@ -37,8 +37,10 @@ const emit = defineEmits<{
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
+  min-height: 56px;
+  box-sizing: border-box;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   transition: background var(--duration-fast) var(--ease-default);
 }
 
@@ -67,6 +69,7 @@ const emit = defineEmits<{
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .selectable-item__label {

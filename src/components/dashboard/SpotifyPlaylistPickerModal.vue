@@ -12,11 +12,12 @@ export function resetPlaylistCache(): void {
 </script>
 
 <script setup lang="ts">
-import { onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
+import { useSelectedFirstDisplay } from '@/composables/useSelectedFirstDisplay'
 import { useActivityStore } from '@/stores/activity'
 import { getImporter } from '@/adapters/registry'
 import type { SpotifyImportOptions } from '@/adapters/spotifyImport'
@@ -39,11 +40,17 @@ const emit = defineEmits<{
 
 const activityStore = useActivityStore()
 const { isAuthenticated, login } = useSpotifyAuth()
-const step = ref<'loading' | 'ready' | 'error'>('loading')
+const OPERATION_ID = 'spotify-import'
+const LOADING_STEP_LABEL = 'Loading Spotify playlists...'
+
+const step = ref<'loading' | 'ready' | 'progress' | 'done' | 'error'>('loading')
 const playlists = ref<SpotifyPlaylistSummary[]>([])
-const displayItems = shallowRef<SpotifyPlaylistSummary[]>([])
+const result = ref<ImportResult | null>(null)
 const errorMsg = ref<string | null>(null)
 const statusMsg = ref('')
+const progress = ref<number>(-1)
+const playlistFetchLoaded = ref(0)
+const playlistFetchTotal = ref(0)
 
 const sortOptions: SortOption<SpotifyPlaylistSummary>[] = [
   { key: 'name', label: 'Name', compareFn: (a, b) => a.name.localeCompare(b.name) },
@@ -56,17 +63,11 @@ const { query, filtered } = useListFilter<SpotifyPlaylistSummary>(
 )
 const { currentSort, sorted } = useListSort<SpotifyPlaylistSummary>(filtered, sortOptions)
 const selection = useListSelection<SpotifyPlaylistSummary>(sorted, (item) => item.id, { selectMultiple: true }, playlists)
-
-// Watch both sorted list and selection IDs so toggling a playlist immediately bubbles selected items to the top, not just on sort/filter changes.
-watch(
-  [sorted, selection.selectedIds],
-  ([newSorted, ids]) => {
-    displayItems.value = [...newSorted].sort((a, b) => {
-      return (ids.has(a.id) ? 0 : 1) - (ids.has(b.id) ? 0 : 1)
-    })
-  },
-  { immediate: true },
-)
+const { displayItems } = useSelectedFirstDisplay(sorted, selection.selectedIds, (item) => item.id)
+const playlistFetchProgress = computed(() => {
+  if (playlistFetchTotal.value <= 0) return -1
+  return Math.min(playlistFetchLoaded.value / playlistFetchTotal.value, 1)
+})
 
 // ----- LOGGING -----
 /** Logging helper functions to standardize log messages and make them easier to filter in the console. */
@@ -85,11 +86,13 @@ function logError(message: string, details?: unknown): void {
 
 // normalize playlist data from Spotify API, handling potential missing fields and providing defaults where necessary.
 // This ensures that the playlist data used in the component is consistent and complete enough for display and import purposes, while also logging potential issues with the raw data for debugging.
-function normalizePlaylistSummary(item: unknown): SpotifyPlaylistSummary | null {
+function normalizePlaylistSummary(item: unknown, recordIssues = true): SpotifyPlaylistSummary | null {
   if (!item || typeof item !== 'object') return null
-
+  // Check for required fields and basic structure. 
   const raw = item as Record<string, unknown>
-  if (typeof raw['id'] !== 'string' || typeof raw['name'] !== 'string') {
+  const candidate = item as Partial<SpotifyPlaylistSummary>
+
+  if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string') {
     return null
   }
 
@@ -102,6 +105,13 @@ function normalizePlaylistSummary(item: unknown): SpotifyPlaylistSummary | null 
     typeof (tracksSource as Record<string, unknown>)['total'] === 'number'
       ? ((tracksSource as Record<string, unknown>)['total'] as number)
       : 0
+
+  // Warn on empty playlist, this likely indicates an issue.
+  // FUTURE: Decide on proper approach, could exclude to avoid clutter, but may be wanted in some cases
+  if (trackTotal === 0 && recordIssues) {
+    logWarning('Playlist has zero tracks according to Spotify API', { id: raw['id'], name: raw['name'] })
+    appendIssue(`Playlist '${raw['name']}' has zero tracks according to Spotify API`)
+  }
 
   const ownerSource = raw['owner']
   const ownerName =
@@ -122,15 +132,15 @@ function normalizePlaylistSummary(item: unknown): SpotifyPlaylistSummary | null 
 }
 
 function getPlaylistId(item: unknown): string | null {
-  return normalizePlaylistSummary(item)?.id ?? null
+  return normalizePlaylistSummary(item, false)?.id ?? null
 }
 
 function getPlaylistName(item: unknown): string {
-  return normalizePlaylistSummary(item)?.name ?? 'Unknown playlist'
+  return normalizePlaylistSummary(item, false)?.name ?? 'Unknown playlist'
 }
 
 function getPlaylistSubtitle(item: unknown): string {
-  const playlist = normalizePlaylistSummary(item)
+  const playlist = normalizePlaylistSummary(item, false)
   if (!playlist) return 'Playlist details unavailable'
   return `${playlist.tracks.total} tracks - ${playlist.owner.display_name}`
 }
@@ -155,7 +165,10 @@ function togglePlaylist(item: unknown): void {
 async function fetchPlaylists(): Promise<void> {
   step.value = 'loading'
   errorMsg.value = null
-  statusMsg.value = 'Connecting to Spotify and loading playlists...'
+  issueMessages.value = []
+  statusMsg.value = LOADING_STEP_LABEL
+  playlistFetchLoaded.value = 0
+  playlistFetchTotal.value = 0
 
   if (!isAuthenticated.value) {
     errorMsg.value = 'Spotify is not connected. Please sign in and try again.'
@@ -185,6 +198,11 @@ async function fetchPlaylists(): Promise<void> {
     while (endpoint) {
       pageCount += 1
       const page = await spotifyApi.get<SpotifyPaginatedResponse<SpotifyPlaylistSummary>>(endpoint)
+      if (playlistFetchTotal.value === 0) {
+        playlistFetchTotal.value = page.total
+      }
+      playlistFetchLoaded.value = Math.min(playlistFetchLoaded.value + page.items.length, page.total)
+
       const normalizedItems = page.items
         .map((item) => normalizePlaylistSummary(item))
         .filter((item): item is SpotifyPlaylistSummary => item !== null)
@@ -205,11 +223,15 @@ async function fetchPlaylists(): Promise<void> {
 
       // Accumulate normalized playlists and log progress after each page
       fetched.push(...normalizedItems)
-      statusMsg.value = `Loaded ${fetched.length} Spotify playlists...`
+      statusMsg.value = playlistFetchTotal.value > 0
+        ? `Loaded ${playlistFetchLoaded.value} of ${playlistFetchTotal.value} Spotify playlists...`
+        : LOADING_STEP_LABEL
       logInfo('Loaded Spotify playlist page', {
         page: pageCount,
+        fetchedRaw: page.items.length,
         fetchedThisPage: normalizedItems.length,
         totalLoaded: fetched.length,
+        totalExpected: page.total,
       })
       endpoint = page.next ? normalizeSpotifyEndpoint(page.next) : ''
     }
@@ -317,23 +339,23 @@ onMounted(fetchPlaylists)
 </script>
 
 <template>
-  <div class="spotify-picker-modal">
-    <h2 class="spotify-picker-modal__title">Import from Spotify</h2>
-    <p v-if="statusMsg && step !== 'ready'" class="spotify-picker-modal__status text-muted text-sm">{{ statusMsg }}</p>
+  <div class="selection-modal">
+    <h2 class="selection-modal__title">Import from Spotify</h2>
+    <p v-if="statusMsg && step !== 'ready'" class="selection-modal__status text-muted text-sm">{{ statusMsg }}</p>
 
-    <div v-if="step === 'loading'" class="spotify-picker-modal__body">
+    <div v-if="step === 'loading'" class="selection-modal__body">
       <p class="text-muted">Loading playlists…</p>
-      <ProgressBar :progress="-1" />
+      <ProgressBar :progress="playlistFetchProgress" />
     </div>
 
-    <div v-else-if="step === 'error'" class="spotify-picker-modal__body">
+    <div v-else-if="step === 'error'" class="selection-modal__body">
       <p class="io-modal__error">{{ errorMsg }}</p>
       <button class="btn btn--secondary" @click="handleRetry">
         {{ isAuthenticated ? 'Try Again' : 'Connect to Spotify' }}
       </button>
     </div>
 
-    <div v-else-if="step === 'ready'" class="spotify-picker-modal__body">
+    <div v-else-if="step === 'ready'" class="selection-modal__body">
       <ControlBar>
         <SearchBar v-model="query" placeholder="Filter playlists…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
@@ -347,7 +369,7 @@ onMounted(fetchPlaylists)
         </template>
       </ControlBar>
 
-      <div class="spotify-picker-modal__list">
+      <div class="selection-modal__list">
         <ScrollableList :items="displayItems" key-field="id" :estimate-size="56">
           <template #item="{ item }">
             <SelectableItem
@@ -363,56 +385,58 @@ onMounted(fetchPlaylists)
         </ScrollableList>
       </div>
 
+      <div v-if="issueMessages.length > 0" class="selection-modal__issues">
+        <p class="selection-modal__issues-title">Notable issues</p>
+        <ul class="selection-modal__issues-list">
+          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
+        </ul>
+      </div>
     </div>
 
-    <div class="spotify-picker-modal__footer">
-      <button class="btn btn--secondary" @click="handleCancel">Cancel</button>
-      <button
-        v-if="step === 'ready'"
-        class="btn btn--primary"
-        :disabled="selection.selectedCount.value === 0"
-        @click="startImport"
-      >
-        Import ({{ selection.selectedCount.value }})
-      </button>
+    <div v-else-if="step === 'progress'" class="selection-modal__body">
+      <p class="text-muted">Importing selected playlists…</p>
+      <ProgressBar :progress="progress" />
+    </div>
+
+    <div v-else-if="step === 'done' && result" class="selection-modal__body">
+      <p>
+        Imported <strong>{{ result.tracksImported }}</strong> track{{ result.tracksImported !== 1 ? 's' : '' }}
+      </p>
+      <p v-if="result.playlistsImported > 0">
+        and {{ result.playlistsImported }} playlist{{ result.playlistsImported !== 1 ? 's' : '' }}
+      </p>
+      <p v-if="result.errors.length > 0" class="io-modal__error">
+        {{ result.errors.length }} error(s) during import
+      </p>
+      <div v-if="issueMessages.length > 0" class="selection-modal__issues">
+        <p class="selection-modal__issues-title">Import issues</p>
+        <ul class="selection-modal__issues-list">
+          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="selection-modal__footer">
+      <span v-if="step === 'ready' && selection.selectedCount.value > 0" class="text-muted text-sm">
+        {{ selection.selectedCount.value }} selected
+      </span>
+      <div v-else />
+      <div class="selection-modal__footer-actions">
+        <button class="btn btn--secondary" @click="handleCancel">
+          {{ step === 'done' ? 'Done' : 'Cancel' }}
+        </button>
+        <button
+          v-if="step === 'ready'"
+          class="btn btn--primary"
+          :disabled="selection.selectedCount.value === 0"
+          @click="startImport"
+        >
+          Import ({{ selection.selectedCount.value }})
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.spotify-picker-modal {
-  padding: var(--space-5);
-  min-width: 500px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.spotify-picker-modal__title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-}
-
-.spotify-picker-modal__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.spotify-picker-modal__status {
-  margin: 0;
-}
-
-.spotify-picker-modal__list {
-  height: 320px;
-  overflow: hidden;
-  border-top: 1px solid var(--color-border-subtle);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.spotify-picker-modal__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
 </style>
