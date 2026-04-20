@@ -143,6 +143,8 @@ function statusLabel(op: ActivityItem): string {
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border-subtle);
   margin-top: var(--space-2);
+  flex: 1;
+  min-height: 0;
 }
 
 .io-summary-card__header {
@@ -166,6 +168,9 @@ function statusLabel(op: ActivityItem): string {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .io-summary-card__row {

@@ -53,47 +53,52 @@ async function offerLogout() {
       <button id="export-button" class="btn btn--primary" @click="openExportModal" :disabled="!hasPlaylists" :title="hasPlaylists ? '' : 'No playlists available'">Export</button>
     </div>
 
-    <!-- Spotify Status Indicator -->
-    <!-- FUTURE: Review @click / nested lambda functions. Logic works and looks alright, but might not be necessary if logout happens another way -->
-    <button
-      class="io-card__spotify-status"
-      :class="{
-        'io-card__spotify-status--connected': isAuthenticated,
-        'io-card__spotify-status--loading': isLoading,
-        'io-card__spotify-status--error': error,
-      }"
-      @click="
-      isAuthenticated ? offerLogout()
-                      : isLoading ? undefined
-                                  : login()
-      "
-      :aria-label="isAuthenticated ? 'Spotify Connected' : 'Connect to Spotify'"
+    <!-- Recent Activity Summary: Persistent display of recently completed operations. Grows to fill available card space. -->
+    <div class="io-card__summary-wrapper">
+      <IOSummaryCard />
+    </div>
 
-    >
-    <!-- @click="!isAuthenticated && !isLoading ? login() : undefined" -->
-      <span
-        class="io-card__spotify-dot"
+    <!-- Card Footer: Spotify status + live activity indicator -->
+    <div class="dashboard-card__footer io-card__footer">
+      <!-- Spotify Status Indicator -->
+      <!-- FUTURE: Review @click / nested lambda functions. Logic works and looks alright, but might not be necessary if logout happens another way -->
+      <button
+        class="io-card__spotify-status"
         :class="{
-          'io-card__spotify-dot--connected': isAuthenticated,
-          'io-card__spotify-dot--loading': isLoading,
-          'io-card__spotify-dot--error': !!error,
+          'io-card__spotify-status--connected': isAuthenticated,
+          'io-card__spotify-status--loading': isLoading,
+          'io-card__spotify-status--error': error,
         }"
-      />
-      <!-- Spotify Status Text: Display state based on isLoading, isAuthenticated, and error status -->
-       <!-- Display username if authenticated and available -->
-      <span v-if="isLoading" class="text-muted text-sm">Connecting...</span>
-      <span v-else-if="isAuthenticated" class="text-sm io-card__spotify-label--connected">
-        Spotify Connected<template v-if="user?.display_name"> - {{ user.display_name }}</template>
-      </span>
-      <span v-else-if="error" class="text-sm io-card__spotify-label--error">{{ error }}</span>
-      <span v-else class="text-muted text-sm">Spotify not connected</span>
-    </button>
+        @click="
+        isAuthenticated ? offerLogout()
+                        : isLoading ? undefined
+                                    : login()
+        "
+        :aria-label="isAuthenticated ? 'Spotify Connected' : 'Connect to Spotify'"
 
-    <!-- Activity progress indicator: shows I/O operation status (import/export). Distinct from the Spotify status row above, which tracks auth state. -->
-    <ActivityIndicator />
+      >
+      <!-- @click="!isAuthenticated && !isLoading ? login() : undefined" -->
+        <span
+          class="io-card__spotify-dot"
+          :class="{
+            'io-card__spotify-dot--connected': isAuthenticated,
+            'io-card__spotify-dot--loading': isLoading,
+            'io-card__spotify-dot--error': !!error,
+          }"
+        />
+        <!-- Spotify Status Text: Display state based on isLoading, isAuthenticated, and error status -->
+         <!-- Display username if authenticated and available -->
+        <span v-if="isLoading" class="text-muted text-sm">Connecting...</span>
+        <span v-else-if="isAuthenticated" class="text-sm io-card__spotify-label--connected">
+          Spotify Connected<template v-if="user?.display_name"> - {{ user.display_name }}</template>
+        </span>
+        <span v-else-if="error" class="text-sm io-card__spotify-label--error">{{ error }}</span>
+        <span v-else class="text-muted text-sm">Spotify not connected</span>
+      </button>
 
-    <!-- Recent Activity Summary: Persistent display of recently completed operations with counts, warnings, and links. -->
-    <IOSummaryCard />
+      <!-- Activity progress indicator: shows I/O operation status (import/export). Distinct from the Spotify status row above, which tracks auth state. -->
+      <ActivityIndicator />
+    </div>
   </div>
 </template>
 
@@ -105,12 +110,25 @@ async function offerLogout() {
   gap: var(--space-3);
 }
 
+/* Wrapper that allows IOSummaryCard to grow and scroll within the card flex layout. */
+.io-card__summary-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.io-card__footer {
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+  justify-content: flex-start;
+}
+
 .io-card__spotify-status {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border-subtle);
   cursor: pointer;
   /*
   background: none;
