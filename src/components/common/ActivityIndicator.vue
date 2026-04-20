@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useActivityStore } from '@/stores/activity'
+import { useModal } from '@/composables/useModal'
 import ProgressBar from '@/components/common/ProgressBar.vue'
+import IssueDetailModal from '@/components/modals/IssueDetailModal.vue'
 
 const activityStore = useActivityStore()
+const modal = useModal()
 const op = computed(() => activityStore.activeOperation)
 
 // Build display text from progress fields, truncating itemLabel with ellipsis if needed.
@@ -50,12 +53,34 @@ const progressValue = computed((): number => {
 
 const isDone = computed(() => op.value?.status === 'done')
 const isError = computed(() => op.value?.status === 'error')
+
+// Non-fatal, per-item warnings forwarded from adapter result.errors
+const issueErrors = computed(() =>
+  (op.value?.errors ?? []).filter((e) => e.category === 'warning'),
+)
+
+// Opens a modal listing non-fatal issues if there are any. 
+// Issues are forwarded from adapters via the activity store and categorized as 'warning' so they don't show as top-level errors but are still accessible to the user.
+function openIssues(): void {
+  if (!op.value || issueErrors.value.length === 0) return
+  modal.open(IssueDetailModal, {
+    title: `Issues — ${op.value.label}`,
+    messages: issueErrors.value.map((e) => e.message),
+  })
+}
 </script>
 
 <template>
   <div v-if="op" class="activity-indicator" :class="{ 'activity-indicator--done': isDone, 'activity-indicator--error': isError }">
     <ProgressBar :progress="isDone || isError ? (isDone ? 1 : 0) : progressValue" />
     <span class="activity-indicator__text text-sm text-muted">{{ statusText }}</span>
+    <button
+      v-if="issueErrors.length > 0"
+      class="activity-indicator__issues-btn text-sm"
+      @click="openIssues"
+    >
+      {{ issueErrors.length }} issue{{ issueErrors.length !== 1 ? 's' : '' }} — click to view
+    </button>
   </div>
 </template>
 
@@ -73,5 +98,18 @@ const isError = computed(() => op.value?.status === 'error')
 
 .activity-indicator--error .activity-indicator__text {
   color: var(--color-danger, var(--color-error, var(--color-text-muted)));
+}
+
+.activity-indicator__issues-btn {
+  all: unset;
+  cursor: pointer;
+  color: var(--color-warning, var(--color-text-muted));
+  text-decoration: underline;
+  align-self: flex-start;
+  /* line-height: 1.4; */
+}
+
+.activity-indicator__issues-btn:hover {
+  color: var(--color-text);
 }
 </style>

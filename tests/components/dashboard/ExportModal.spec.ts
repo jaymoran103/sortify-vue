@@ -15,6 +15,25 @@ vi.mock('@/stores/playlists', () => ({
   usePlaylistStore: () => ({ playlists }),
 }))
 
+vi.mock('@/stores/activity', () => ({
+  useActivityStore: () => ({
+    startOperation: vi.fn(),
+    updateProgress: vi.fn(),
+    completeOperation: vi.fn(),
+    failOperation: vi.fn(),
+  }),
+}))
+
+vi.mock('@/composables/useSpotifyAuth', async () => {
+  const { ref } = await import('vue')
+  return {
+    useSpotifyAuth: () => ({
+      isAuthenticated: ref(false),
+      login: vi.fn(),
+    }),
+  }
+})
+
 // Stub ScrollableList to render items directly (no virtualizer DOM requirements)
 const ScrollableListStub = {
   props: ['items', 'keyField', 'estimateSize'],

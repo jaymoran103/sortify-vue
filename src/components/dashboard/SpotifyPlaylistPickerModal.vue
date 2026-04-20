@@ -4,6 +4,11 @@ import type { SpotifyPlaylistSummary } from '@/spotify/types'
 // Module-level cache: persists across mounts so reopening the picker does not
 // re-fetch the same playlist list. Cleared on explicit retry or after import completes.
 let _playlistCache: SpotifyPlaylistSummary[] | null = null
+
+// Exported so callers can force a fresh fetch.
+export function resetPlaylistCache(): void {
+  _playlistCache = null
+}
 </script>
 
 <script setup lang="ts">
@@ -107,13 +112,6 @@ function normalizePlaylistSummary(item: unknown): SpotifyPlaylistSummary | null 
       ? ((tracksSource as Record<string, unknown>)['total'] as number)
       : 0
 
-  // Warn on empty playlist, this likely indicates an issue.
-  // FUTURE: Decide on proper approach, could exclude to avoid clutter, but may be wanted in some cases
-  if (trackTotal==0){
-    logWarning('Playlist has zero tracks according to Spotify API', { id: raw['id'], name: raw['name'] })
-    appendIssue(`Playlist '${raw['name']}' has zero tracks according to Spotify API`)
-  }
-
   const ownerSource = raw['owner']
   const ownerName =
     ownerSource !== null &&
@@ -210,6 +208,14 @@ async function fetchPlaylists(): Promise<void> {
         appendIssue(warning)
       }
 
+      // Warn about zero-track playlists (fetch time only — not on every render)
+      for (const pl of normalizedItems) {
+        if (pl.tracks.total === 0) {
+          logWarning('Playlist has zero tracks according to Spotify API', { id: pl.id, name: pl.name })
+          appendIssue(`Playlist '${pl.name}' has zero tracks according to Spotify API`)
+        }
+      }
+
       // Accumulate normalized playlists and log progress after each page
       fetched.push(...normalizedItems)
       statusMsg.value = `Loaded ${fetched.length} Spotify playlists...`
@@ -291,6 +297,10 @@ async function startImport(): Promise<void> {
     )
     result.value = response
     issueMessages.value = response.errors
+    // Forward per-item warnings to the activity store so the IOCard footer shows them.
+    for (const msg of response.errors) {
+      activityStore.addError(OPERATION_ID, { category: 'warning', message: msg, items: [] })
+    }
     statusMsg.value = `Spotify import complete. Imported ${response.playlistsImported} playlist${response.playlistsImported !== 1 ? 's' : ''} and ${response.tracksImported} track${response.tracksImported !== 1 ? 's' : ''}.`
     if (response.errors.length > 0) {
       logWarning('Spotify import completed with issues', response.errors)

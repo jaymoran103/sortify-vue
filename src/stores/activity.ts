@@ -6,6 +6,9 @@ import type { ActivityItem, ActivityError, OperationProgress } from '@/types/ui'
 // Delay in ms before a 'done' operation is automatically removed from the map.
 const DONE_CLEAR_DELAY_MS = 5000
 
+// When the completed operation has errors, keep it visible longer so the user can see the issue count.
+const DONE_WITH_ERRORS_CLEAR_DELAY_MS = 60_000
+
 export const useActivityStore = defineStore('activity', () => {
   const operations: Ref<Map<string, ActivityItem>> = ref(new Map())
 
@@ -59,13 +62,14 @@ export const useActivityStore = defineStore('activity', () => {
   }
 
   // Marks the operation as 'done' and records completedAt.
-  // Schedules auto-removal after DONE_CLEAR_DELAY_MS.
+  // Schedules auto-removal after DONE_CLEAR_DELAY_MS (longer if there are errors).
   function completeOperation(id: string): void {
     const op = operations.value.get(id)
     if (!op) return
     const updated: ActivityItem = { ...op, status: 'done', completedAt: Date.now() }
     operations.value = new Map(operations.value).set(id, updated)
-    setTimeout(() => clearOperation(id), DONE_CLEAR_DELAY_MS)
+    const delay = updated.errors.length > 0 ? DONE_WITH_ERRORS_CLEAR_DELAY_MS : DONE_CLEAR_DELAY_MS
+    setTimeout(() => clearOperation(id), delay)
   }
 
   // Marks the operation as 'error' with a top-level message appended to errors.

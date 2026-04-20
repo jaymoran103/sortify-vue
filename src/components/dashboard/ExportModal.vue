@@ -2,6 +2,9 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { getExporter } from '@/adapters/registry'
 import { usePlaylistStore } from '@/stores/playlists'
+import { useActivityStore } from '@/stores/activity'
+import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
+import type { SpotifyExportOptions } from '@/adapters/spotifyExport'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
@@ -18,6 +21,10 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+const activityStore = useActivityStore()
+const { isAuthenticated, login } = useSpotifyAuth()
+const SPOTIFY_EXPORT_OPERATION_ID = 'spotify-export'
+
 // ── Format / profile ─────────────────────────────────────────────────────────
 
 const formatOptions = [
@@ -31,9 +38,11 @@ const profileOptions = [
 ]
 
 const step = ref<Step>('source')
+const destination = ref<'local' | 'spotify'>('local')
 const format = ref('csv')
 const profile = ref('full')
 const errorMsg = ref<string | null>(null)
+const spotifyExportResult = ref<{ playlistsExported: number; errors: string[]; createdPlaylists?: Array<{name: string; spotifyId: string}> } | null>(null)
 
 // Profile is only relevant for CSV export, disable it and reset to 'full' when format is JSON
 const enableProfile = computed(() => format.value !== 'json')
@@ -93,14 +102,80 @@ function toggleSelectAll(): void {
 // ── Step navigation ───────────────────────────────────────────────────────────
 
 function selectLocalFiles(): void {
+  destination.value = 'local'
+  step.value = 'playlists'
+}
+
+function selectSpotify(): void {
+  if (!isAuthenticated.value) {
+    login()
+    return
+  }
+  destination.value = 'spotify'
   step.value = 'playlists'
 }
 
 function confirmPlaylists(): void {
-  step.value = 'options'
+  if (destination.value === 'spotify') {
+    void handleSpotifyExport()
+  } else {
+    step.value = 'options'
+  }
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
+
+// Main export function for Spotify: 
+// - calls the Spotify export adapter with the selected playlist IDs, 
+// - updates activity status based on progress and result. 
+// - display caught errors to the user, log in the activity store.
+async function handleSpotifyExport(): Promise<void> {
+  const ids = [...selection.selectedIds.value].map(Number)
+  if (ids.length === 0) return
+
+  step.value = 'progress'
+  errorMsg.value = null
+  spotifyExportResult.value = null
+
+  // Get the Spotify export adapter, validate
+  const adapter = getExporter<SpotifyExportOptions>('spotify')
+  if (!adapter) {
+    errorMsg.value = 'Spotify exporter not registered'
+    step.value = 'playlists'
+    return
+  }
+
+  // Start tracking in the activity store
+  activityStore.startOperation(SPOTIFY_EXPORT_OPERATION_ID, 'Exporting to Spotify')
+
+  // Call adapter export function with progress callback that updates the activity store. 
+  // Adapter handles batching and progress reporting internally, this section just needs to pass the callback and update UI state once done or on error.
+  try {
+    const result = await adapter.export(
+      { playlistIds: ids },
+      (done, total, label) => {
+        activityStore.updateProgress(SPOTIFY_EXPORT_OPERATION_ID, {
+          done,
+          total,
+          phase: 'Exporting to Spotify',
+          itemLabel: label,
+        })
+      },
+    )
+    spotifyExportResult.value = result
+    // Forward per-item warnings (skipped playlists etc.) to the activity store
+    // so they appear in the IOCard footer issues list.
+    for (const msg of result.errors) {
+      activityStore.addError(SPOTIFY_EXPORT_OPERATION_ID, { category: 'warning', message: msg, items: [] })
+    }
+    step.value = 'done'
+    activityStore.completeOperation(SPOTIFY_EXPORT_OPERATION_ID)
+  } catch (err) {
+    errorMsg.value = err instanceof Error ? err.message : 'Spotify export failed'
+    step.value = 'playlists'
+    activityStore.failOperation(SPOTIFY_EXPORT_OPERATION_ID, errorMsg.value)
+  }
+}
 
 async function handleExport(): Promise<void> {
   const adapter = getExporter(format.value)
@@ -141,9 +216,9 @@ async function handleExport(): Promise<void> {
           <span class="source-card__label">Local Files</span>
           <span class="source-card__hint">CSV or JSON</span>
         </button>
-        <button class="source-card" disabled>
+        <button class="source-card" @click="selectSpotify">
           <span class="source-card__label">Spotify</span>
-          <span class="source-card__hint">(Coming soon)</span>
+          <span class="source-card__hint">{{ isAuthenticated ? 'Export playlists' : 'Connect to Spotify' }}</span>
         </button>
       </div>
     </div>
@@ -196,7 +271,30 @@ async function handleExport(): Promise<void> {
 
     <!-- Step: done -->
     <div v-else-if="step === 'done'" class="io-modal__body">
-      <p>Export complete. Check your downloads folder.</p>
+      <!-- Separate handling for Spotify export results vs local file export -->
+      <template v-if="destination === 'spotify' && spotifyExportResult">
+        <p>
+          Exported <strong>{{ spotifyExportResult.playlistsExported }}</strong>
+          playlist{{ spotifyExportResult.playlistsExported !== 1 ? 's' : '' }} to Spotify.
+        </p>
+        <!-- For exports with successfully created playlists, display each one as a link TODO: Review-->
+        <ul v-if="spotifyExportResult.createdPlaylists?.length" class="export-modal__spotify-links">
+          <li v-for="pl in spotifyExportResult.createdPlaylists" :key="pl.spotifyId">
+            <a
+              :href="`https://open.spotify.com/playlist/${pl.spotifyId}`"
+              target="_blank"
+              rel="noopener noreferrer"
+            >{{ pl.name }}</a>
+          </li>
+        </ul>
+        <!-- For exports with errors, display each one as a message. TODO: Categorize by type -->
+        <p v-if="spotifyExportResult.errors.length > 0" class="io-modal__error">
+          {{ spotifyExportResult.errors.length }} issue(s) during export
+        </p>
+      </template>
+      <template v-else>
+        <p>Export complete. Check your downloads folder.</p>
+      </template>
     </div>
 
     <!-- Footer: playlists step has select-all on left + nav on right -->
@@ -211,7 +309,7 @@ async function handleExport(): Promise<void> {
         :disabled="selection.selectedIds.value.size === 0"
         @click="confirmPlaylists"
       >
-        Next ({{ selection.selectedCount.value }})
+        {{ destination === 'spotify' ? `Export (${selection.selectedCount.value})` : `Next (${selection.selectedCount.value})` }}
       </button>
     </div>
 
@@ -246,6 +344,16 @@ async function handleExport(): Promise<void> {
   overflow: hidden;
   border-top: 1px solid var(--color-border-subtle);
   border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.export-modal__spotify-links {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--font-size-sm);
+}
+
+.export-modal__spotify-links a {
+  color: var(--color-accent);
 }
 
 .io-modal__select-all {

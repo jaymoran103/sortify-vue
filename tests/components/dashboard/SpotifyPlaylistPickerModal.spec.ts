@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import SpotifyPlaylistPickerModal from '@/components/dashboard/SpotifyPlaylistPickerModal.vue'
+import SpotifyPlaylistPickerModal, { resetPlaylistCache } from '@/components/dashboard/SpotifyPlaylistPickerModal.vue'
 import { useActivityStore } from '@/stores/activity'
 
 const testState = vi.hoisted(() => ({
@@ -69,6 +69,7 @@ function mountModal() {
 describe('SpotifyPlaylistPickerModal', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    resetPlaylistCache()
     testState.mockApiGet.mockReset()
     testState.mockSpotifyImport.mockReset()
     testState.mockLogin.mockReset()

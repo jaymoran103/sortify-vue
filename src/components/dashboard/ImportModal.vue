@@ -138,6 +138,11 @@ async function handleFiles(e: Event): Promise<void> {
 
     result.value = accumulated
     step.value = 'done'
+    
+    // Forward per-item warnings to the activity store so the IOCard footer shows them.
+    for (const msg of accumulated.errors) {
+      activityStore.addError(OPERATION_ID, { category: 'warning', message: msg, items: [] })
+    }
     activityStore.completeOperation(OPERATION_ID)
   } catch (err) {
     errorMsg.value = (err as Error).message
