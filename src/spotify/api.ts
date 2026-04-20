@@ -21,13 +21,15 @@ export class SpotifyApi {
   }
 
   // Waits if needed to maintain minimum spacing between requests.
+  // Uses slot reservation: _lastRequestTime is updated synchronously before yielding, so concurrent callers each claim 
+  // successive time slots instead of all reading the same stale timestamp and firing simultaneously.
+  // NOTE: This is key for avoiding triggering rate limits, ensuring reliable request spacing even under use by concurrent components.
   private async _throttle(): Promise<void> {
     const now = Date.now()
-    const elapsed = now - this._lastRequestTime
-    if (elapsed < SLEEP_BETWEEN_REQUESTS_MS) {
-      await sleep(SLEEP_BETWEEN_REQUESTS_MS - elapsed)
-    }
-    this._lastRequestTime = Date.now()
+    const nextSlot = this._lastRequestTime + SLEEP_BETWEEN_REQUESTS_MS
+    const wait = Math.max(0, nextSlot - now)
+    this._lastRequestTime = Math.max(now, nextSlot)
+    if (wait > 0) await sleep(wait)
   }
 
   // Sends a GET request to the given Spotify API endpoint.

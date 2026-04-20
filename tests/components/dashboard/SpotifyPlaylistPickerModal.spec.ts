@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import SpotifyPlaylistPickerModal from '@/components/dashboard/SpotifyPlaylistPickerModal.vue'
+import SpotifyPlaylistPickerModal, { resetPlaylistCache } from '@/components/dashboard/SpotifyPlaylistPickerModal.vue'
 import { useActivityStore } from '@/stores/activity'
 
 const testState = vi.hoisted(() => ({
@@ -69,6 +69,7 @@ function mountModal() {
 describe('SpotifyPlaylistPickerModal', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    resetPlaylistCache()
     testState.mockApiGet.mockReset()
     testState.mockSpotifyImport.mockReset()
     testState.mockLogin.mockReset()
@@ -156,6 +157,29 @@ describe('SpotifyPlaylistPickerModal', () => {
     expect(wrapper.text()).toContain('Spotify is not connected')
     await wrapper.find('button.btn--secondary').trigger('click')
     expect(testState.mockLogin).toHaveBeenCalled()
+  })
+
+  it('reads track count from items.total when tracks field is absent', async () => {
+    testState.mockApiGet.mockResolvedValue({
+      items: [
+        {
+          id: 'pl-1',
+          name: 'Editorial Mix',
+          items: { total: 30 },
+          owner: { display_name: 'Spotify' },
+          images: [],
+        },
+      ],
+      total: 1,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+
+    const wrapper = mountModal()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('30 tracks')
   })
 
   it('falls back safely when Spotify returns incomplete playlist data', async () => {

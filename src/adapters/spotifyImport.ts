@@ -1,19 +1,22 @@
 import { db } from '@/db'
 import type { Track } from '@/types/models'
 import type { ImportAdapter, ImportResult } from '@/types/adapters'
-import type { SpotifyPlaylistSummary, SpotifyPaginatedResponse, SpotifyTrackItem } from '@/spotify/types'
+import type { SpotifyPlaylistSummary, SpotifyPaginatedResponse, SpotifyTrackItem, SpotifyTrackPayload } from '@/spotify/types'
 import { spotifyAuth } from '@/spotify/auth'
 import { spotifyApi } from '@/spotify/api'
 import { SLEEP_BETWEEN_PLAYLISTS_MS } from '@/spotify/config'
+import { normalizeSpotifyEndpoint } from '@/spotify/utils'
 
 export interface SpotifyImportOptions {
   playlists: SpotifyPlaylistSummary[]
 }
 
-type SpotifyTrack = NonNullable<SpotifyTrackItem['track']>
+function getSpotifyTrack(item: SpotifyTrackItem): SpotifyTrackPayload | null {
+  return item.item?.type === 'track' ? (item.item as SpotifyTrackPayload) : null
+}
 
 function hasEpisode(item: SpotifyTrackItem): boolean {
-  return 'episode' in item && item.episode !== null && item.episode !== undefined
+  return item.item?.type === 'episode'
 }
 
 function logInfo(message: string, details?: unknown): void {
@@ -28,9 +31,9 @@ function logError(message: string, details?: unknown): void {
   console.error(`[SpotifyImport] ${message}`, details ?? '')
 }
 
-// Normalize a spotify track into the internal Track format, extracting relevant fields and flattening artists.
+// Normalize a spotify track payload into the internal Track format, extracting relevant fields and flattening artists.
 // FUTURE: Make a note somewhere about artist tracking, storing IDs rather than string names. As artist info is currently display-only, seems better to leave as flattened string for now.
-function normalizeSpotifyTrack(item: SpotifyTrack): Track {
+function normalizeSpotifyTrack(item: SpotifyTrackPayload): Track {
   return {
     trackID: item.uri,
     title: item.name,
@@ -40,18 +43,6 @@ function normalizeSpotifyTrack(item: SpotifyTrack): Track {
     spotifyURI: item.uri,
     duration: item.duration_ms,
   }
-}
-
-// transforms Spotify's paginated "next" URLs into API endpoints.
-// Spotify's API may return either full URLs or just paths, and the paths may or may not start with /v1/. 
-// This function normalizes them into consistent API endpoints that can be passed to spotifyApi.get().
-function getSpotifyEndpoint(next: string): string {
-  if (next.startsWith('http')) {
-    const url = new URL(next)
-    const path = `${url.pathname}${url.search}`
-    return path.startsWith('/v1/') ? path.slice(3) : path
-  }
-  return next.startsWith('/v1/') ? next.slice(3) : next
 }
 
 
@@ -67,9 +58,16 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
     }
 
     // Log intent to import, with basic stats about the import size
-    logInfo('Starting Spotify import', { playlistCount: options.playlists.length })
+    logInfo('Starting Spotify import', {
+      playlistCount: options.playlists.length,
+      playlistSummaries: options.playlists.map((playlist) => ({
+        id: playlist.id,
+        name: playlist.name,
+        tracksTotal: playlist.tracks?.total ?? 0,
+      })),
+    })
 
-    let totalTracks = options.playlists.reduce(
+    const totalTracks = options.playlists.reduce(
       (sum, playlist) => sum + (playlist.tracks?.total ?? 0),
       0,
     )
@@ -84,35 +82,23 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
       const playlistTrackIds: string[] = []
       let endpoint = `/playlists/${playlist.id}/items?limit=50`
       
-      // Paginate through this playlist's tracks, normalizing and writing each to the DB if not already present.
-      const expectedTracks = playlist.tracks?.total ?? 0
-      let resolvedTracks = expectedTracks
-      let resolvedTrackCount = false
       logInfo('Importing Playlist', {
         playlistId: playlist.id,
         playlistName: playlist.name,
-        expectedTracks,
+        expectedTracks: playlist.tracks?.total ?? 0,
       })
       try {
         while (endpoint) {
+          logInfo('Fetching Spotify tracks page', { endpoint, playlistName: playlist.name })
           const page = await spotifyApi.get<SpotifyPaginatedResponse<SpotifyTrackItem>>(endpoint)
-          if (!resolvedTrackCount) {
-            resolvedTrackCount = true
-            resolvedTracks = page.total
-            if (resolvedTracks !== expectedTracks) {
-              totalTracks += resolvedTracks - expectedTracks
-              logInfo('Resolved Spotify playlist track total from API page metadata', {
-                playlistName: playlist.name,
-                expectedTracks,
-                resolvedTracks,
-              })
-            }
-          }
+
           let skippedNullTracks = 0
           let skippedEpisodes = 0
+          let realTracksThisPage = 0
 
           for (const item of page.items) {
-            if (!item.track) {
+            const track = getSpotifyTrack(item)
+            if (!track) {
               processedTracks += 1
               skippedNullTracks += 1
               if (hasEpisode(item)) {
@@ -124,7 +110,7 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
             // Normalize track, checking if it already exists in the DB by trackID.
             // Add if not yet present.
             // FUTURE: Worth it to fully normalize first, rather than just determining trackID and checking presence in DB?
-            const normalized = normalizeSpotifyTrack(item.track)
+            const normalized = normalizeSpotifyTrack(track)
             const existing = await db.tracks.get(normalized.trackID)
             if (!existing) {
               await db.tracks.put(normalized)
@@ -132,6 +118,7 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
             playlistTrackIds.push(normalized.trackID)
             processedTracks += 1
             importedTracks += 1
+            realTracksThisPage += 1
           }
 
           // Log any skipped tracks, with reason.
@@ -144,17 +131,28 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
             })
           }
 
-          // Log progress after each page, with stats about how many tracks processed so far and how many total.
+          // Warn if the entire page had no importable tracks. May indicate an API schema issue.
+          if (page.items.length > 0 && realTracksThisPage === 0) {
+            logWarning('No importable tracks on this page — all items were null or were episodes', {
+              playlistName: playlist.name,
+              pageSize: page.items.length,
+              skippedEpisodes,
+              skippedUnknownItems: skippedNullTracks - skippedEpisodes,
+            })
+          }
+
+          // Log progress after each page.
           logInfo('Processed Spotify playlist page', {
             playlistName: playlist.name,
             pageSize: page.items.length,
+            realTracksThisPage,
+            skippedNullTracks,
             processedTracks,
             totalTracks,
-            resolvedTracks,
           })
 
           onProgress?.(processedTracks, totalTracks, playlist.name)
-          endpoint = page.next ? getSpotifyEndpoint(page.next) : ''
+          endpoint = page.next ? normalizeSpotifyEndpoint(page.next) : ''
         }
 
         // After processing all tracks in this playlist, add the playlist to the DB with its trackIDs.

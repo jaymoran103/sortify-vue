@@ -1,13 +1,15 @@
 import { db } from '@/db'
 import type { Track, Playlist } from '@/types/models'
-import type { ImportAdapter, ImportResult } from '@/types/adapters'
+import type { ImportAdapter, ImportResult, ProgressCallback } from '@/types/adapters'
 
 export interface JsonImportOptions {
   file: File
 }
 
-/** Imports a JSON bundle containing tracks and playlists into the database */
-export async function importJsonBundle(data: unknown): Promise<ImportResult> {
+/** Imports a JSON bundle containing tracks and playlists into the database.
+ * Calls onProgress(index+1, total, playlist.name) after each playlist is written.
+ */
+export async function importJsonBundle(data: unknown, onProgress?: ProgressCallback): Promise<ImportResult> {
 
   // Validate the structure of the JSON bundle to ensure it contains the expected tracks and playlists arrays.
   if (!data || typeof data !== 'object') {
@@ -26,14 +28,17 @@ export async function importJsonBundle(data: unknown): Promise<ImportResult> {
 
   // Add playlists to the database, omitting any existing id fields to allow the database to generate new numeric IDs.
   // FUTURE: Consider handling ID conflicts more intelligently?
-  for (const pl of bundle.playlists as Array<Playlist>) {
+  const playlists = bundle.playlists as Array<Playlist>
+  for (let i = 0; i < playlists.length; i++) {
+    const pl = playlists[i]!
     const { id: _id, ...rest } = pl
     await db.playlists.add(rest as Omit<Playlist, 'id'>)
+    onProgress?.(i + 1, playlists.length, pl.name)
   }
 
   return {
     tracksImported: (bundle.tracks as Track[]).length,
-    playlistsImported: (bundle.playlists as Playlist[]).length,
+    playlistsImported: playlists.length,
     errors: [],
   }
 }
@@ -47,7 +52,7 @@ export const jsonImportAdapter: ImportAdapter<JsonImportOptions> = {
   key: 'json',
   label: 'JSON Bundle',
   
-  async import(options: JsonImportOptions): Promise<ImportResult> {
+  async import(options: JsonImportOptions, onProgress?: ProgressCallback): Promise<ImportResult> {
     const text = await options.file.text()
     let data: unknown
     try {
@@ -55,6 +60,6 @@ export const jsonImportAdapter: ImportAdapter<JsonImportOptions> = {
     } catch (err) {
       throw new Error(`Failed to parse JSON: ${(err as Error).message}`)
     }
-    return importJsonBundle(data)
+    return importJsonBundle(data, onProgress)
   },
 }

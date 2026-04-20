@@ -110,6 +110,24 @@ describe('useActivityStore', () => {
     expect(() => store.failOperation('nope', 'err')).not.toThrow()
   })
 
+  it('failOperation uses default category "error" when none is provided', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.failOperation('op1', 'Something went wrong')
+    const op = store.operations.get('op1')
+    expect(op?.errors[0]?.category).toBe('error')
+  })
+
+  it('failOperation uses a custom errorCategory when provided', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.failOperation('op1', 'Spotify rate limit reached.', 'rate-limit')
+    const op = store.operations.get('op1')
+    expect(op?.status).toBe('error')
+    expect(op?.errors[0]?.category).toBe('rate-limit')
+    expect(op?.errors[0]?.message).toBe('Spotify rate limit reached.')
+  })
+
   it('clearOperation removes the item', () => {
     const store = useActivityStore()
     store.startOperation('op1', 'Test')
@@ -152,5 +170,119 @@ describe('useActivityStore', () => {
 
     expect(store.activeOperation?.id).toBe('op2')
     expect(store.activeOperation?.status).toBe('error')
+  })
+
+  // ── History ─────────────────────────────────────────────────────────────────
+
+  it('starts with empty history and empty recentOperations', () => {
+    const store = useActivityStore()
+    expect(store.history).toEqual([])
+    expect(store.recentOperations).toEqual([])
+  })
+
+  it('startOperation stores source on the item', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test', 'file-import')
+    expect(store.operations.get('op1')?.source).toBe('file-import')
+  })
+
+  it('startOperation without source leaves source undefined', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    expect(store.operations.get('op1')?.source).toBeUndefined()
+  })
+
+  it('completeOperation adds item to history', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.completeOperation('op1')
+    expect(store.history).toHaveLength(1)
+    expect(store.history[0]?.id).toBe('op1')
+    expect(store.history[0]?.status).toBe('done')
+  })
+
+  it('completeOperation stores summary on item in history', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.completeOperation('op1', { tracks: 42, playlists: 3, warnings: 1 })
+    expect(store.history[0]?.summary?.tracks).toBe(42)
+    expect(store.history[0]?.summary?.playlists).toBe(3)
+    expect(store.history[0]?.summary?.warnings).toBe(1)
+  })
+
+  it('completeOperation does not remove item from history after auto-clear', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.completeOperation('op1')
+    vi.advanceTimersByTime(10000)
+    expect(store.history).toHaveLength(1)
+    expect(store.operations.has('op1')).toBe(false)
+  })
+
+  it('failOperation adds item to history with error status', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.failOperation('op1', 'Something broke')
+    expect(store.history).toHaveLength(1)
+    expect(store.history[0]?.status).toBe('error')
+    expect(store.history[0]?.errors[0]?.message).toBe('Something broke')
+  })
+
+  it('dismissHistoryItem removes item from history', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.completeOperation('op1')
+    expect(store.history).toHaveLength(1)
+    store.dismissHistoryItem('op1')
+    expect(store.history).toHaveLength(0)
+  })
+
+  it('dismissHistoryItem removes item from operations immediately', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.completeOperation('op1')
+    expect(store.operations.has('op1')).toBe(true)
+    store.dismissHistoryItem('op1')
+    expect(store.operations.has('op1')).toBe(false)
+  })
+
+  it('dismissHistoryItem does nothing for unknown id', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.completeOperation('op1')
+    expect(() => store.dismissHistoryItem('does-not-exist')).not.toThrow()
+    expect(store.history).toHaveLength(1)
+  })
+
+  it('clearHistory removes all items from history', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'A')
+    store.completeOperation('op1')
+    store.startOperation('op2', 'B')
+    store.completeOperation('op2')
+    expect(store.history).toHaveLength(2)
+    store.clearHistory()
+    expect(store.history).toHaveLength(0)
+  })
+
+  it('clearHistory does not affect live operations', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Active')
+    store.startOperation('op2', 'Done')
+    store.completeOperation('op2')
+    store.clearHistory()
+    expect(store.operations.has('op1')).toBe(true)
+  })
+
+  it('recentOperations returns items sorted newest-first', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Older')
+    store.completeOperation('op1')
+    vi.advanceTimersByTime(1)
+    store.startOperation('op2', 'Newer')
+    store.completeOperation('op2')
+    const recent = store.recentOperations
+    expect(recent[0]?.id).toBe('op2')
+    expect(recent[1]?.id).toBe('op1')
   })
 })

@@ -11,22 +11,47 @@ export interface SpotifyPlaylistSummary {
 }
 
 // Detailed track info from Spotify API, including nested album and artist data.
-// For local files, deleted tracks, and podcast episodes, the track field is null
-// TODO ensure proper handling, likely skipping and flagging was warnings for import result display
-export interface SpotifyTrackItem {
-  track: {
-    uri: string
-    name: string
-    album: { name: string }
-    artists: Array<{ name: string }>
-    duration_ms: number
-    popularity: number
-    explicit: boolean
-  } | null // null for local files, deleted tracks, podcast episodes
-  episode?: {
-    uri: string
-  } | null
+// For local files, deleted tracks, and podcast episodes, the track field is null.
+//
+// Spotify playlist-items schema (GET /playlists/{id}/items) wraps each item in a PlaylistTrackObject whose `item` field is the media object.
+export interface SpotifyTrackPayload {
+  type: 'track'
+  uri: string
+  name: string
+  album: { name: string }
+  artists: Array<{ name: string }>
+  duration_ms: number
+  popularity?: number
+  explicit: boolean
+  is_playable?: boolean
 }
+
+// Spotify API shape for a podcast episode, which can appear in playlists but is not importable as a track. 
+// FUTURE: These have a different schema from tracks, so we need to check the type field and handle accordingly if adding support for importing episodes
+export interface SpotifyEpisodePayload {
+  type: 'episode'
+  uri: string
+  name: string
+  duration_ms?: number
+}
+
+// Current playlist-items shape: item IS the media object per the updated API spec
+export interface SpotifyPlaylistTrackWrapper {
+  added_at: string
+  added_by: {
+    external_urls: { spotify: string }
+    href: string
+    id: string
+    type: string
+    uri: string
+  }
+  is_local: boolean
+  primary_color: string | null
+  item: SpotifyTrackPayload | SpotifyEpisodePayload | null
+  video_thumbnail: { url: string | null }
+}
+
+export type SpotifyTrackItem = SpotifyPlaylistTrackWrapper
 
 // Response shape for Spotify API endpoints that return paginated lists of tracks, 
 // e.g. GET /playlists/{id}/tracks

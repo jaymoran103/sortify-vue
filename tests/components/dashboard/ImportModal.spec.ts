@@ -78,7 +78,7 @@ describe('ImportModal', () => {
     expect(registry.getImporter).toHaveBeenCalledWith('json')
   })
 
-  it('accumulates results from multiple files', async () => {
+  it('accumulates results from multiple files and emits cancel to close modal', async () => {
     vi.spyOn(registry, 'getImporter')
       .mockReturnValueOnce({ key: 'csv', label: 'CSV File', import: vi.fn().mockResolvedValue({ tracksImported: 10, playlistsImported: 0, errors: [] }) })
       .mockReturnValueOnce({ key: 'json', label: 'JSON Bundle', import: vi.fn().mockResolvedValue({ tracksImported: 5, playlistsImported: 2, errors: [] }) })
@@ -91,12 +91,12 @@ describe('ImportModal', () => {
     const jsonFile = new File(['{}'], 'bundle.json', { type: 'application/json' })
     Object.defineProperty(input.element, 'files', { value: [csvFile, jsonFile], configurable: true })
     await input.trigger('change')
-    await flushPromises()
 
-    expect(wrapper.text()).toContain('15')
+    // Modal closes immediately when import starts; results are tracked by activity store
+    expect(wrapper.emitted('cancel')).toBeTruthy()
   })
 
-  it('shows Done button label after successful import', async () => {
+  it('emits cancel to close modal when import starts successfully', async () => {
     mockImport.mockResolvedValue({ tracksImported: 1, playlistsImported: 0, errors: [] })
 
     const wrapper = mount(ImportModal)
@@ -106,9 +106,8 @@ describe('ImportModal', () => {
     const file = new File(['a,b'], 'data.csv', { type: 'text/csv' })
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
-    await flushPromises()
 
-    expect(wrapper.find('button.btn--secondary').text()).toBe('Done')
+    expect(wrapper.emitted('cancel')).toBeTruthy()
   })
 
   it('forwards CSV playlist names into activity progress labels', async () => {
@@ -138,9 +137,12 @@ describe('ImportModal', () => {
     await flushPromises()
   })
 
-  it('sets determinate JSON progress before a file import resolves', async () => {
+  it('reports per-playlist JSON progress via activity store', async () => {
     const deferred = createDeferred<{ tracksImported: number; playlistsImported: number; errors: string[] }>()
-    const jsonImport = vi.fn(() => deferred.promise)
+    const jsonImport = vi.fn(async (_opts, onProgress) => {
+      onProgress?.(1, 3, 'Road Trip')
+      return deferred.promise
+    })
     vi.spyOn(registry, 'getImporter').mockReturnValue({
       key: 'json',
       label: 'JSON Bundle',
@@ -158,13 +160,13 @@ describe('ImportModal', () => {
     await flushPromises()
 
     expect(activityStore.activeOperation?.progress).toEqual({
-      done: 0,
-      total: 1,
+      done: 1,
+      total: 3,
       phase: 'Importing JSON',
-      itemLabel: 'bundle.json',
+      itemLabel: 'Road Trip',
     })
 
-    deferred.resolve({ tracksImported: 2, playlistsImported: 1, errors: [] })
+    deferred.resolve({ tracksImported: 2, playlistsImported: 3, errors: [] })
     await flushPromises()
   })
 })

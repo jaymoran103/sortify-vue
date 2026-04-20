@@ -15,6 +15,25 @@ vi.mock('@/stores/playlists', () => ({
   usePlaylistStore: () => ({ playlists }),
 }))
 
+vi.mock('@/stores/activity', () => ({
+  useActivityStore: () => ({
+    startOperation: vi.fn(),
+    updateProgress: vi.fn(),
+    completeOperation: vi.fn(),
+    failOperation: vi.fn(),
+  }),
+}))
+
+vi.mock('@/composables/useSpotifyAuth', async () => {
+  const { ref } = await import('vue')
+  return {
+    useSpotifyAuth: () => ({
+      isAuthenticated: ref(false),
+      login: vi.fn(),
+    }),
+  }
+})
+
 // Stub ScrollableList to render items directly (no virtualizer DOM requirements)
 const ScrollableListStub = {
   props: ['items', 'keyField', 'estimateSize'],
@@ -87,16 +106,14 @@ describe('ExportModal', () => {
     expect(mockExport).toHaveBeenCalled()
   })
 
-  it('shows done state after export', async () => {
-    mockExport.mockResolvedValue({ playlistsExported: 2, errors: [] })
+  it('clicking Export emits cancel to close the modal', async () => {
+    mockExport.mockResolvedValue({ playlistsExported: 1, errors: [] })
 
     const wrapper = mount(ExportModal, mountOptions())
     await toOptionsStep(wrapper)
     await wrapper.find('button.btn--primary').trigger('click')
-    await flushPromises()
 
-    expect(wrapper.text()).toContain('Export complete')
-    expect(wrapper.find('button.btn--primary').exists()).toBe(false)
+    expect(wrapper.emitted('cancel')).toBeTruthy()
   })
 
   it('Cancel button emits cancel', async () => {
@@ -104,17 +121,4 @@ describe('ExportModal', () => {
     await wrapper.find('button.btn--secondary').trigger('click')
     expect(wrapper.emitted('cancel')).toBeTruthy()
   })
-
-  it('hides Export button while exporting', async () => {
-    mockExport.mockImplementation(() => new Promise(() => {})) // never resolves
-
-    const wrapper = mount(ExportModal, mountOptions())
-    await toOptionsStep(wrapper)
-    await wrapper.find('button.btn--primary').trigger('click')
-
-    // Step changes to 'progress' — Export button is gone
-    expect(wrapper.find('button.btn--primary').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Exporting')
-  })
 })
-

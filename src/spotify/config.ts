@@ -14,7 +14,7 @@ export const SPOTIFY_SCOPES = [
 ].join(' ')
 
 // Rate-limit safety
-export const SLEEP_BETWEEN_REQUESTS_MS = 200
+export const SLEEP_BETWEEN_REQUESTS_MS = 300
 export const SLEEP_BETWEEN_PLAYLISTS_MS = 1000
 export const MAX_RETRIES = 3
 export const FALLBACK_RETRY_AFTER_MS = 30_000

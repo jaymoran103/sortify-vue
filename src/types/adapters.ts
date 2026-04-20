@@ -36,4 +36,6 @@ export interface ImportResult {
 export interface ExportResult {
   playlistsExported: number
   errors: string[]
+  // Optional: populated by the Spotify export adapter with the newly-created playlists.
+  createdPlaylists?: Array<{ name: string; spotifyId: string }>
 }
