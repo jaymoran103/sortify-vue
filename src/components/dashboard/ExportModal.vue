@@ -23,9 +23,6 @@ const emit = defineEmits<{
 
 const activityStore = useActivityStore()
 const { isAuthenticated, login } = useSpotifyAuth()
-const SPOTIFY_EXPORT_OPERATION_ID = 'spotify-export'
-const FILE_EXPORT_OPERATION_ID = 'file-export'
-
 // ── Format / profile ─────────────────────────────────────────────────────────
 
 const formatOptions = [
@@ -139,13 +136,15 @@ async function handleSpotifyExport(): Promise<void> {
   // Close modal immediately; progress and result display delegate to ActivityIndicator / IOSummaryCard.
   emit('cancel')
 
-  activityStore.startOperation(SPOTIFY_EXPORT_OPERATION_ID, 'Exporting to Spotify', 'spotify-export')
+  // Unique ID per invocation so each operation gets its own history row.
+  const operationId = crypto.randomUUID()
+  activityStore.startOperation(operationId, 'Exporting to Spotify', 'spotify-export')
 
   try {
     const result = await adapter.export(
       { playlistIds: ids },
       (done, total, label) => {
-        activityStore.updateProgress(SPOTIFY_EXPORT_OPERATION_ID, {
+        activityStore.updateProgress(operationId, {
           done,
           total,
           phase: 'Exporting to Spotify',
@@ -155,9 +154,9 @@ async function handleSpotifyExport(): Promise<void> {
     )
     // Forward per-item warnings to the activity store.
     for (const msg of result.errors) {
-      activityStore.addError(SPOTIFY_EXPORT_OPERATION_ID, { category: 'warning', message: msg, items: [] })
+      activityStore.addError(operationId, { category: 'warning', message: msg, items: [] })
     }
-    activityStore.completeOperation(SPOTIFY_EXPORT_OPERATION_ID, {
+    activityStore.completeOperation(operationId, {
       playlists: result.playlistsExported,
       warnings: result.errors.length,
       linkItems: result.createdPlaylists?.map((p) => ({
@@ -171,7 +170,7 @@ async function handleSpotifyExport(): Promise<void> {
     const userMsg = isRateLimit
       ? 'Spotify rate limit reached. Please wait a few minutes before retrying.'
       : rawMsg
-    activityStore.failOperation(SPOTIFY_EXPORT_OPERATION_ID, userMsg, isRateLimit ? 'rate-limit' : 'error')
+    activityStore.failOperation(operationId, userMsg, isRateLimit ? 'rate-limit' : 'error')
   }
 }
 
@@ -187,7 +186,9 @@ async function handleExport(): Promise<void> {
   // Close modal immediately; progress and result display delegate to ActivityIndicator / IOSummaryCard.
   emit('cancel')
 
-  activityStore.startOperation(FILE_EXPORT_OPERATION_ID, 'Exporting to file', 'file-export')
+  // Unique ID per invocation so each operation gets its own history row.
+  const operationId = crypto.randomUUID()
+  activityStore.startOperation(operationId, 'Exporting to file', 'file-export')
 
   try {
     const ids = [...selection.selectedIds.value].map(Number)
@@ -198,11 +199,11 @@ async function handleExport(): Promise<void> {
     } else {
       await adapter.export({})
     }
-    activityStore.completeOperation(FILE_EXPORT_OPERATION_ID, {
+    activityStore.completeOperation(operationId, {
       playlists: ids.length > 0 ? ids.length : (playlistStore.playlists?.length ?? 0),
     })
   } catch (err) {
-    activityStore.failOperation(FILE_EXPORT_OPERATION_ID, (err as Error).message)
+    activityStore.failOperation(operationId, (err as Error).message)
   }
 }
 </script>

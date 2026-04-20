@@ -39,13 +39,10 @@ const emit = defineEmits<{
 
 const activityStore = useActivityStore()
 const { isAuthenticated, login } = useSpotifyAuth()
-const OPERATION_ID = 'spotify-import'
-
 const step = ref<'loading' | 'ready' | 'error'>('loading')
 const playlists = ref<SpotifyPlaylistSummary[]>([])
 const displayItems = shallowRef<SpotifyPlaylistSummary[]>([])
 const errorMsg = ref<string | null>(null)
-const issueMessages = ref<string[]>([])
 const statusMsg = ref('')
 
 const sortOptions: SortOption<SpotifyPlaylistSummary>[] = [
@@ -84,10 +81,6 @@ function logWarning(message: string, details?: unknown): void {
 
 function logError(message: string, details?: unknown): void {
   console.error(`[SpotifyPicker] ${message}`, details ?? '')
-}
-
-function appendIssue(message: string): void {
-  issueMessages.value = [...issueMessages.value, message]
 }
 
 // normalize playlist data from Spotify API, handling potential missing fields and providing defaults where necessary.
@@ -152,7 +145,6 @@ function togglePlaylist(item: unknown): void {
   if (!id) {
     const warning = 'Skipped interaction with a playlist row because its data was incomplete.'
     logWarning(warning, item)
-    appendIssue(warning)
     return
   }
   selection.toggle(id)
@@ -163,7 +155,6 @@ function togglePlaylist(item: unknown): void {
 async function fetchPlaylists(): Promise<void> {
   step.value = 'loading'
   errorMsg.value = null
-  issueMessages.value = []
   statusMsg.value = 'Connecting to Spotify and loading playlists...'
 
   if (!isAuthenticated.value) {
@@ -203,14 +194,12 @@ async function fetchPlaylists(): Promise<void> {
       if (skippedCount > 0) {
         const warning = `Skipped ${skippedCount} playlist entr${skippedCount === 1 ? 'y' : 'ies'} with incomplete Spotify data.`
         logWarning(warning, { endpoint, page: pageCount })
-        appendIssue(warning)
       }
 
       // Warn about zero-track playlists (fetch time only — not on every render)
       for (const pl of normalizedItems) {
         if (pl.tracks.total === 0) {
           logWarning('Playlist has zero tracks according to Spotify API', { id: pl.id, name: pl.name })
-          appendIssue(`Playlist '${pl.name}' has zero tracks according to Spotify API`)
         }
       }
 
@@ -247,10 +236,11 @@ async function startImport(): Promise<void> {
   // Close modal immediately; progress and result display delegate to ActivityIndicator / IOSummaryCard.
   emit('cancel')
   errorMsg.value = null
-  issueMessages.value = []
   statusMsg.value = `Starting Spotify import for ${selected.length} playlist${selected.length !== 1 ? 's' : ''}...`
 
-  activityStore.startOperation(OPERATION_ID, 'Importing from Spotify', 'spotify-import')
+  // Unique ID per invocation so each operation gets its own history row.
+  const operationId = crypto.randomUUID()
+  activityStore.startOperation(operationId, 'Importing from Spotify', 'spotify-import')
   logInfo('Selected playlists for Spotify import', selected.map((item) => ({
     id: item.id,
     name: item.name,
@@ -266,7 +256,7 @@ async function startImport(): Promise<void> {
   if (!spotifyAdapter) {
     const message = 'Spotify importer not registered'
     logError(message)
-    activityStore.failOperation(OPERATION_ID, message)
+    activityStore.failOperation(operationId, message)
     return
   }
 
@@ -277,7 +267,7 @@ async function startImport(): Promise<void> {
         statusMsg.value = label
           ? `Importing Playlist '${label}' (${done}/${total})`
           : `Importing Playlists (${done}/${total})`
-        activityStore.updateProgress(OPERATION_ID, {
+        activityStore.updateProgress(operationId, {
           done,
           total,
           phase: 'Importing Spotify',
@@ -285,16 +275,15 @@ async function startImport(): Promise<void> {
         })
       },
     )
-    issueMessages.value = response.errors
     // Forward per-item warnings to the activity store.
     for (const msg of response.errors) {
-      activityStore.addError(OPERATION_ID, { category: 'warning', message: msg, items: [] })
+      activityStore.addError(operationId, { category: 'warning', message: msg, items: [] })
     }
     if (response.errors.length > 0) {
       logWarning('Spotify import completed with issues', response.errors)
     }
     logInfo('Spotify import complete', response)
-    activityStore.completeOperation(OPERATION_ID, {
+    activityStore.completeOperation(operationId, {
       tracks: response.tracksImported,
       playlists: response.playlistsImported,
       warnings: response.errors.length,
@@ -307,7 +296,7 @@ async function startImport(): Promise<void> {
       ? 'Spotify rate limit reached. Please wait a few minutes before retrying.'
       : rawMsg
     logError(rawMsg, err)
-    activityStore.failOperation(OPERATION_ID, userMsg, isRateLimit ? 'rate-limit' : 'error')
+    activityStore.failOperation(operationId, userMsg, isRateLimit ? 'rate-limit' : 'error')
   }
 }
 
@@ -366,12 +355,6 @@ onMounted(fetchPlaylists)
         </ScrollableList>
       </div>
 
-      <div v-if="issueMessages.length > 0" class="spotify-picker-modal__issues">
-        <p class="spotify-picker-modal__issues-title">Notable issues</p>
-        <ul class="spotify-picker-modal__issues-list">
-          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
-        </ul>
-      </div>
     </div>
 
     <div class="spotify-picker-modal__footer">
@@ -417,26 +400,6 @@ onMounted(fetchPlaylists)
   overflow: hidden;
   border-top: 1px solid var(--color-border-subtle);
   border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.spotify-picker-modal__issues {
-  padding: var(--space-3);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-raised);
-}
-
-.spotify-picker-modal__issues-title {
-  margin: 0 0 var(--space-2);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-.spotify-picker-modal__issues-list {
-  margin: 0;
-  padding-left: var(--space-4);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
 }
 
 .spotify-picker-modal__footer {

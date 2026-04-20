@@ -91,7 +91,6 @@ function openIssues(): void {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding-top: var(--space-2);
 }
 
 .activity-indicator--done .activity-indicator__text {

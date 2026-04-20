@@ -13,8 +13,6 @@ const emit = defineEmits<{
 const activityStore = useActivityStore()
 const modal = useModal()
 const { isAuthenticated, isLoading, login } = useSpotifyAuth()
-const OPERATION_ID = 'file-import'
-
 type Step = 'source' | 'files'
 
 // Step tracks only the pre-import navigation. After files are chosen, the modal closes.
@@ -60,8 +58,12 @@ async function handleFiles(e: Event): Promise<void> {
   emit('cancel')
   errorMsg.value = null
 
+  // Unique ID per invocation so each operation gets its own history row.
+  // FUTURE: Assess best approach if multi-step operations become a factorw
+  const operationId = crypto.randomUUID()
+
   // Start tracking in the activity store so IOCard footer shows progress.
-  activityStore.startOperation(OPERATION_ID, 'Importing files', 'file-import')
+  activityStore.startOperation(operationId, 'Importing files', 'file-import')
 
   // Track progress through input files. JSON and CSV files are currently weighted equally.
   const accumulated: ImportResult = { tracksImported: 0, playlistsImported: 0, errors: [] }
@@ -75,7 +77,7 @@ async function handleFiles(e: Event): Promise<void> {
       const r = await csvAdapter.import(
         { files: csvFiles },
         (done, _total, label) => {
-          activityStore.updateProgress(OPERATION_ID, {
+          activityStore.updateProgress(operationId, {
             done: Math.round(done),
             total: totalUnits,
             phase: 'Importing CSV',
@@ -97,7 +99,7 @@ async function handleFiles(e: Event): Promise<void> {
         const r = await jsonAdapter.import(
           { file },
           (done, total, label) => {
-            activityStore.updateProgress(OPERATION_ID, {
+            activityStore.updateProgress(operationId, {
               done,
               total,
               phase: 'Importing JSON',
@@ -113,15 +115,15 @@ async function handleFiles(e: Event): Promise<void> {
 
     // Forward per-item warnings to the activity store so the IOCard footer shows them.
     for (const msg of accumulated.errors) {
-      activityStore.addError(OPERATION_ID, { category: 'warning', message: msg, items: [] })
+      activityStore.addError(operationId, { category: 'warning', message: msg, items: [] })
     }
-    activityStore.completeOperation(OPERATION_ID, {
+    activityStore.completeOperation(operationId, {
       tracks: accumulated.tracksImported,
       playlists: accumulated.playlistsImported,
       warnings: accumulated.errors.length,
     })
   } catch (err) {
-    activityStore.failOperation(OPERATION_ID, (err as Error).message)
+    activityStore.failOperation(operationId, (err as Error).message)
   }
 }
 </script>
