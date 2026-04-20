@@ -40,7 +40,6 @@ const emit = defineEmits<{
 
 const activityStore = useActivityStore()
 const { isAuthenticated, login } = useSpotifyAuth()
-const OPERATION_ID = 'spotify-import'
 const LOADING_STEP_LABEL = 'Loading Spotify playlists...'
 
 const step = ref<'loading' | 'ready' | 'progress' | 'done' | 'error'>('loading')
@@ -110,7 +109,6 @@ function normalizePlaylistSummary(item: unknown, recordIssues = true): SpotifyPl
   // FUTURE: Decide on proper approach, could exclude to avoid clutter, but may be wanted in some cases
   if (trackTotal === 0 && recordIssues) {
     logWarning('Playlist has zero tracks according to Spotify API', { id: raw['id'], name: raw['name'] })
-    appendIssue(`Playlist '${raw['name']}' has zero tracks according to Spotify API`)
   }
 
   const ownerSource = raw['owner']
@@ -165,7 +163,6 @@ function togglePlaylist(item: unknown): void {
 async function fetchPlaylists(): Promise<void> {
   step.value = 'loading'
   errorMsg.value = null
-  issueMessages.value = []
   statusMsg.value = LOADING_STEP_LABEL
   playlistFetchLoaded.value = 0
   playlistFetchTotal.value = 0
@@ -385,12 +382,6 @@ onMounted(fetchPlaylists)
         </ScrollableList>
       </div>
 
-      <div v-if="issueMessages.length > 0" class="selection-modal__issues">
-        <p class="selection-modal__issues-title">Notable issues</p>
-        <ul class="selection-modal__issues-list">
-          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
-        </ul>
-      </div>
     </div>
 
     <div v-else-if="step === 'progress'" class="selection-modal__body">
@@ -408,12 +399,6 @@ onMounted(fetchPlaylists)
       <p v-if="result.errors.length > 0" class="io-modal__error">
         {{ result.errors.length }} error(s) during import
       </p>
-      <div v-if="issueMessages.length > 0" class="selection-modal__issues">
-        <p class="selection-modal__issues-title">Import issues</p>
-        <ul class="selection-modal__issues-list">
-          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
-        </ul>
-      </div>
     </div>
 
     <div class="selection-modal__footer">
