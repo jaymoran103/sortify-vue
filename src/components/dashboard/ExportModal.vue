@@ -5,7 +5,6 @@ import { usePlaylistStore } from '@/stores/playlists'
 import { useActivityStore } from '@/stores/activity'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import type { SpotifyExportOptions } from '@/adapters/spotifyExport'
-import ErrorSummary from '@/components/common/ErrorSummary.vue'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
@@ -16,7 +15,7 @@ import SelectableItem from '@/components/common/SelectableItem.vue'
 import type { Playlist } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
-type Step = 'source' | 'playlists' | 'options' | 'progress' | 'done'
+type Step = 'source' | 'playlists' | 'options'
 
 const emit = defineEmits<{
   cancel: []
@@ -44,7 +43,6 @@ const destination = ref<'local' | 'spotify'>('local')
 const format = ref('csv')
 const profile = ref('full')
 const errorMsg = ref<string | null>(null)
-const spotifyExportResult = ref<{ playlistsExported: number; errors: string[]; createdPlaylists?: Array<{name: string; spotifyId: string}> } | null>(null)
 
 // Profile is only relevant for CSV export, disable it and reset to 'full' when format is JSON
 const enableProfile = computed(() => format.value !== 'json')
@@ -135,23 +133,14 @@ async function handleSpotifyExport(): Promise<void> {
   const ids = [...selection.selectedIds.value].map(Number)
   if (ids.length === 0) return
 
-  step.value = 'progress'
-  errorMsg.value = null
-  spotifyExportResult.value = null
-
-  // Get the Spotify export adapter, validate
   const adapter = getExporter<SpotifyExportOptions>('spotify')
-  if (!adapter) {
-    errorMsg.value = 'Spotify exporter not registered'
-    step.value = 'playlists'
-    return
-  }
+  if (!adapter) throw new Error('Spotify exporter not registered')
 
-  // Start tracking in the activity store
+  // Close modal immediately; progress and result display delegate to ActivityIndicator / IOSummaryCard.
+  emit('cancel')
+
   activityStore.startOperation(SPOTIFY_EXPORT_OPERATION_ID, 'Exporting to Spotify', 'spotify-export')
 
-  // Call adapter export function with progress callback that updates the activity store. 
-  // Adapter handles batching and progress reporting internally, this section just needs to pass the callback and update UI state once done or on error.
   try {
     const result = await adapter.export(
       { playlistIds: ids },
@@ -164,13 +153,10 @@ async function handleSpotifyExport(): Promise<void> {
         })
       },
     )
-    spotifyExportResult.value = result
-    // Forward per-item warnings (skipped playlists etc.) to the activity store
-    // so they appear in the IOCard footer issues list.
+    // Forward per-item warnings to the activity store.
     for (const msg of result.errors) {
       activityStore.addError(SPOTIFY_EXPORT_OPERATION_ID, { category: 'warning', message: msg, items: [] })
     }
-    step.value = 'done'
     activityStore.completeOperation(SPOTIFY_EXPORT_OPERATION_ID, {
       playlists: result.playlistsExported,
       warnings: result.errors.length,
@@ -182,11 +168,10 @@ async function handleSpotifyExport(): Promise<void> {
   } catch (err) {
     const rawMsg = err instanceof Error ? err.message : 'Spotify export failed'
     const isRateLimit = rawMsg.startsWith('Rate limited')
-    errorMsg.value = isRateLimit
+    const userMsg = isRateLimit
       ? 'Spotify rate limit reached. Please wait a few minutes before retrying.'
       : rawMsg
-    step.value = 'playlists'
-    activityStore.failOperation(SPOTIFY_EXPORT_OPERATION_ID, errorMsg.value, isRateLimit ? 'rate-limit' : 'error')
+    activityStore.failOperation(SPOTIFY_EXPORT_OPERATION_ID, userMsg, isRateLimit ? 'rate-limit' : 'error')
   }
 }
 
@@ -197,8 +182,10 @@ async function handleExport(): Promise<void> {
     return
   }
 
-  step.value = 'progress'
   errorMsg.value = null
+
+  // Close modal immediately; progress and result display delegate to ActivityIndicator / IOSummaryCard.
+  emit('cancel')
 
   activityStore.startOperation(FILE_EXPORT_OPERATION_ID, 'Exporting to file', 'file-export')
 
@@ -211,14 +198,11 @@ async function handleExport(): Promise<void> {
     } else {
       await adapter.export({})
     }
-    step.value = 'done'
     activityStore.completeOperation(FILE_EXPORT_OPERATION_ID, {
       playlists: ids.length > 0 ? ids.length : (playlistStore.playlists?.length ?? 0),
     })
   } catch (err) {
-    errorMsg.value = (err as Error).message
-    step.value = 'options'
-    activityStore.failOperation(FILE_EXPORT_OPERATION_ID, errorMsg.value)
+    activityStore.failOperation(FILE_EXPORT_OPERATION_ID, (err as Error).message)
   }
 }
 </script>
@@ -283,40 +267,6 @@ async function handleExport(): Promise<void> {
       <p v-if="errorMsg" class="io-modal__error">{{ errorMsg }}</p>
     </div>
 
-    <!-- Step: progress -->
-    <div v-else-if="step === 'progress'" class="io-modal__body">
-      <p class="text-muted">Exporting&hellip;</p>
-    </div>
-
-    <!-- Step: done -->
-    <div v-else-if="step === 'done'" class="io-modal__body">
-      <!-- Separate handling for Spotify export results vs local file export -->
-      <template v-if="destination === 'spotify' && spotifyExportResult">
-        <p>
-          Exported <strong>{{ spotifyExportResult.playlistsExported }}</strong>
-          playlist{{ spotifyExportResult.playlistsExported !== 1 ? 's' : '' }} to Spotify.
-        </p>
-        <!-- For exports with successfully created playlists, display each one as a link TODO: Review-->
-        <ul v-if="spotifyExportResult.createdPlaylists?.length" class="export-modal__spotify-links">
-          <li v-for="pl in spotifyExportResult.createdPlaylists" :key="pl.spotifyId">
-            <a
-              :href="`https://open.spotify.com/playlist/${pl.spotifyId}`"
-              target="_blank"
-              rel="noopener noreferrer"
-            >{{ pl.name }}</a>
-          </li>
-        </ul>
-        <!-- For exports with errors, display via ErrorSummary -->
-        <ErrorSummary
-          v-if="spotifyExportResult.errors.length > 0"
-          :errors="spotifyExportResult.errors.map((msg) => ({ category: 'warning', message: msg, items: [] }))"
-        />
-      </template>
-      <template v-else>
-        <p>Export complete. Check your downloads folder.</p>
-      </template>
-    </div>
-
     <!-- Footer: playlists step has select-all on left + nav on right -->
     <div v-if="step === 'playlists'" class="io-modal__footer">
       <button class="btn btn--ghost io-modal__select-all" @click="toggleSelectAll">
@@ -338,9 +288,7 @@ async function handleExport(): Promise<void> {
       <button v-if="step === 'options'" class="btn btn--ghost" @click="step = 'playlists'">
         Back
       </button>
-      <button class="btn btn--secondary" @click="emit('cancel')">
-        {{ step === 'done' ? 'Done' : 'Cancel' }}
-      </button>
+      <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
       <button v-if="step === 'options'" class="btn btn--primary" @click="handleExport">
         Export
       </button>

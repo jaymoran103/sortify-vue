@@ -28,7 +28,6 @@ import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
 import SelectableItem from '@/components/common/SelectableItem.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
-import ErrorSummary from '@/components/common/ErrorSummary.vue'
 import type { ImportResult } from '@/types/adapters'
 import type { SpotifyPaginatedResponse } from '@/spotify/types'
 import type { SortOption } from '@/types/ui'
@@ -42,14 +41,12 @@ const activityStore = useActivityStore()
 const { isAuthenticated, login } = useSpotifyAuth()
 const OPERATION_ID = 'spotify-import'
 
-const step = ref<'loading' | 'ready' | 'progress' | 'done' | 'error'>('loading')
+const step = ref<'loading' | 'ready' | 'error'>('loading')
 const playlists = ref<SpotifyPlaylistSummary[]>([])
 const displayItems = shallowRef<SpotifyPlaylistSummary[]>([])
-const result = ref<ImportResult | null>(null)
 const errorMsg = ref<string | null>(null)
 const issueMessages = ref<string[]>([])
 const statusMsg = ref('')
-const progress = ref<number>(-1)
 
 const sortOptions: SortOption<SpotifyPlaylistSummary>[] = [
   { key: 'name', label: 'Name', compareFn: (a, b) => a.name.localeCompare(b.name) },
@@ -247,12 +244,10 @@ async function startImport(): Promise<void> {
   const selected = playlists.value.filter((item) => selection.isSelected(item.id))
   if (selected.length === 0) return
 
+  // Close modal immediately; progress and result display delegate to ActivityIndicator / IOSummaryCard.
   emit('cancel')
-  step.value = 'progress'
-  progress.value = -1
   errorMsg.value = null
   issueMessages.value = []
-  result.value = null
   statusMsg.value = `Starting Spotify import for ${selected.length} playlist${selected.length !== 1 ? 's' : ''}...`
 
   activityStore.startOperation(OPERATION_ID, 'Importing from Spotify', 'spotify-import')
@@ -267,24 +262,18 @@ async function startImport(): Promise<void> {
     estimatedTracks: selected.reduce((sum, item) => sum + (item.tracks.total ?? 0), 0),
   })
 
-  // Get and validate the Spotify import adapter
   const spotifyAdapter = getImporter<SpotifyImportOptions>('spotify')
   if (!spotifyAdapter) {
     const message = 'Spotify importer not registered'
-    errorMsg.value = message
-    statusMsg.value = 'Spotify import setup failed.'
     logError(message)
-    step.value = 'error'
     activityStore.failOperation(OPERATION_ID, message)
     return
   }
 
-  // Call the import method of the Spotify adapter, passing the selected playlists and a progress callback to update the UI and activity store.
   try {
     const response = await spotifyAdapter.import(
       { playlists: selected },
       (done, total, label) => {
-        progress.value = total > 0 ? done / total : -1
         statusMsg.value = label
           ? `Importing Playlist '${label}' (${done}/${total})`
           : `Importing Playlists (${done}/${total})`
@@ -296,18 +285,15 @@ async function startImport(): Promise<void> {
         })
       },
     )
-    result.value = response
     issueMessages.value = response.errors
-    // Forward per-item warnings to the activity store so the IOCard footer shows them.
+    // Forward per-item warnings to the activity store.
     for (const msg of response.errors) {
       activityStore.addError(OPERATION_ID, { category: 'warning', message: msg, items: [] })
     }
-    statusMsg.value = `Spotify import complete. Imported ${response.playlistsImported} playlist${response.playlistsImported !== 1 ? 's' : ''} and ${response.tracksImported} track${response.tracksImported !== 1 ? 's' : ''}.`
     if (response.errors.length > 0) {
       logWarning('Spotify import completed with issues', response.errors)
     }
     logInfo('Spotify import complete', response)
-    step.value = 'done'
     activityStore.completeOperation(OPERATION_ID, {
       tracks: response.tracksImported,
       playlists: response.playlistsImported,
@@ -320,10 +306,7 @@ async function startImport(): Promise<void> {
     const userMsg = isRateLimit
       ? 'Spotify rate limit reached. Please wait a few minutes before retrying.'
       : rawMsg
-    errorMsg.value = userMsg
-    statusMsg.value = 'Spotify import failed.'
     logError(rawMsg, err)
-    step.value = 'error'
     activityStore.failOperation(OPERATION_ID, userMsg, isRateLimit ? 'rate-limit' : 'error')
   }
 }
@@ -391,31 +374,8 @@ onMounted(fetchPlaylists)
       </div>
     </div>
 
-    <div v-else-if="step === 'progress'" class="spotify-picker-modal__body">
-      <p class="text-muted">Importing selected playlists…</p>
-      <ProgressBar :progress="progress" />
-    </div>
-
-    <div v-else-if="step === 'done' && result" class="spotify-picker-modal__body">
-      <p>
-        Imported <strong>{{ result.tracksImported }}</strong> track{{ result.tracksImported !== 1 ? 's' : '' }}
-      </p>
-      <p v-if="result.playlistsImported > 0">
-        and {{ result.playlistsImported }} playlist{{ result.playlistsImported !== 1 ? 's' : '' }}
-      </p>
-      <p v-if="result.errors.length > 0">
-          {{ result.errors.length }} issue{{ result.errors.length !== 1 ? 's' : '' }} during import:
-        </p>
-        <ErrorSummary
-          v-if="result.errors.length > 0"
-          :errors="result.errors.map((msg) => ({ category: 'warning', message: msg, items: [] }))"
-        />
-    </div>
-
     <div class="spotify-picker-modal__footer">
-      <button class="btn btn--secondary" @click="handleCancel">
-        {{ step === 'done' ? 'Done' : 'Cancel' }}
-      </button>
+      <button class="btn btn--secondary" @click="handleCancel">Cancel</button>
       <button
         v-if="step === 'ready'"
         class="btn btn--primary"

@@ -31,7 +31,6 @@ function toggleExpand(id: string): void {
 }
 
 // Mapping of operation sources to user-friendly labels for display in the summary card.
-// Currently pretty simple, may expand in the future to better differentiate between modes and offer more details
 const SOURCE_LABELS: Record<OperationSource, string> = {
   'file-import': 'File Import',
   'file-export': 'File Export',
@@ -42,7 +41,8 @@ const SOURCE_LABELS: Record<OperationSource, string> = {
 function rowLabel(op: ActivityItem): string {
   return op.source ? SOURCE_LABELS[op.source] : op.label
 }
-// Builds a summary line for an operation based on its summary fields.
+
+// Builds a summary line for expanded view showing counts of tracks, playlists, and warnings.
 function summaryLine(op: ActivityItem): string {
   const s = op.summary
   if (!s) return ''
@@ -50,17 +50,13 @@ function summaryLine(op: ActivityItem): string {
   if (s.tracks) parts.push(`${s.tracks} track${s.tracks !== 1 ? 's' : ''}`)
   if (s.playlists) parts.push(`${s.playlists} playlist${s.playlists !== 1 ? 's' : ''}`)
   if (s.warnings) parts.push(`${s.warnings} warning${s.warnings !== 1 ? 's' : ''}`)
-  return parts.join(', ')
+  return parts.join(' · ')
 }
-
-function hasDetails(op: ActivityItem): boolean {
-  return op.errors.length > 0 || (op.summary?.linkItems?.length ?? 0) > 0
-}
-
 // TODO need better way to express warnings
+// Done - N warnings? Done (N warnings)? N Warnings?
 function statusLabel(op: ActivityItem): string {
   if (op.status === 'done') {
-    return op.summary?.warnings ? 'Warnings' : 'Done'
+    return op.summary?.warnings ? 'Done with warnings' : 'Done'
   }
   return 'Failed'
 }
@@ -82,39 +78,27 @@ function statusLabel(op: ActivityItem): string {
         class="io-summary-card__row"
         :class="{ 'io-summary-card__row--error': op.status === 'error' }"
       >
-        <!-- Row summary line -->
+        <!-- Collapsed row: expand toggle · label · status · dismiss -->
         <div class="io-summary-card__row-main">
-
-            <!-- Conditionally show expand/collapse button -->
-            <button
-            v-if="hasDetails(op)"
-            class="io-summary-card__expand-btn text-sm"
+          <button
+            class="io-summary-card__expand-btn"
             :aria-label="expandedIds.has(op.id) ? 'Collapse details' : 'Expand details'"
             @click="toggleExpand(op.id)"
-            >   
+          >
             {{ expandedIds.has(op.id) ? '▲' : '▼' }}
-            </button>
-        
-            <!-- Spacer to ensure display aligns regardless of expand/collapse visibility-->
-             <!-- FUTURE: refine or make all summaries expandable -->
-            <span v-else> 
-                &nbsp;
-            </span>
-        <!-- Row Label  -->
+          </button>
+
           <span class="io-summary-card__row-label text-sm">{{ rowLabel(op) }}</span>
 
-        <!-- Summary Line -->
-          <span class="io-summary-card__row-counts text-sm text-muted">{{ summaryLine(op) }}</span>
-
-        <!-- Status and Dismiss Button -->
           <span
             class="io-summary-card__row-status text-sm"
             :class="{
-              'io-summary-card__row-status--done': op.status === 'done',
+              'io-summary-card__row-status--done': op.status === 'done' && !op.summary?.warnings,
+              'io-summary-card__row-status--warnings': op.status === 'done' && op.summary?.warnings,
               'io-summary-card__row-status--error': op.status === 'error',
             }"
           >{{ statusLabel(op) }}</span>
-          
+
           <button
             class="io-summary-card__dismiss-btn"
             :aria-label="`Dismiss ${rowLabel(op)}`"
@@ -122,8 +106,11 @@ function statusLabel(op: ActivityItem): string {
           >×</button>
         </div>
 
-        <!-- Expanded detail area -->
+        <!-- Expanded detail area: counts · errors · links -->
         <div v-if="expandedIds.has(op.id)" class="io-summary-card__details">
+          <p v-if="summaryLine(op)" class="io-summary-card__summary-line text-sm text-muted">
+            {{ summaryLine(op) }}
+          </p>
           <ErrorSummary v-if="op.errors.length > 0" :errors="op.errors" />
           <ul v-if="op.summary?.linkItems?.length" class="io-summary-card__links">
             <li
@@ -200,10 +187,6 @@ function statusLabel(op: ActivityItem): string {
 
 .io-summary-card__row-label {
   font-weight: var(--font-weight-medium);
-  flex-shrink: 0;
-}
-
-.io-summary-card__row-counts {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -217,6 +200,10 @@ function statusLabel(op: ActivityItem): string {
 
 .io-summary-card__row-status--done {
   color: var(--color-accent);
+}
+
+.io-summary-card__row-status--warnings {
+  color: var(--color-text-muted);
 }
 
 .io-summary-card__row-status--error {
@@ -256,6 +243,10 @@ function statusLabel(op: ActivityItem): string {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.io-summary-card__summary-line {
+  margin: 0;
 }
 
 .io-summary-card__links {

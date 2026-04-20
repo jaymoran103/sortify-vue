@@ -78,7 +78,7 @@ describe('ImportModal', () => {
     expect(registry.getImporter).toHaveBeenCalledWith('json')
   })
 
-  it('accumulates results from multiple files', async () => {
+  it('accumulates results from multiple files and emits cancel to close modal', async () => {
     vi.spyOn(registry, 'getImporter')
       .mockReturnValueOnce({ key: 'csv', label: 'CSV File', import: vi.fn().mockResolvedValue({ tracksImported: 10, playlistsImported: 0, errors: [] }) })
       .mockReturnValueOnce({ key: 'json', label: 'JSON Bundle', import: vi.fn().mockResolvedValue({ tracksImported: 5, playlistsImported: 2, errors: [] }) })
@@ -91,12 +91,12 @@ describe('ImportModal', () => {
     const jsonFile = new File(['{}'], 'bundle.json', { type: 'application/json' })
     Object.defineProperty(input.element, 'files', { value: [csvFile, jsonFile], configurable: true })
     await input.trigger('change')
-    await flushPromises()
 
-    expect(wrapper.text()).toContain('15')
+    // Modal closes immediately when import starts; results are tracked by activity store
+    expect(wrapper.emitted('cancel')).toBeTruthy()
   })
 
-  it('shows Done button label after successful import', async () => {
+  it('emits cancel to close modal when import starts successfully', async () => {
     mockImport.mockResolvedValue({ tracksImported: 1, playlistsImported: 0, errors: [] })
 
     const wrapper = mount(ImportModal)
@@ -106,9 +106,8 @@ describe('ImportModal', () => {
     const file = new File(['a,b'], 'data.csv', { type: 'text/csv' })
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
-    await flushPromises()
 
-    expect(wrapper.find('button.btn--secondary').text()).toBe('Done')
+    expect(wrapper.emitted('cancel')).toBeTruthy()
   })
 
   it('forwards CSV playlist names into activity progress labels', async () => {

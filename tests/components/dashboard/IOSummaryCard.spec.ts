@@ -69,7 +69,7 @@ describe('IOSummaryCard', () => {
     expect(wrapper.find('.io-summary-card__row-label').text()).toBe('Custom Operation')
   })
 
-  it('renders summary counts in the row', async () => {
+  it('summary counts display in the expanded area, not the collapsed row', async () => {
     const wrapper = mountCard()
     const store = useActivityStore()
     store.history.push(makeItem({
@@ -77,10 +77,15 @@ describe('IOSummaryCard', () => {
       summary: { tracks: 42, playlists: 3, warnings: 1 },
     }))
     await wrapper.vm.$nextTick()
-    const counts = wrapper.find('.io-summary-card__row-counts').text()
-    expect(counts).toContain('42 tracks')
-    expect(counts).toContain('3 playlists')
-    expect(counts).toContain('1 warning')
+    // Collapsed row should not contain counts
+    expect(wrapper.find('.io-summary-card__row-main').text()).not.toContain('42 tracks')
+    // Expand to see counts
+    await wrapper.find('.io-summary-card__expand-btn').trigger('click')
+    await wrapper.vm.$nextTick()
+    const detail = wrapper.find('.io-summary-card__details').text()
+    expect(detail).toContain('42 tracks')
+    expect(detail).toContain('3 playlists')
+    expect(detail).toContain('1 warning')
   })
 
   it('dismiss button removes the row', async () => {
@@ -117,7 +122,7 @@ describe('IOSummaryCard', () => {
     expect(wrapper.find('.io-summary-card__show-more').text()).toContain('1 more')
   })
 
-  it('show-more button reveals all rows', async () => {
+  it('show-more button reveals all rows and changes to show-less label', async () => {
     const wrapper = mountCard()
     const store = useActivityStore()
     for (let i = 0; i < 5; i++) {
@@ -130,26 +135,53 @@ describe('IOSummaryCard', () => {
     expect(wrapper.find('.io-summary-card__show-more').text()).toContain('Show less')
   })
 
-  it('expand button is absent when there are no errors and no link items', async () => {
+  it('expand button is always present regardless of errors or link items', async () => {
     const wrapper = mountCard()
     const store = useActivityStore()
     store.history.push(makeItem({ id: 'a', errors: [] }))
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.io-summary-card__expand-btn').exists()).toBe(false)
+    expect(wrapper.find('.io-summary-card__expand-btn').exists()).toBe(true)
   })
 
-  it('expand button is present when the operation has errors', async () => {
+  it('status label shows "Done with warnings" when done and warnings present', async () => {
+    const wrapper = mountCard()
+    const store = useActivityStore()
+    store.history.push(makeItem({ id: 'a', summary: { warnings: 2 } }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.io-summary-card__row-status').text()).toBe('Done with warnings')
+  })
+
+  it('status label shows "Done" when done and no warnings', async () => {
+    const wrapper = mountCard()
+    const store = useActivityStore()
+    store.history.push(makeItem({ id: 'a' }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.io-summary-card__row-status').text()).toBe('Done')
+  })
+
+  it('status label shows "Failed" when operation errored', async () => {
     const wrapper = mountCard()
     const store = useActivityStore()
     store.history.push(makeItem({
       id: 'a',
-      errors: [{ category: 'warning', message: 'Something', items: [] }],
+      status: 'error',
+      errors: [{ category: 'error', message: 'Oops', items: [] }],
     }))
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.io-summary-card__expand-btn').exists()).toBe(true)
+    expect(wrapper.find('.io-summary-card__row-status').text()).toBe('Failed')
   })
 
-  it('clicking expand button renders ErrorSummary', async () => {
+  it('expanding a row with no summary or errors shows empty details area', async () => {
+    const wrapper = mountCard()
+    const store = useActivityStore()
+    store.history.push(makeItem({ id: 'a' }))
+    await wrapper.vm.$nextTick()
+    await wrapper.find('.io-summary-card__expand-btn').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.io-summary-card__details').exists()).toBe(true)
+  })
+
+  it('clicking expand button renders ErrorSummary when errors present', async () => {
     const wrapper = mountCard()
     const store = useActivityStore()
     store.history.push(makeItem({
