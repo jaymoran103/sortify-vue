@@ -337,6 +337,14 @@ onMounted(fetchPlaylists)
       <ControlBar>
         <SearchBar v-model="query" placeholder="Filter playlists…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
+        <template #actions>
+          <button
+            class="btn btn--ghost btn--sm"
+            @click="selection.selectedCount.value === playlists.length ? selection.clear() : selection.selectAll()"
+          >
+            {{ selection.selectedCount.value === playlists.length ? 'Deselect All' : 'Select All' }}
+          </button>
+        </template>
       </ControlBar>
 
       <div class="spotify-picker-modal__list">

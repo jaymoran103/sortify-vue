@@ -81,6 +81,22 @@
   background: var(--color-danger-hover);
 }
 
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-color: var(--color-border-subtle);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--color-row-hover);
+  color: var(--color-text);
+}
+
+.btn--sm {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
 /* ── Dropdowns ── */
 
 /* Dropdown arrow */

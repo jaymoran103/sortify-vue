@@ -155,6 +155,7 @@ function statusLabel(op: ActivityItem): string {
 
 .io-summary-card__clear-all {
   all: unset;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   color: var(--color-text-muted);
   text-decoration: underline;
@@ -276,6 +277,7 @@ function statusLabel(op: ActivityItem): string {
 
 .io-summary-card__show-more {
   all: unset;
+  font-size: var(--font-size-sm);
   cursor: pointer;
   text-decoration: underline;
   align-self: flex-start;
