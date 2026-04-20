@@ -7,6 +7,7 @@ import { useActivityStore } from '@/stores/activity'
 import SpotifyPlaylistPickerModal from './SpotifyPlaylistPickerModal.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import type { ImportResult } from '@/types/adapters'
+import ErrorSummary from '@/components/common/ErrorSummary.vue'
 
 const emit = defineEmits<{
   cancel: []
@@ -138,7 +139,7 @@ async function handleFiles(e: Event): Promise<void> {
 
     result.value = accumulated
     step.value = 'done'
-    
+
     // Forward per-item warnings to the activity store so the IOCard footer shows them.
     for (const msg of accumulated.errors) {
       activityStore.addError(OPERATION_ID, { category: 'warning', message: msg, items: [] })
@@ -203,9 +204,13 @@ async function handleFiles(e: Event): Promise<void> {
           result.playlistsImported !== 1 ? 's' : ''
         }}
       </p>
-      <p v-if="result.errors.length > 0" class="io-modal__error">
-        {{ result.errors.length }} error(s) during import
+      <p v-if="result.errors.length > 0">
+        {{ result.errors.length }} issue{{ result.errors.length !== 1 ? 's' : '' }} during import:
       </p>
+      <ErrorSummary
+        v-if="result.errors.length > 0"
+        :errors="result.errors.map((msg) => ({ category: 'warning', message: msg, items: [] }))"
+      />
     </div>
 
     <div class="io-modal__footer">

@@ -73,10 +73,11 @@ export const useActivityStore = defineStore('activity', () => {
   }
 
   // Marks the operation as 'error' with a top-level message appended to errors.
-  function failOperation(id: string, message: string): void {
+  // errorCategory defaults to 'error' but callers may pass 'rate-limit' or other category strings.
+  function failOperation(id: string, message: string, errorCategory: string = 'error'): void {
     const op = operations.value.get(id)
     if (!op) return
-    const failError: ActivityError = { category: 'error', message, items: [] }
+    const failError: ActivityError = { category: errorCategory, message, items: [] }
     const updated: ActivityItem = {
       ...op,
       status: 'error',

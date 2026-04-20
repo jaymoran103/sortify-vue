@@ -110,6 +110,24 @@ describe('useActivityStore', () => {
     expect(() => store.failOperation('nope', 'err')).not.toThrow()
   })
 
+  it('failOperation uses default category "error" when none is provided', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.failOperation('op1', 'Something went wrong')
+    const op = store.operations.get('op1')
+    expect(op?.errors[0]?.category).toBe('error')
+  })
+
+  it('failOperation uses a custom errorCategory when provided', () => {
+    const store = useActivityStore()
+    store.startOperation('op1', 'Test')
+    store.failOperation('op1', 'Spotify rate limit reached.', 'rate-limit')
+    const op = store.operations.get('op1')
+    expect(op?.status).toBe('error')
+    expect(op?.errors[0]?.category).toBe('rate-limit')
+    expect(op?.errors[0]?.message).toBe('Spotify rate limit reached.')
+  })
+
   it('clearOperation removes the item', () => {
     const store = useActivityStore()
     store.startOperation('op1', 'Test')

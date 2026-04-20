@@ -5,6 +5,7 @@ import { usePlaylistStore } from '@/stores/playlists'
 import { useActivityStore } from '@/stores/activity'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import type { SpotifyExportOptions } from '@/adapters/spotifyExport'
+import ErrorSummary from '@/components/common/ErrorSummary.vue'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
@@ -171,9 +172,13 @@ async function handleSpotifyExport(): Promise<void> {
     step.value = 'done'
     activityStore.completeOperation(SPOTIFY_EXPORT_OPERATION_ID)
   } catch (err) {
-    errorMsg.value = err instanceof Error ? err.message : 'Spotify export failed'
+    const rawMsg = err instanceof Error ? err.message : 'Spotify export failed'
+    const isRateLimit = rawMsg.startsWith('Rate limited')
+    errorMsg.value = isRateLimit
+      ? 'Spotify rate limit reached. Please wait a few minutes before retrying.'
+      : rawMsg
     step.value = 'playlists'
-    activityStore.failOperation(SPOTIFY_EXPORT_OPERATION_ID, errorMsg.value)
+    activityStore.failOperation(SPOTIFY_EXPORT_OPERATION_ID, errorMsg.value, isRateLimit ? 'rate-limit' : 'error')
   }
 }
 
@@ -287,10 +292,11 @@ async function handleExport(): Promise<void> {
             >{{ pl.name }}</a>
           </li>
         </ul>
-        <!-- For exports with errors, display each one as a message. TODO: Categorize by type -->
-        <p v-if="spotifyExportResult.errors.length > 0" class="io-modal__error">
-          {{ spotifyExportResult.errors.length }} issue(s) during export
-        </p>
+        <!-- For exports with errors, display via ErrorSummary -->
+        <ErrorSummary
+          v-if="spotifyExportResult.errors.length > 0"
+          :errors="spotifyExportResult.errors.map((msg) => ({ category: 'warning', message: msg, items: [] }))"
+        />
       </template>
       <template v-else>
         <p>Export complete. Check your downloads folder.</p>

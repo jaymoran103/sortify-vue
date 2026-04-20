@@ -28,6 +28,7 @@ import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
 import SelectableItem from '@/components/common/SelectableItem.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
+import ErrorSummary from '@/components/common/ErrorSummary.vue'
 import type { ImportResult } from '@/types/adapters'
 import type { SpotifyPaginatedResponse } from '@/spotify/types'
 import type { SortOption } from '@/types/ui'
@@ -310,12 +311,16 @@ async function startImport(): Promise<void> {
     activityStore.completeOperation(OPERATION_ID)
     _playlistCache = null
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Spotify import failed'
-    errorMsg.value = message
+    const rawMsg = err instanceof Error ? err.message : 'Spotify import failed'
+    const isRateLimit = rawMsg.startsWith('Rate limited')
+    const userMsg = isRateLimit
+      ? 'Spotify rate limit reached. Please wait a few minutes before retrying.'
+      : rawMsg
+    errorMsg.value = userMsg
     statusMsg.value = 'Spotify import failed.'
-    logError(message, err)
+    logError(rawMsg, err)
     step.value = 'error'
-    activityStore.failOperation(OPERATION_ID, message)
+    activityStore.failOperation(OPERATION_ID, userMsg, isRateLimit ? 'rate-limit' : 'error')
   }
 }
 
@@ -394,19 +399,19 @@ onMounted(fetchPlaylists)
       <p v-if="result.playlistsImported > 0">
         and {{ result.playlistsImported }} playlist{{ result.playlistsImported !== 1 ? 's' : '' }}
       </p>
-      <p v-if="result.errors.length > 0" class="io-modal__error">
-        {{ result.errors.length }} error(s) during import
-      </p>
-      <div v-if="issueMessages.length > 0" class="spotify-picker-modal__issues">
-        <p class="spotify-picker-modal__issues-title">Import issues</p>
-        <ul class="spotify-picker-modal__issues-list">
-          <li v-for="issue in issueMessages" :key="issue">{{ issue }}</li>
-        </ul>
-      </div>
+      <p v-if="result.errors.length > 0">
+          {{ result.errors.length }} issue{{ result.errors.length !== 1 ? 's' : '' }} during import:
+        </p>
+        <ErrorSummary
+          v-if="result.errors.length > 0"
+          :errors="result.errors.map((msg) => ({ category: 'warning', message: msg, items: [] }))"
+        />
     </div>
 
     <div class="spotify-picker-modal__footer">
-      <button class="btn btn--secondary" @click="handleCancel">Cancel</button>
+      <button class="btn btn--secondary" @click="handleCancel">
+        {{ step === 'done' ? 'Done' : 'Cancel' }}
+      </button>
       <button
         v-if="step === 'ready'"
         class="btn btn--primary"
@@ -414,9 +419,6 @@ onMounted(fetchPlaylists)
         @click="startImport"
       >
         Import ({{ selection.selectedCount.value }})
-      </button>
-      <button v-else-if="step === 'done'" class="btn btn--secondary" @click="handleCancel">
-        Done
       </button>
     </div>
   </div>
