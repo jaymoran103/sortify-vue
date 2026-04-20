@@ -255,7 +255,7 @@ async function startImport(): Promise<void> {
   result.value = null
   statusMsg.value = `Starting Spotify import for ${selected.length} playlist${selected.length !== 1 ? 's' : ''}...`
 
-  activityStore.startOperation(OPERATION_ID, 'Importing from Spotify')
+  activityStore.startOperation(OPERATION_ID, 'Importing from Spotify', 'spotify-import')
   logInfo('Selected playlists for Spotify import', selected.map((item) => ({
     id: item.id,
     name: item.name,
@@ -308,7 +308,11 @@ async function startImport(): Promise<void> {
     }
     logInfo('Spotify import complete', response)
     step.value = 'done'
-    activityStore.completeOperation(OPERATION_ID)
+    activityStore.completeOperation(OPERATION_ID, {
+      tracks: response.tracksImported,
+      playlists: response.playlistsImported,
+      warnings: response.errors.length,
+    })
     _playlistCache = null
   } catch (err) {
     const rawMsg = err instanceof Error ? err.message : 'Spotify import failed'

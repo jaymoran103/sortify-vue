@@ -72,7 +72,7 @@ async function handleFiles(e: Event): Promise<void> {
   progress.value = -1
 
   // Start tracking in the activity store so IOCard footer shows progress.
-  activityStore.startOperation(OPERATION_ID, 'Importing files')
+  activityStore.startOperation(OPERATION_ID, 'Importing files', 'file-import')
 
   // Track progress through input files. JSON and CSV files are currently weighted equally - FUTURE: revisit this approach for more accurate progress reporting,
   const accumulated: ImportResult = { tracksImported: 0, playlistsImported: 0, errors: [] }
@@ -144,7 +144,11 @@ async function handleFiles(e: Event): Promise<void> {
     for (const msg of accumulated.errors) {
       activityStore.addError(OPERATION_ID, { category: 'warning', message: msg, items: [] })
     }
-    activityStore.completeOperation(OPERATION_ID)
+    activityStore.completeOperation(OPERATION_ID, {
+      tracks: accumulated.tracksImported,
+      playlists: accumulated.playlistsImported,
+      warnings: accumulated.errors.length,
+    })
   } catch (err) {
     errorMsg.value = (err as Error).message
     step.value = 'files'

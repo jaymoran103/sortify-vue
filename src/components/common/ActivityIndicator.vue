@@ -74,7 +74,9 @@ function openIssues(): void {
   <div v-if="op" class="activity-indicator" :class="{ 'activity-indicator--done': isDone, 'activity-indicator--error': isError }">
     <ProgressBar :progress="isDone || isError ? (isDone ? 1 : 0) : progressValue" />
     <span class="activity-indicator__text text-sm text-muted">{{ statusText }}</span>
+    <!-- TODO: Remove button once iosummary is fully implemented -->
     <button
+    hidden
       v-if="issueErrors.length > 0"
       class="activity-indicator__issues-btn text-sm"
       @click="openIssues"

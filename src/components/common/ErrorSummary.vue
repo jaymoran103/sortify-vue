@@ -2,11 +2,11 @@
 import { ref, computed } from 'vue'
 import type { ActivityError } from '@/types/ui'
 
-const COLLAPSE_THRESHOLD = 3
-
 const props = defineProps<{
   errors: ActivityError[]
 }>()
+
+const COLLAPSE_THRESHOLD = 3
 
 // Group errors by category, preserving insertion order.
 const groups = computed((): [string, ActivityError[]][] => {
@@ -168,7 +168,6 @@ function categoryCssClass(category: string): string {
   cursor: pointer;
   color: var(--color-text-muted);
   text-decoration: underline;
-  text-decoration-style: dotted;
   align-self: flex-start;
 }
 

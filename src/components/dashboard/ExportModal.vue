@@ -25,6 +25,7 @@ const emit = defineEmits<{
 const activityStore = useActivityStore()
 const { isAuthenticated, login } = useSpotifyAuth()
 const SPOTIFY_EXPORT_OPERATION_ID = 'spotify-export'
+const FILE_EXPORT_OPERATION_ID = 'file-export'
 
 // ── Format / profile ─────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ async function handleSpotifyExport(): Promise<void> {
   }
 
   // Start tracking in the activity store
-  activityStore.startOperation(SPOTIFY_EXPORT_OPERATION_ID, 'Exporting to Spotify')
+  activityStore.startOperation(SPOTIFY_EXPORT_OPERATION_ID, 'Exporting to Spotify', 'spotify-export')
 
   // Call adapter export function with progress callback that updates the activity store. 
   // Adapter handles batching and progress reporting internally, this section just needs to pass the callback and update UI state once done or on error.
@@ -170,7 +171,14 @@ async function handleSpotifyExport(): Promise<void> {
       activityStore.addError(SPOTIFY_EXPORT_OPERATION_ID, { category: 'warning', message: msg, items: [] })
     }
     step.value = 'done'
-    activityStore.completeOperation(SPOTIFY_EXPORT_OPERATION_ID)
+    activityStore.completeOperation(SPOTIFY_EXPORT_OPERATION_ID, {
+      playlists: result.playlistsExported,
+      warnings: result.errors.length,
+      linkItems: result.createdPlaylists?.map((p) => ({
+        label: p.name,
+        href: `https://open.spotify.com/playlist/${p.spotifyId}`,
+      })) ?? [],
+    })
   } catch (err) {
     const rawMsg = err instanceof Error ? err.message : 'Spotify export failed'
     const isRateLimit = rawMsg.startsWith('Rate limited')
@@ -192,6 +200,8 @@ async function handleExport(): Promise<void> {
   step.value = 'progress'
   errorMsg.value = null
 
+  activityStore.startOperation(FILE_EXPORT_OPERATION_ID, 'Exporting to file', 'file-export')
+
   try {
     const ids = [...selection.selectedIds.value].map(Number)
     const playlistIds = ids.length > 0 ? ids : 'all'
@@ -202,9 +212,13 @@ async function handleExport(): Promise<void> {
       await adapter.export({})
     }
     step.value = 'done'
+    activityStore.completeOperation(FILE_EXPORT_OPERATION_ID, {
+      playlists: ids.length > 0 ? ids.length : (playlistStore.playlists?.length ?? 0),
+    })
   } catch (err) {
     errorMsg.value = (err as Error).message
     step.value = 'options'
+    activityStore.failOperation(FILE_EXPORT_OPERATION_ID, errorMsg.value)
   }
 }
 </script>

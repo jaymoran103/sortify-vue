@@ -7,6 +7,7 @@ import ImportModal from './ImportModal.vue'
 import ExportModal from './ExportModal.vue'
 import ConfirmModal from '../modals/ConfirmModal.vue'
 import ActivityIndicator from '@/components/common/ActivityIndicator.vue'
+import IOSummaryCard from '@/components/dashboard/IOSummaryCard.vue'
 
 const modal = useModal()
 
@@ -90,6 +91,9 @@ async function offerLogout() {
 
     <!-- Activity progress indicator: shows I/O operation status (import/export). Distinct from the Spotify status row above, which tracks auth state. -->
     <ActivityIndicator />
+
+    <!-- Recent Activity Summary: Persistent display of recently completed operations with counts, warnings, and links. -->
+    <IOSummaryCard />
   </div>
 </template>
 
