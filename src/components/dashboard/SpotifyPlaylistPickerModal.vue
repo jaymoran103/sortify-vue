@@ -1,3 +1,11 @@
+<script lang="ts">
+import type { SpotifyPlaylistSummary } from '@/spotify/types'
+
+// Module-level cache: persists across mounts so reopening the picker does not
+// re-fetch the same playlist list. Cleared on explicit retry or after import completes.
+let _playlistCache: SpotifyPlaylistSummary[] | null = null
+</script>
+
 <script setup lang="ts">
 import { onMounted, ref, shallowRef, watch } from 'vue'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
@@ -16,7 +24,7 @@ import ScrollableList from '@/components/common/ScrollableList.vue'
 import SelectableItem from '@/components/common/SelectableItem.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import type { ImportResult } from '@/types/adapters'
-import type { SpotifyPlaylistSummary, SpotifyPaginatedResponse } from '@/spotify/types'
+import type { SpotifyPaginatedResponse } from '@/spotify/types'
 import type { SortOption } from '@/types/ui'
 
 const emit = defineEmits<{
@@ -169,6 +177,16 @@ async function fetchPlaylists(): Promise<void> {
     return
   }
 
+  // Check module-level cache before making API calls. 
+  // This allows for faster reopening of the picker without redundant network requests, while still ensuring that data is fetched fresh on explicit retry or after imports.
+  // FUTURE: Consider adding a timestamp, and invalidating cache after a few minutes, or manual refresh, in case users are actively modifying playlists via spotify while the picked is open. Very much an edge case
+  if (_playlistCache !== null) {
+    playlists.value = _playlistCache
+    statusMsg.value = `Loaded ${_playlistCache.length} Spotify playlists.`
+    step.value = 'ready'
+    return
+  }
+
   const fetched: SpotifyPlaylistSummary[] = []
   try {
     logInfo('Fetching Spotify playlists')
@@ -203,6 +221,7 @@ async function fetchPlaylists(): Promise<void> {
       endpoint = page.next ? normalizeSpotifyEndpoint(page.next) : ''
     }
     playlists.value = fetched
+    _playlistCache = fetched
     statusMsg.value = `Loaded ${fetched.length} Spotify playlists.`
     logInfo('Finished loading Spotify playlists', { totalLoaded: fetched.length })
     step.value = 'ready'
@@ -279,6 +298,7 @@ async function startImport(): Promise<void> {
     logInfo('Spotify import complete', response)
     step.value = 'done'
     activityStore.completeOperation(OPERATION_ID)
+    _playlistCache = null
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Spotify import failed'
     errorMsg.value = message
@@ -290,6 +310,7 @@ async function startImport(): Promise<void> {
 }
 
 function handleRetry(): void {
+  _playlistCache = null
   if (!isAuthenticated.value) {
     login()
     return
