@@ -263,13 +263,11 @@ async function handleCreatePlaylist(): Promise<void> {
 // ─── Keyboard shortcuts ────────────────────
 
 useKeyboardShortcuts({
-  'ctrl+s': (e) => { e.preventDefault(); void handleSave() },
-  'meta+s': (e) => { e.preventDefault(); void handleSave() },
-  'ctrl+a': (e) => { e.preventDefault(); rowSelection.selectAll() },
-  'meta+a': (e) => { e.preventDefault(); rowSelection.selectAll() },
+  'cmd+s': (e) => { e.preventDefault(); void handleSave() },
+  'cmd+a': (e) => { e.preventDefault(); rowSelection.selectAll() },
   'escape': () => { rowSelection.clear() },
-  'delete': () => { if (rowSelection.selectedCount.value > 0) void handleBulkDelete() },
-  'backspace': () => { if (rowSelection.selectedCount.value > 0) void handleBulkDelete() },
+  'cmd+delete': () => { if (rowSelection.selectedCount.value > 0) void handleBulkDelete() },
+  'cmd+backspace': () => { if (rowSelection.selectedCount.value > 0) void handleBulkDelete() },
 })
 </script>
 
