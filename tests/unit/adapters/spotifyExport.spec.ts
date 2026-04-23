@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { spotifyExportAdapter } from '@/adapters/spotifyExport'
+import { spotifyExportAdapter, resolveExportURI } from '@/adapters/spotifyExport'
 import { db } from '@/db'
 import { spotifyApi } from '@/spotify/api'
 import { spotifyAuth } from '@/spotify/auth'
@@ -240,5 +240,73 @@ describe('spotifyExportAdapter', () => {
     )
     expect(addItemsCalls).toHaveLength(1)
     expect((addItemsCalls[0]![1] as { uris: string[] }).uris).toEqual(['spotify:track:abc'])
+  })
+
+  it('exports track using trackID as URI when spotifyURI is missing but trackID is Spotify format', async () => {
+    const noUriTrack = {
+      trackID: 'spotify:track:nouri1',
+      title: 'No URI Track',
+      artist: 'Artist',
+      album: 'Album',
+      source: 'spotify' as const,
+    }
+    await db.tracks.put(noUriTrack)
+    const playlistId = await db.playlists.add({
+      name: 'Legacy Playlist',
+      trackIDs: [noUriTrack.trackID],
+      timeAdded: Date.now(),
+      lastModified: Date.now(),
+    })
+
+    const result = await spotifyExportAdapter.export({ playlistIds: [playlistId] })
+
+    expect(result.playlistsExported).toBe(1)
+    expect(result.errors).toEqual([])
+    const addItemsCalls = spotifyPostMock.mock.calls.filter(([ep]) =>
+      (ep as string).includes('/items'),
+    )
+    expect(addItemsCalls).toHaveLength(1)
+    expect((addItemsCalls[0]![1] as { uris: string[] }).uris).toEqual(['spotify:track:nouri1'])
+  })
+
+  it('skips track when both spotifyURI and trackID are non-Spotify format', async () => {
+    const nonSpotifyTrack = {
+      trackID: 'gen_abc123',
+      title: 'Local Track',
+      artist: 'Artist',
+      album: 'Album',
+      source: 'csv' as const,
+    }
+    await db.tracks.put(nonSpotifyTrack)
+    const playlistId = await db.playlists.add({
+      name: 'Non-Spotify Playlist',
+      trackIDs: [nonSpotifyTrack.trackID],
+      timeAdded: Date.now(),
+      lastModified: Date.now(),
+    })
+
+    const result = await spotifyExportAdapter.export({ playlistIds: [playlistId] })
+
+    expect(result.playlistsExported).toBe(0)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]).toContain('no tracks with Spotify URIs')
+  })
+
+  describe('resolveExportURI', () => {
+    it('returns spotifyURI when valid', () => {
+      expect(resolveExportURI({ trackID: 'gen_x', title: '', artist: '', album: '', source: 'csv', spotifyURI: 'spotify:track:abc' })).toBe('spotify:track:abc')
+    })
+
+    it('falls back to trackID when spotifyURI is absent but trackID is Spotify format', () => {
+      expect(resolveExportURI({ trackID: 'spotify:track:abc', title: '', artist: '', album: '', source: 'spotify' })).toBe('spotify:track:abc')
+    })
+
+    it('returns undefined when neither is a valid Spotify URI', () => {
+      expect(resolveExportURI({ trackID: 'gen_abc', title: '', artist: '', album: '', source: 'csv' })).toBeUndefined()
+    })
+
+    it('returns undefined when spotifyURI is a non-track Spotify URI', () => {
+      expect(resolveExportURI({ trackID: 'gen_abc', title: '', artist: '', album: '', source: 'csv', spotifyURI: 'spotify:album:xyz' })).toBeUndefined()
+    })
   })
 })

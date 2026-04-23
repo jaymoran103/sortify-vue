@@ -1,8 +1,13 @@
 import { db } from '@/db'
+import type { Track } from '@/types/models'
 import type { ExportAdapter, ExportResult } from '@/types/adapters'
 import { spotifyAuth } from '@/spotify/auth'
 import { spotifyApi } from '@/spotify/api'
 import { SLEEP_BETWEEN_PLAYLISTS_MS } from '@/spotify/config'
+
+//TODO: add as optional input
+const PREFIX_PLAYLIST_NAME = '[Sortify] - '
+const PLAYLIST_DESCRIPTION = 'Exported from Sortify - jaymoran103.github.io/sortify-vue'
 
 export interface SpotifyExportOptions {
   playlistIds: number[]
@@ -27,6 +32,20 @@ function logWarning(message: string, details?: unknown): void {
 
 function logError(message: string, details?: unknown): void {
   console.error(`[SpotifyExport] ${message}`, details ?? '')
+}
+
+// Regex for a properly formatted Spotify track URI.
+const SPOTIFY_TRACK_URI_RE = /^spotify:track:[A-Za-z0-9]+$/
+
+// Resolve the Spotify URI to use when exporting a track.
+// Prefers spotifyURI if available
+// fall back to trackID, IF it's a valid Spotify track URI.
+// Returns undefined for tracks that fail both checks, signifying Spotify incompatibility
+export function resolveExportURI(track: Track): string | undefined {
+  const uri = track.spotifyURI as string | undefined
+  if (uri && SPOTIFY_TRACK_URI_RE.test(uri)) return uri
+  if (SPOTIFY_TRACK_URI_RE.test(track.trackID)) return track.trackID
+  return undefined
 }
 
 // Spotify export adapter: exports playlists and tracks to Spotify using the Web API. 
@@ -67,11 +86,8 @@ export const spotifyExportAdapter: ExportAdapter<SpotifyExportOptions> = {
         // Fetch Spotify URIs for all tracks in the playlist, skipping any that are missing or not Spotify tracks.
         const tracks = await db.tracks.bulkGet(playlist.trackIDs)
         const spotifyUris = tracks
-          .filter((track): track is NonNullable<typeof track> => !!track?.spotifyURI?.startsWith('spotify:track:'))
-          .map((track) => track.spotifyURI!)
-
-        //DEBUG
-        console.log(`Playlist: ${playlist.name} – ${playlist.trackIDs.length} tracks, ${spotifyUris.length} Spotify URIs`)
+          .map((track) => (track ? resolveExportURI(track) : undefined))
+          .filter((uri): uri is string => uri !== undefined)
 
         // If no tracks with Spotify URIs, skip creating the playlist and move to the next one. 
         // Log a warning and record an error for reporting.
@@ -92,9 +108,10 @@ export const spotifyExportAdapter: ExportAdapter<SpotifyExportOptions> = {
 
         // Create the playlist on Spotify
         const created = await spotifyApi.post<SpotifyCreatePlaylistResponse>('/me/playlists', {
-          name: playlist.name,
+          // name: `${PREFIX_PLAYLIST_NAME}${playlist.name}`,
+          name: PREFIX_PLAYLIST_NAME+playlist.name,
           public: false,
-          description: 'Exported from Sortify',
+          description: PLAYLIST_DESCRIPTION,
         })
 
         // Add tracks to the playlist in batches, respecting Spotify's limits. NOTE: Leaning conservative for now with lower chunk size

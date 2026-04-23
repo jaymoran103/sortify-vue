@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, afterEach } from 'vitest'
-import { importCsvText, hashTrackId } from '@/adapters/csvImport'
+import { importCsvText, hashTrackId, resolveSpotifyURI } from '@/adapters/csvImport'
 import { db } from '@/db'
 
 describe('csvImport', () => {
@@ -88,5 +88,53 @@ describe('csvImport', () => {
     expect(calls.length).toBe(2)
     expect(calls[0]).toEqual([1, 2])
     expect(calls[1]).toEqual([2, 2])
+  })
+
+  it('promotes Spotify-format trackID to spotifyURI when "track uri" column used', async () => {
+    const csv =
+      'track uri,title,artist,album\nspotify:track:4NtwoZQaUXX082YmRQ2qcN,Song,Artist,Album'
+    await importCsvText(csv, 'Playlist')
+    const tracks = await db.tracks.toArray()
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0]!.spotifyURI).toBe('spotify:track:4NtwoZQaUXX082YmRQ2qcN')
+  })
+
+  it('promotes Spotify-format trackID to spotifyURI when "uri" column used', async () => {
+    const csv = 'uri,title,artist,album\nspotify:track:abc123def,Song,Artist,Album'
+    await importCsvText(csv, 'Playlist')
+    const tracks = await db.tracks.toArray()
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0]!.spotifyURI).toBe('spotify:track:abc123def')
+  })
+
+  it('does not promote non-Spotify trackID to spotifyURI', async () => {
+    const csv = 'trackID,title,artist,album\ngen_abc123,Song,Artist,Album'
+    await importCsvText(csv, 'Playlist')
+    const tracks = await db.tracks.toArray()
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0]!.spotifyURI).toBeUndefined()
+  })
+
+  it('explicit spotifyURI column takes precedence over trackID promotion', async () => {
+    const csv =
+      'trackID,title,artist,album,spotifyURI\nspotify:track:aaa,Song,Artist,Album,spotify:track:bbb'
+    await importCsvText(csv, 'Playlist')
+    const tracks = await db.tracks.toArray()
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0]!.spotifyURI).toBe('spotify:track:bbb')
+  })
+
+  describe('resolveSpotifyURI', () => {
+    it('returns explicit URI when provided', () => {
+      expect(resolveSpotifyURI('spotify:track:aaa', 'spotify:track:bbb')).toBe('spotify:track:bbb')
+    })
+
+    it('promotes Spotify-format trackID when no explicit URI', () => {
+      expect(resolveSpotifyURI('spotify:track:abc123', undefined)).toBe('spotify:track:abc123')
+    })
+
+    it('returns undefined for non-Spotify trackID with no explicit URI', () => {
+      expect(resolveSpotifyURI('gen_abc123', undefined)).toBeUndefined()
+    })
   })
 })

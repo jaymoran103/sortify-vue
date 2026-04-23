@@ -65,6 +65,18 @@ export function hashTrackId(title: string, artist: string, album: string): strin
   return `gen_${Math.abs(hash).toString(16)}`
 }
 
+// Regex for a well-formed Spotify track URI.
+const SPOTIFY_TRACK_URI_RE = /^spotify:track:[A-Za-z0-9]+$/
+
+// Resolves the best spotifyURI for a track.
+// Prefers an explicit spotifyURI field; falls back to trackID if it's a valid Spotify track URI.
+// Returns undefined for non-Spotify tracks.
+export function resolveSpotifyURI(trackID: string, explicitSpotifyURI: string | undefined): string | undefined {
+  if (explicitSpotifyURI) return explicitSpotifyURI
+  if (SPOTIFY_TRACK_URI_RE.test(trackID)) return trackID
+  return undefined
+}
+
 // Parses a single CSV line into an array of values, handling quoted fields and escaped quotes. //TODO review comma handling and test more thoroughly for edge cases.
 export function parseCSVLine(line: string): string[] {
   const fields: string[] = []
@@ -198,7 +210,8 @@ export async function importCsvText(
       album: fields.album ?? '',
       source,
     }
-    if (fields.spotifyURI) track.spotifyURI = fields.spotifyURI
+    const spotifyURI = resolveSpotifyURI(trackID, fields.spotifyURI)
+    if (spotifyURI) track.spotifyURI = spotifyURI
 
     // Include any additional fields that were extracted and are not part of the core required fields.
     for (const [key, val] of Object.entries(fields)) {
