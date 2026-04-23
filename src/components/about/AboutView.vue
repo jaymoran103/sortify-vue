@@ -1,7 +1,13 @@
 <script setup lang="ts">
-
+import TabbedDiveSection from './TabbedDiveSection.vue'
 import FeatureCard from './FeatureCard.vue'
 
+
+const gliderTabs = [
+  { label: 'Workspace Overview', sub: 'Its cool' },
+  { label: 'Workspace Columns', sub: 'dont sleep on em' },
+  { label: 'Context actions', sub: 'tab 3' },
+]
 const featureCards = [
   {
     icon: '⊞',
@@ -80,10 +86,21 @@ const featureCards = [
       </div>
     </section>
 
+    <!-- SECTION: WORKSPACE -->
+    <section class="workspace-dive">
+      <h2 class="section-heading">Multi-playlist Workspace</h2>
+      <TabbedDiveSection :tabs="workspaceTabs">
+
+        <template #default="{ activeTab }">
+          <PageMock :activeTab="activeTab" />
+        </template>
+
+      </TabbedDiveSection>
+    </section>
 
     
 
-    <!-- SECTION:DATA MODEL DIAGRAM -->
+    <!-- DATA MODEL DIAGRAM -->
     <section class="data-model">
       <h2 class="section-heading">Move your data flexibly.</h2>
       <p class="data-model-sub">Pull from Spotify once. Edit in your browser. Save to a file you own. Loop it as many times as you want.</p>
