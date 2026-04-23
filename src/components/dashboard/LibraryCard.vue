@@ -12,6 +12,8 @@ import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
+import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
+import RenamePlaylistModal from '@/components/dashboard/RenamePlaylistModal.vue'
 import type { Playlist, Track } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
@@ -96,6 +98,38 @@ async function openDeletePlaylists(): Promise<void> {
   await playlistStore.deletePlaylists(ids)
 }
 
+async function openDeleteTracks(): Promise<void> {
+  const ids = await modal.open<string[]>(TrackSelectModal, {})
+  if (!ids?.length) return
+  await trackStore.deleteTracks(ids)
+}
+
+async function openDeleteUnreferencedTracks(): Promise<void> {
+  const referencedIds = new Set((playlistStore.playlists ?? []).flatMap((p) => p.trackIDs))
+  const orphanedIds = (trackStore.tracks ?? [])
+    .map((t) => t.trackID)
+    .filter((id) => !referencedIds.has(id))
+
+  if (orphanedIds.length === 0) {
+    await modal.open<true>(ConfirmModal, {
+      title: 'No Unreferenced Tracks',
+      message: 'All tracks are referenced by at least one playlist.',
+      confirmLabel: 'OK',
+      danger: false,
+    })
+    return
+  }
+
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Delete Unreferenced Tracks',
+    message: `This will permanently delete ${orphanedIds.length} track(s) not in any playlist. This cannot be undone.`,
+    confirmLabel: `Delete ${orphanedIds.length} track(s)`,
+    danger: true,
+  })
+  if (!confirmed) return
+  await trackStore.deleteTracks(orphanedIds)
+}
+
 // Action handler for "Clear Library" option: destructive action with confirmation modal
 async function openClearLibrary(): Promise<void> {
   const confirmed = await modal.open<true>(ConfirmModal, {
@@ -109,10 +143,21 @@ async function openClearLibrary(): Promise<void> {
   await playlistStore.clearPlaylists()
 }
 
+// Action handler for renaming a playlist: opens a modal with a text input, then updates the playlist name if it was changed.
+async function openRenamePlaylist(playlist: Playlist): Promise<void> {
+  const newName = await modal.open<string>(RenamePlaylistModal, { playlist })
+  if (newName && newName !== playlist.name) {
+    await playlistStore.updatePlaylist(playlist.id!, { name: newName as string })
+  }
+}
+
 // Open context menu with simple options for library management
 function showManagementMenu(event: MouseEvent): void {
   contextMenu.show(event, [
     { label: 'Delete Playlists…', action: openDeletePlaylists },
+    { label: 'Delete Tracks…',    action: openDeleteTracks },
+    { divider: true },
+    { label: 'Delete Unreferenced Tracks…', action: openDeleteUnreferencedTracks },
     { divider: true },
     { label: 'Clear Library…',    action: openClearLibrary },
   ])
@@ -193,6 +238,13 @@ function showManagementMenu(event: MouseEvent): void {
               <span class="library-card__meta text-muted text-sm">
                 {{ (item as Playlist).trackIDs.length }} tracks
               </span>
+              <button
+                class="library-card__rename-btn"
+                title="Rename playlist"
+                @click.stop="openRenamePlaylist(item as Playlist)"
+              >
+                ✎
+              </button>
             </span>
           </div>
         </template>
@@ -341,6 +393,8 @@ function showManagementMenu(event: MouseEvent): void {
 
 .library-card__row:hover {
   background: var(--color-row-hover);
+}
+.library-card__row:hover .library-card__rename-btn {
   opacity: 1;
 }
 
@@ -410,5 +464,18 @@ function showManagementMenu(event: MouseEvent): void {
   color: var(--color-text-muted);
   /* text-transform: uppercase; */
   letter-spacing: 0.06em;
+}
+.library-card__rename-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  padding: 0 var(--space-1);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+.library-card__rename-btn:hover {
+  color: var(--color-text);
 }
 </style>

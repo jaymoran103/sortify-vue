@@ -38,6 +38,11 @@ export const useTrackStore = defineStore('tracks', () => {
     await db.tracks.delete(id)
   }
 
+  /** Deletes multiple tracks from the database by their string-based trackIDs. */
+  async function deleteTracks(ids: string[]): Promise<void> {
+    await db.tracks.bulkDelete(ids)
+  }
+
   /** Clears all tracks from the database. */
   async function clearTracks(): Promise<void> {
     await db.tracks.clear()
@@ -56,6 +61,7 @@ export const useTrackStore = defineStore('tracks', () => {
     addTrack,
     addTracks,
     deleteTrack,
+    deleteTracks,
     clearTracks,
     trackCount,
   }
