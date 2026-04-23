@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import TabbedDiveSection from './TabbedDiveSection.vue'
+import WorkspaceMock from './WorkspaceMock.vue'
 import FeatureCard from './FeatureCard.vue'
 
-
-const gliderTabs = [
-  { label: 'Workspace Overview', sub: 'Its cool' },
-  { label: 'Workspace Columns', sub: 'dont sleep on em' },
-  { label: 'Context actions', sub: 'tab 3' },
+const workspaceTabs = [
+  { label: 'Edit memberships', sub: 'Toggle tracks across playlists. Nothing writes until you save.' },
+  { label: 'Manage playlists', sub: 'Rename, duplicate, or remove columns. Reorder by drag.' },
+  { label: 'Save & Export', sub: 'Write back to your library or download as CSV / JSON.' },
 ]
 const featureCards = [
   {
@@ -92,13 +92,12 @@ const featureCards = [
       <TabbedDiveSection :tabs="workspaceTabs">
 
         <template #default="{ activeTab }">
-          <PageMock :activeTab="activeTab" />
+          <WorkspaceMock :activeTab="activeTab" />
         </template>
 
       </TabbedDiveSection>
     </section>
 
-    
 
     <!-- DATA MODEL DIAGRAM -->
     <section class="data-model">
