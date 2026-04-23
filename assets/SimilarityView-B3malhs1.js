@@ -1,1 +1,0 @@
-import{_ as t}from"./index-P6A4XxTE.js";import{U as i,Y as r,Z as s}from"./api-D_ILkV0w.js";const o={},a={class:"similarity-view"};function n(c,e){return i(),r("div",a,[...e[0]||(e[0]=[s("h1",null,"Similarity",-1)])])}const _=t(o,[["render",n]]);export{_ as default};
