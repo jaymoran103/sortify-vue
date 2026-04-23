@@ -20,6 +20,7 @@ import { useListSort } from '@/composables/useListSort'
 import { useSelectedFirstDisplay } from '@/composables/useSelectedFirstDisplay'
 import { useActivityStore } from '@/stores/activity'
 import { getImporter } from '@/adapters/registry'
+import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
 import type { SpotifyImportOptions } from '@/adapters/spotifyImport'
 import { spotifyApi } from '@/spotify/api'
 import { normalizeSpotifyEndpoint } from '@/spotify/utils'
@@ -322,7 +323,7 @@ async function startImport(): Promise<void> {
 function handleRetry(): void {
   _playlistCache = null
   if (!isAuthenticated.value) {
-    login()
+    login(PENDING_ACTIONS.OPEN_SPOTIFY_PICKER)
     return
   }
   fetchPlaylists()

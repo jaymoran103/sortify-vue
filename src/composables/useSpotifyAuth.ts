@@ -3,12 +3,15 @@ import type { Ref } from 'vue'
 import { spotifyAuth } from '@/spotify/auth'
 import { spotifyApi } from '@/spotify/api'
 import type { SpotifyUserProfile } from '@/spotify/types'
+import { savePendingIntent, PENDING_ACTIONS } from '@/spotify/pendingIntent'
 
 // Module-level reactive state: shared across all composable consumers.
 const _cachedUser = ref<SpotifyUserProfile | null>(null)
 const _isAuthenticated = ref(spotifyAuth.isAuthenticated())
 const _isLoading = ref(false)
 const _error = ref<string | null>(null)
+// Set after OAuth callback completes; consumed by IOCard to re-open the intended action.
+const _pendingAction = ref<string | null>(null)
 let _fetchUserInFlight: Promise<void> | null = null
 
 // Module-level helpers: operate on shared state, safe to call outside a component.
@@ -47,6 +50,12 @@ export async function handleSpotifyCallback(): Promise<void> {
   }
 }
 
+// Exported standalone setter: called from main.ts after consuming the pending intent.
+// Follows the same module-level pattern as handleSpotifyCallback — safe to call outside a component context.
+export function setPendingAction(action: string): void {
+  _pendingAction.value = action
+}
+
 // Returns reactive auth state and actions for use in components.
 // All consumers share the same underlying state, so updates propagate immediately.
 export function useSpotifyAuth(): {
@@ -54,13 +63,17 @@ export function useSpotifyAuth(): {
   user: Ref<SpotifyUserProfile | null>
   isLoading: Ref<boolean>
   error: Ref<string | null>
-  login: () => Promise<void>
+  pendingAction: Ref<string | null>
+  login: (pendingAction?: string) => Promise<void>
   logout: () => void
+  clearPendingAction: () => void
   handleCallback: () => Promise<void>
 } {
-  // Initiates PKCE login flow — redirects to Spotify authorization page.
-  async function login(): Promise<void> {
+  // Initiates PKCE login flow — saves pending intent then redirects to Spotify authorization page.
+  // pendingAction defaults to CONNECT_ONLY so the IOCard connect button never leaves a stale pending action.
+  async function login(pendingAction: string = PENDING_ACTIONS.CONNECT_ONLY): Promise<void> {
     _error.value = null
+    savePendingIntent({ action: pendingAction, returnRoute: window.location.hash || '#/' })
     await spotifyAuth.authenticate()
   }
 
@@ -70,6 +83,11 @@ export function useSpotifyAuth(): {
     _isAuthenticated.value = false
     _cachedUser.value = null
     _error.value = null
+  }
+
+  // Consumes the pending action after IOCard has acted on it so it cannot fire again on re-mount.
+  function clearPendingAction(): void {
+    _pendingAction.value = null
   }
 
   onMounted(() => {
@@ -84,8 +102,10 @@ export function useSpotifyAuth(): {
     user: _cachedUser,
     isLoading: _isLoading,
     error: _error,
+    pendingAction: _pendingAction,
     login,
     logout,
+    clearPendingAction,
     handleCallback: handleSpotifyCallback,
   }
 }

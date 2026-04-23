@@ -15,6 +15,42 @@ vi.mock('@/stores/playlists', () => ({
   usePlaylistStore: () => ({ playlists: mockPlaylists }),
 }))
 
+// Mutable auth state controlled per-test
+const mockAuthState = vi.hoisted(() => ({
+  isAuthenticated: false,
+  user: null as null | { display_name: string },
+  isLoading: false,
+  error: null as string | null,
+  pendingAction: null as string | null,
+}))
+const mockLogin = vi.fn()
+const mockLogout = vi.fn()
+const mockClearPendingAction = vi.fn()
+
+vi.mock('@/composables/useSpotifyAuth', async () => {
+  const { ref } = await import('vue')
+  return {
+    useSpotifyAuth: () => ({
+      isAuthenticated: ref(mockAuthState.isAuthenticated),
+      user: ref(mockAuthState.user),
+      isLoading: ref(mockAuthState.isLoading),
+      error: ref(mockAuthState.error),
+      pendingAction: ref(mockAuthState.pendingAction),
+      login: mockLogin,
+      logout: mockLogout,
+      clearPendingAction: mockClearPendingAction,
+      handleCallback: vi.fn(),
+    }),
+  }
+})
+
+vi.mock('@/spotify/pendingIntent', () => ({
+  PENDING_ACTIONS: {
+    OPEN_SPOTIFY_PICKER: 'open-spotify-picker',
+    CONNECT_ONLY: 'connect-only',
+  },
+}))
+
 function mountCard() {
   return mount(IOCard, {
     global: { plugins: [createPinia()] },
@@ -24,7 +60,15 @@ function mountCard() {
 describe('IOCard', () => {
   beforeEach(() => {
     mockOpen.mockClear()
+    mockLogin.mockClear()
+    mockLogout.mockClear()
+    mockClearPendingAction.mockClear()
     mockPlaylists = []
+    mockAuthState.isAuthenticated = false
+    mockAuthState.user = null
+    mockAuthState.isLoading = false
+    mockAuthState.error = null
+    mockAuthState.pendingAction = null
   })
 
   it('shows Spotify placeholder text', () => {
@@ -70,5 +114,34 @@ describe('IOCard', () => {
     await wrapper.find('#export-button').trigger('click')
     expect(mockOpen).toHaveBeenCalledWith(ExportModal)
   })
-})
 
+  // ── Pending action on mount ──────────────────────────────────────────────
+  it('opens ImportModal with autoSpotify:true when pending action is open-spotify-picker', () => {
+    mockAuthState.pendingAction = 'open-spotify-picker'
+    mountCard()
+    expect(mockClearPendingAction).toHaveBeenCalled()
+    expect(mockOpen).toHaveBeenCalledWith(ImportModal, { autoSpotify: true })
+  })
+
+  it('does not open any modal when pending action is null', () => {
+    mockAuthState.pendingAction = null
+    mountCard()
+    expect(mockOpen).not.toHaveBeenCalled()
+  })
+
+  it('does not open any modal when pending action is connect-only', () => {
+    mockAuthState.pendingAction = 'connect-only'
+    mountCard()
+    expect(mockOpen).not.toHaveBeenCalled()
+  })
+
+  it('calls clearPendingAction before opening the modal to prevent re-firing', () => {
+    mockAuthState.pendingAction = 'open-spotify-picker'
+    const callOrder: string[] = []
+    mockClearPendingAction.mockImplementation(() => callOrder.push('clear'))
+    mockOpen.mockImplementation(() => { callOrder.push('open'); return Promise.resolve() })
+    mountCard()
+    expect(callOrder[0]).toBe('clear')
+    expect(callOrder[1]).toBe('open')
+  })
+})

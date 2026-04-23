@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useModal } from '@/composables/useModal'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
+import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
 import ImportModal from './ImportModal.vue'
 import ExportModal from './ExportModal.vue'
 import ConfirmModal from '../modals/ConfirmModal.vue'
@@ -16,7 +17,7 @@ const playlistStore = usePlaylistStore()
 const hasPlaylists = computed(() => (playlistStore.playlists ?? []).length > 0)
 
 // Access Spotify auth state for status indicator and login action
-const { isAuthenticated, user, isLoading, error, login, logout } = useSpotifyAuth()
+const { isAuthenticated, user, isLoading, error, login, logout, pendingAction, clearPendingAction } = useSpotifyAuth()
 
 function openImportModal() {
   modal.open(ImportModal)
@@ -39,6 +40,15 @@ async function offerLogout() {
     logout()
   }
 }
+
+// After OAuth redirect, IOCard is the first dashboard component to mount.
+// If a pending action was saved before the redirect, consume and act on it.
+onMounted(() => {
+  if (pendingAction.value === PENDING_ACTIONS.OPEN_SPOTIFY_PICKER) {
+    clearPendingAction()
+    modal.open(ImportModal, { autoSpotify: true })
+  }
+})
 </script>
 
 <template>
