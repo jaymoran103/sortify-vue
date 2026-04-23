@@ -1,7 +1,36 @@
 <script setup lang="ts">
 
+import FeatureCard from './FeatureCard.vue'
 
+const featureCards = [
+  {
+    icon: '⊞',
+    title: 'Workspace',
+    description: 'Load any set of playlists into a shared grid. View and toggle track membership. Create, combine and refine.',
+  },
+  {
+    icon: '⊙',
+    title: 'Spotify Sync',
+    description: "Sign in once to pull your Spotify library in. No passwords stored — just a token that lets Sortify read your playlists.",
+  },
+  {
+    icon: '▤',
+    title: 'Local Files',
+    description: "Import from CSV or JSON, export any time. If Spotify disappears tomorrow, your organized library doesn't.",
+  },
+  {
+    icon: '◈',
+    title: 'Similarity',
+    // description: "Hunt down duplicates, equivalents, and overlaps across your library. Then clean up the mess.",
+    description: "Scan your library for duplicates, equivalents, and overlaps. Then sort them out.",
+    // description: "Find the playlists that overlap the most, the songs you add everywhere, and equivalent versions with different names.",
+    // description: "Find the playlists that overlap the most, the songs you add everywhere, and equivalent versions with different names. Then do something about it",
 
+    // feature spam
+    // description: "Find that song saved in six different playlists. Spot the live version you forgot about. See which playlists actually share the same fifteen songs, and condense.",
+    badge: 'Coming soon',
+  },
+]
 </script>
 
 <template>
@@ -40,51 +69,56 @@
     <section class="feature-cards">
       <h2 class="section-heading">The tools.</h2>
       <div class="cards-grid">
-
-        <!-- FEATURE 1 -->
-          <div class="feat-card">
-            <div class="feat-card-icon">{{ '⊞' }}</div>
-            <div class="feat-card-body">
-            <h3>{{ 'Workspace' }}</h3>
-            <p>{{ 'Load any set of playlists into a shared grid. View and toggle track membership. Create, combine and refine.' }}</p>
-          </div>
-        </div>
-
-        <!-- FEATURE 2 -->
-        <div class="feat-card">
-              <div class="feat-card-icon">{{ '⊙' }}</div>
-              <div class="feat-card-body">
-            <div class="feat-card-body">
-              <h3>{{ 'Spotify Sync' }}</h3>
-              <p>{{ 'Sync your playlists with Spotify. Keep your library up-to-date effortlessly.' }}</p>
-            </div>
-          </div>
-        </div>
-        
-
-        <!-- FEATURE 3 -->
-        <div class="feat-card">
-            <div class="feat-card-icon">{{ '▤' }}</div>
-            <div class="feat-card-body">
-          <div class="feat-card-body">
-            <h3>{{ 'Local Files' }}</h3>
-            <p>{{ "Import from CSV or JSON, export any time. If Spotify disappears tomorrow, your organized library doesn't." }}</p>
-          </div>
-        </div>
-        </div>
-
-        <!-- FEATURE 4 -->
-        <div class="feat-card">
-            <div class="feat-card-icon">{{ '◈' }}</div>
-            <div class="feat-card-body">
-          <div class="feat-card-body">
-            <h3>{{ 'Similarity' }}</h3>
-            <p>{{ "Find the playlists that overlap the most, the songs you add everywhere, and equivalent versions with different names." }}</p>
-          </div>
-        </div>
+        <FeatureCard
+          v-for="card in featureCards"
+          :key="card.title"
+          :icon="card.icon"
+          :title="card.title"
+          :description="card.description"
+          :badge="card.badge"
+        />
       </div>
+    </section>
 
-        
+
+    
+
+    <!-- SECTION:DATA MODEL DIAGRAM -->
+    <section class="data-model">
+      <h2 class="section-heading">Your data makes a loop.</h2>
+      <p class="data-model-sub">Pull from Spotify once. Edit in your browser. Save to a file you own. Loop it as many times as you want.</p>
+      <div class="stack-diagram">
+
+        <div class="stack-node">
+          <div class="stack-icon">⊙</div>
+          <div class="stack-label">Spotify</div>
+          <div class="stack-desc">Your listening history and saved playlists. Sign in once to pull them in — or skip it entirely.</div>
+        </div>
+
+        <div class="stack-arrow">
+          <div class="stack-arrow-line"></div>
+          <div class="stack-arrow-label">sync</div>
+        </div>
+
+        <div class="stack-node stack-node-accent">
+          <!-- <div class="stack-icon">◻</div> -->
+          <div class="stack-icon">⎈</div>
+          <div class="stack-label">Browser</div>
+          <div class="stack-desc">Stored locally in IndexedDB. Private, offline-capable, no login required. This is your working copy.</div>
+        </div>
+
+        <div class="stack-arrow">
+          <div class="stack-arrow-line"></div>
+          <div class="stack-arrow-label">load</div>
+        </div>
+
+        <div class="stack-node">
+          <!-- <div class="stack-icon">🖴</div> -->
+          <div class="stack-icon">▤</div>
+          <div class="stack-label">Your files</div>
+          <div class="stack-desc">CSV or JSON — yours forever. Opens in any spreadsheet app. Re-importable into Sortify on any device.</div>
+        </div>
+
       </div>
     </section>
 
@@ -95,7 +129,7 @@
 
     
 
-    <!-- 4. DATA MODEL -->
+    <!--SECTION: DATA MODEL -->
      
     <section class="data-model">
       <h2 class="section-heading">Move your data, flexibly</h2>
@@ -103,10 +137,10 @@
       
     </section>
 
-    <!-- 5. SIMILARITY (coming soon) -->
+    <!-- SECTION SIMILARITY (coming soon) -->
     <!-- <section"> </section> -->
 
-    <!-- 6. ETHOS -->
+    <!-- SECTION: ETHOS -->
     <section class="ethos">
       <h2 class="section-heading">Built for you, not for engagement.</h2>
       <dl class="ethos-list">
@@ -162,13 +196,13 @@
   font-size: 3rem;
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 .hero-sub {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-lg);
   color: var(--color-text-muted);
   max-width: 580px;
-  margin: 0 auto var(--space-4);
+  margin: 0 auto var(--space-6);
 }
 
 /* ── Section baseline ── */
@@ -183,6 +217,55 @@
   font-size: 2rem;
   font-weight: var(--font-weight-bold);
   margin-bottom: var(--space-5);
+}
+
+/* ── Data model ── */
+.data-model-sub { color: var(--color-text-muted); font-size: var(--font-size-md); max-width: 560px; margin-bottom: var(--space-6); }
+
+.stack-diagram { display: flex; align-items: center; }
+
+.stack-node {
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  text-align: center;
+}
+.stack-node-accent {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+}
+.stack-icon { font-size: 1.75rem; line-height: 1; color: var(--color-text-muted); }
+.stack-label { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text); }
+.stack-desc { font-size: var(--font-size-sm); color: var(--color-text-muted); line-height: var(--line-height-normal); }
+
+.stack-arrow { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  gap: var(--space-1); 
+  padding: 0 var(--space-2); 
+  flex-shrink: 0; 
+}
+.stack-arrow-line { 
+  width: 48px; 
+  height: 2px; 
+  background: var(--color-border-subtle); 
+  position: relative; 
+}
+.stack-arrow-line::after { 
+  content: '▶'; 
+  position: absolute; 
+  right: -6px; 
+  top: -7px; 
+  font-size: 10px; 
+  color: var(--color-text-muted); 
+}
+.stack-arrow-label { 
+  font-size: var(--font-size-xs); 
+  color: var(--color-text-muted); 
+  /* text-transform: uppercase;  */
 }
 
 /* ── Feature cards ── */
@@ -200,23 +283,25 @@
   gap: var(--space-6);
   margin-top: var(--space-5);
 }
-.ethos-item { display: flex; 
+.ethos-item { 
+  display: flex; 
   flex-direction: column; 
   gap: var(--space-2); 
-
+}
+.ethos-item dt { 
+    font-size: var(--font-size-md); 
+    font-weight: var(--font-weight-semibold); 
+    color: var(--color-text); 
+}
+.ethos-item dd { 
   font-size: var(--font-size-base); 
   color: var(--color-text-muted); 
   line-height: var(--line-height-normal); 
 }
 
-.ethos-item dt {
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
-} 
-
 /* ── Call to action ── */
 .cta {
-  padding: var(--space-8) var(--space-8) ;
+  padding: var(--space-8) 0;
   text-align: center;
   display: flex;
   flex-direction: column;
