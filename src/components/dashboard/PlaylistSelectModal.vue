@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed } from 'vue'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
+import { useSelectedFirstDisplay } from '@/composables/useSelectedFirstDisplay'
 
 import ControlBar from '@/components/common/ControlBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
@@ -25,7 +25,6 @@ const emit = defineEmits<{
   confirm: [ids: number[]]
 }>()
 
-const router = useRouter()
 const playlistStore = usePlaylistStore()
 
 // Get all playlists from the store, then chain filter and sort composables.
@@ -54,18 +53,10 @@ const selection = useListSelection<Playlist>(
   allPlaylists,
 )
 
-// Determine displayItems: sorted output prioritizing selections is applied on pipeline change
-// Implemented as a watch (not computed) so that selection changes do not trigger a re-render. Only manual control updates (sort/filter) will reorder the list, so results don't jump around during selection. 
-const displayItems = shallowRef<Playlist[]>([])
-watch(
+const { displayItems } = useSelectedFirstDisplay(
   sorted,
-  (newSorted) => {
-    const ids = selection.selectedIds.value // non-reactive snapshot: not a watch dependency
-    displayItems.value = [...newSorted].sort((a, b) => {
-      return (ids.has(String(a.id!)) ? 0 : 1) - (ids.has(String(b.id!)) ? 0 : 1)
-    })
-  },
-  { immediate: true },
+  selection.selectedIds,
+  (item) => String(item.id!),
 )
 
 // allSelected: true when every currently visible (sorted/filtered) item is selected.
@@ -86,49 +77,43 @@ function toggleSelectAll(): void {
 }
 
 function confirmSelection(): void {
-  if (props.mode === 'export' || props.mode === 'delete') {
-    const ids = [...selection.selectedIds.value].map(Number)
-    emit('confirm', ids)
-  } else {
-    const ids = [...selection.selectedIds.value].join(',')
-    router.push({ path: '/workspace', query: { playlists: ids } })
-    emit('cancel')
-  }
+  const ids = [...selection.selectedIds.value].map(Number)
+  emit('confirm', ids)
 }
 </script>
 
 <template>
-  <div class="playlist-select">
-    <h2 class="playlist-select__title">Select Playlists</h2>
+  <div class="selection-modal">
+    <h2 class="selection-modal__title">Select Playlists</h2>
 
-    <ControlBar>
-      <SearchBar v-model="query" placeholder="Filter playlists…" />
-      <SelectDropdown v-model="currentSort" :options="sortOptions" />
-    </ControlBar>
+    <div class="selection-modal__body">
+      <ControlBar>
+        <SearchBar v-model="query" placeholder="Filter playlists…" />
+        <SelectDropdown v-model="currentSort" :options="sortOptions" />
+      </ControlBar>
 
-    <div class="playlist-select__list">
-      <ScrollableList :items="displayItems" key-field="id" :estimate-size="48">
-        <template #item="{ item }">
-          <!-- Playlist Item: Display name with track count as subtitle -->
-          <SelectableItem
-            :label="(item as Playlist).name"
-            :subtitle="`${(item as Playlist).trackIDs.length} tracks`"
-            :selected="selection.isSelected(String((item as Playlist).id!))"
-            @toggle="selection.toggle(String((item as Playlist).id!))"
-          />
-        </template>
-        <template #empty>
-          <p class="text-muted">No matching playlists</p>
-        </template>
-      </ScrollableList>
+      <div class="selection-modal__list">
+        <ScrollableList :items="displayItems" key-field="id" :estimate-size="56">
+          <template #item="{ item }">
+            <SelectableItem
+              :label="(item as Playlist).name"
+              :subtitle="`${(item as Playlist).trackIDs.length} tracks`"
+              :selected="selection.isSelected(String((item as Playlist).id!))"
+              @toggle="selection.toggle(String((item as Playlist).id!))"
+            />
+          </template>
+          <template #empty>
+            <p class="text-muted">No matching playlists</p>
+          </template>
+        </ScrollableList>
+      </div>
     </div>
 
-    <!-- Footer with action buttons -->
-    <div class="playlist-select__footer">
+    <div class="selection-modal__footer">
       <button class="btn btn--secondary playlist-select__select-all" @click="toggleSelectAll">
         {{ allSelected ? 'Deselect All' : 'Select All' }}
       </button>
-      <div class="playlist-select__footer-actions">
+      <div class="selection-modal__footer-actions">
         <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
         <button
           class="btn"
@@ -144,35 +129,7 @@ function confirmSelection(): void {
 </template>
 
 <style scoped>
-.playlist-select {
-  padding: var(--space-5);
-  min-width: 440px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.playlist-select__title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-}
-
-.playlist-select__list {
-  height: 320px;
-  overflow: hidden;
-  border-top: 1px solid var(--color-border-subtle);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.playlist-select__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.playlist-select__footer-actions {
-  display: flex;
-  gap: var(--space-2);
+.playlist-select__select-all {
+  flex-shrink: 0;
 }
 </style>

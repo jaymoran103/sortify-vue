@@ -193,7 +193,7 @@ function showManagementMenu(event: MouseEvent): void {
         v-if="activeView === 'playlists'"
         :items="filteredPlaylists"
         key-field="id"
-        :estimate-size="40"
+        :estimate-size="48"
       >
         <template #item="{ item }">
           <div class="library-card__row">
@@ -219,7 +219,7 @@ function showManagementMenu(event: MouseEvent): void {
             </p>
             <template v-else>
               <p class="text-muted">No playlists yet.</p>
-              <p class="text-muted">Import some tracks to get started.</p>
+              <p class="text-muted">Import some to get started.</p>
             </template>
           </div>
         </template>
@@ -230,7 +230,7 @@ function showManagementMenu(event: MouseEvent): void {
         v-else
         :items="filteredTracks"
         key-field="trackID"
-        :estimate-size="40"
+        :estimate-size="48"
       >
         <template #item="{ item }">
           <div class="library-card__row">
@@ -348,7 +348,9 @@ function showManagementMenu(event: MouseEvent): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-5);
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3);
   font-size: var(--font-size-sm);
   gap: var(--space-3);
 }

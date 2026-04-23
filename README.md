@@ -1,54 +1,48 @@
-# sortify-vue
+# Sortify
 
-This template should help get you started developing with Vue 3 in Vite.
 
-## Recommended IDE Setup
+A Vue 3 single-page application for managing Spotify playlist libraries — import, organize, edit, and export playlists locally with full Spotify PKCE integration. [Live on GitHub Pages](https://jaymoran103.github.io/sortify-vue/#/). 
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+For the original implementation with Vanilla JS and IndexedDB, see the [Vanilla Repo](https://github.com/jaymoran103/sortify-feb), hosted [here](https://jaymoran103.github.io/sortify-feb/)
 
-## Recommended Browser Setup
+## Features
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+- **Dashboard** — import/export playlists via CSV, JSON, or Spotify OAuth
+- **Workspace** — load a session, edit track membership across playlists in a virtualized table, and save changes back to the local library
+- **Local persistence** — all data lives in IndexedDB via Dexie; no backend, no login required beyond Spotify
+- **Save Buffer** – workspace changes arent applied to your local version until you save them. 
+- **Spotify integration** — PKCE OAuth flow with a typed API client and token lifecycle management
+- **IO Adapters** — swappable import/export adapters ensure a consistent process with progress updates for transparency, regardless of operation scale or type.
+---
 
-## Type Support for `.vue` Imports in TS
+## Architecture
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+| Layer | Choice |
+|---|---|
+| Framework | Vue 3 · TypeScript strict · Vite |
+| State | Pinia (setup stores) |
+| Persistence | Dexie.js (IndexedDB, liveQuery) |
+| Routing | Vue Router hash mode |
+| Virtual scroll | @tanstack/vue-virtual |
+| Testing | Vitest + Playwright |
 
-## Customize configuration
+The app is organized around three concerns that don't bleed into each other: 
+- `Stores` own data and write to Dexie,
+- `Composables` own reusable UI logic (filtering, sorting, selection, modals), 
+- `Components` compose both without owning either. The workspace uses a buffer pattern — playlists are cloned into memory on session load, edits stay local, and a save action flushes to IDB.
 
-See [Vite Configuration Reference](https://vite.dev/config/).
+<!-- See ARCHITECTURE.md for the full reference. -->
+---
+## Project Outline
+Upcoming feature additions include: 
 
-## Project Setup
+From Vanilla Implementation:
+- Refined reporting for I/O warnings
+- Similarity Engine
+- Advanced workspace features
 
-```sh
-pnpm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
-pnpm dev
-```
-
-### Type-Check, Compile and Minify for Production
-
-```sh
-pnpm build
-```
-
-### Run Unit Tests with [Vitest](https://vitest.dev/)
-
-```sh
-pnpm test:unit
-```
-
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
-pnpm lint
-```
+New:
+- Dedicated route for similarity visualization and configruation
+- Dedicated library page
+- Shell-based layout promoting the library as the primary view.
+- Integration of playback SDK for song access while editing.

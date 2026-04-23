@@ -1,23 +1,37 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { getImporter } from '@/adapters/registry'
-import ProgressBar from '@/components/common/ProgressBar.vue'
+import { useModal } from '@/composables/useModal'
+import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
+import { useActivityStore } from '@/stores/activity'
+import SpotifyPlaylistPickerModal from './SpotifyPlaylistPickerModal.vue'
 import type { ImportResult } from '@/types/adapters'
-
-type Step = 'source' | 'files' | 'progress' | 'done'
 
 const emit = defineEmits<{
   cancel: []
 }>()
+const activityStore = useActivityStore()
+const modal = useModal()
+const { isAuthenticated, isLoading, login } = useSpotifyAuth()
+type Step = 'source' | 'files'
 
-// State variables to track current step of the import process, progress percentage, import results, and any error messages.
+// Step tracks only the pre-import navigation. After files are chosen, the modal closes.
 const step = ref<Step>('source')
-const progress = ref<number>(-1)
-const result = ref<ImportResult | null>(null)
 const errorMsg = ref<string | null>(null)
 
 function selectLocalFiles(): void {
   step.value = 'files'
+}
+
+async function openSpotifyImport(): Promise<void> {
+  if (!isAuthenticated.value) {
+    await login()
+    return
+  }
+  emit('cancel')
+  modal.open(SpotifyPlaylistPickerModal).catch(() => {
+    // Ignore modal promise rejections from user cancellation.
+  })
 }
 
 // Main file handling function: CSVs are batched into one adapter call; each JSON is imported individually.
@@ -28,7 +42,7 @@ async function handleFiles(e: Event): Promise<void> {
   const files = Array.from((e.target as HTMLInputElement).files ?? [])
   if (!files.length) return
 
-  // Filter files by type. TODO: More efficient to iterate through files, adding to respective arrays in a single pass? This seems fine given the small number of file types.
+  // Filter files by type.
   const csvFiles = files.filter((f) => f.name.toLowerCase().endsWith('.csv'))
   const jsonFiles = files.filter((f) => f.name.toLowerCase().endsWith('.json'))
   const unsupported = files.filter(
@@ -40,61 +54,76 @@ async function handleFiles(e: Event): Promise<void> {
     return
   }
 
-  step.value = 'progress'
+  // Close modal immediately. Progress and result display delegate to ActivityIndicator / IOSummaryCard.
+  emit('cancel')
   errorMsg.value = null
-  progress.value = -1
 
-  // Track progress through input files. JSON and CSV files are currently weighted equally - FUTURE: revisit this approach for more accurate progress reporting,
+  // Unique ID per invocation so each operation gets its own history row.
+  // FUTURE: Assess best approach if multi-step operations become a factorw
+  const operationId = crypto.randomUUID()
+
+  // Start tracking in the activity store so IOCard footer shows progress.
+  activityStore.startOperation(operationId, 'Importing files', 'file-import')
+
+  // Track progress through input files. JSON and CSV files are currently weighted equally.
   const accumulated: ImportResult = { tracksImported: 0, playlistsImported: 0, errors: [] }
   const totalUnits = csvFiles.length + jsonFiles.length
-  let completedUnits = 0
 
-  // Call adapter's import function for each file type, batching csv and json files.
   try {
     if (csvFiles.length > 0) {
-
-      // Get and validate CSV adapter
       const csvAdapter = getImporter('csv')
       if (!csvAdapter) throw new Error('CSV importer not registered')
 
-      // Call import with all CSV files at once. T
-      // he adapter normalises row-level per-file progress to a [0, csvFiles.length] range, so we can divide by totalUnits directly.
       const r = await csvAdapter.import(
         { files: csvFiles },
-        //TODO could save some math by providing totalUnits and incrementing a counter from here, but exposing a single figure is more modular and avoids mismatched progress if units change.
-        (done) => { progress.value = done / totalUnits },
+        (done, _total, label) => {
+          activityStore.updateProgress(operationId, {
+            done: Math.round(done),
+            total: totalUnits,
+            phase: 'Importing CSV',
+            itemLabel: label,
+          })
+        },
       )
 
-      // Accumulate results from CSV import
-      completedUnits += csvFiles.length
-      progress.value = completedUnits / totalUnits
       accumulated.tracksImported += r.tracksImported
       accumulated.playlistsImported += r.playlistsImported
       accumulated.errors.push(...r.errors)
     }
 
     if (jsonFiles.length > 0) {
-      // Get and validate JSON adapter
       const jsonAdapter = getImporter('json')
       if (!jsonAdapter) throw new Error('JSON importer not registered')
 
-      // Call import for each JSON file sequentially, accumulating results.
-      // TODO: Settle on better progress approach with JSON imports — currently each file is one unit regardless of size.
       for (const file of jsonFiles) {
-        const r = await jsonAdapter.import({ file })
-        completedUnits += 1
-        progress.value = completedUnits / totalUnits
+        const r = await jsonAdapter.import(
+          { file },
+          (done, total, label) => {
+            activityStore.updateProgress(operationId, {
+              done,
+              total,
+              phase: 'Importing JSON',
+              itemLabel: label,
+            })
+          },
+        )
         accumulated.tracksImported += r.tracksImported
         accumulated.playlistsImported += r.playlistsImported
         accumulated.errors.push(...r.errors)
       }
     }
 
-    result.value = accumulated
-    step.value = 'done'
+    // Forward per-item warnings to the activity store so the IOCard footer shows them.
+    for (const msg of accumulated.errors) {
+      activityStore.addError(operationId, { category: 'warning', message: msg, items: [] })
+    }
+    activityStore.completeOperation(operationId, {
+      tracks: accumulated.tracksImported,
+      playlists: accumulated.playlistsImported,
+      warnings: accumulated.errors.length,
+    })
   } catch (err) {
-    errorMsg.value = (err as Error).message
-    step.value = 'files'
+    activityStore.failOperation(operationId, (err as Error).message)
   }
 }
 </script>
@@ -114,11 +143,10 @@ async function handleFiles(e: Event): Promise<void> {
           <span class="source-card__hint">CSV or JSON</span>
         </button>
 
-        <!-- Spotify Option: disabled stub-->
-        <button class="source-card" disabled>
+        <!-- Spotify Option: opens the Spotify playlist picker when authenticated. -->
+        <button class="source-card" type="button" @click="openSpotifyImport" :disabled="isLoading">
           <span class="source-card__label">Spotify</span>
-          <!-- <span class="source-card__badge">Coming soon</span> -->
-          <span class="source-card__hint">(Coming soon)</span>
+          <span class="source-card__hint">{{ isAuthenticated ? 'Browse playlists' : 'Sign in to Spotify' }}</span>
         </button>
       </div>
     </div>
@@ -133,36 +161,11 @@ async function handleFiles(e: Event): Promise<void> {
       <p v-if="errorMsg" class="io-modal__error">{{ errorMsg }}</p>
     </div>
 
-    <!-- Step: progress -->
-    <div v-else-if="step === 'progress'" class="io-modal__body">
-      <p class="text-muted">Importing&hellip;</p>
-      <ProgressBar :progress="progress" />
-    </div>
-
-    <!-- Step: done -->
-    <div v-else-if="step === 'done' && result" class="io-modal__body">
-      <p>
-        Imported <strong>{{ result.tracksImported }}</strong> track{{
-          result.tracksImported !== 1 ? 's' : ''
-        }}
-      </p>
-      <p v-if="result.playlistsImported > 0">
-        and {{ result.playlistsImported }} playlist{{
-          result.playlistsImported !== 1 ? 's' : ''
-        }}
-      </p>
-      <p v-if="result.errors.length > 0" class="io-modal__error">
-        {{ result.errors.length }} error(s) during import
-      </p>
-    </div>
-
     <div class="io-modal__footer">
-      <button v-if="step !== 'source' && step !== 'done'" class="btn btn--ghost" @click="step = 'source'">
+      <button v-if="step === 'files'" class="btn btn--ghost" @click="step = 'source'">
         Back
       </button>
-      <button class="btn btn--secondary" @click="emit('cancel')">
-        {{ step === 'done' ? 'Done' : 'Cancel' }}
-      </button>
+      <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
     </div>
   </div>
 </template>

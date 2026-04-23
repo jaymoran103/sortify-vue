@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { importJsonBundle } from '@/adapters/jsonImport'
 import { db } from '@/db'
 import type { Track } from '@/types/models'
@@ -64,5 +64,20 @@ describe('jsonImport', () => {
     const result = await importJsonBundle(bundle)
     expect(result.tracksImported).toBe(2)
     expect(result.playlistsImported).toBe(1)
+  })
+
+  it('calls onProgress for each playlist with name and index', async () => {
+    const bundle = {
+      tracks: [sampleTrack],
+      playlists: [
+        { name: 'First', trackIDs: ['t1'] },
+        { name: 'Second', trackIDs: ['t1'] },
+      ],
+    }
+    const progress = vi.fn()
+    await importJsonBundle(bundle, progress)
+    expect(progress).toHaveBeenCalledTimes(2)
+    expect(progress).toHaveBeenNthCalledWith(1, 1, 2, 'First')
+    expect(progress).toHaveBeenNthCalledWith(2, 2, 2, 'Second')
   })
 })

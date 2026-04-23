@@ -65,11 +65,28 @@ export const usePlaylistStore = defineStore('playlists', () => {
     return Array.isArray(arr) ? arr.length : 0
   })
 
+  /** Batch-updates multiple playlists in a single Dexie transaction.
+   * Fires liveQuery exactly once (on transaction commit) rather than once per playlist.
+   * Avoids incremental count flicker in dependent views (e.g. LibraryCard) after workspace save().
+   */
+  async function batchUpdatePlaylists(
+    updates: Array<{ id: number; changes: Partial<Playlist> }>,
+  ): Promise<void> {
+    if (updates.length === 0) return
+    const now = Date.now()
+    await db.transaction('rw', db.playlists, async () => {
+      for (const { id, changes } of updates) {
+        await db.playlists.update(id, { ...changes, lastModified: now })
+      }
+    })
+  }
+
   return {
     playlists,
     getPlaylist,
     addPlaylist,
     updatePlaylist,
+    batchUpdatePlaylists,
     deletePlaylist,
     deletePlaylists,
     clearPlaylists,
