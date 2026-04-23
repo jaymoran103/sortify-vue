@@ -76,6 +76,7 @@ function toggleSelectAll(): void {
   }
 }
 
+// Emit confirm with selected playlist IDs when user confirms selection.
 function confirmSelection(): void {
   const ids = [...selection.selectedIds.value].map(Number)
   emit('confirm', ids)
@@ -86,12 +87,14 @@ function confirmSelection(): void {
   <div class="selection-modal">
     <h2 class="selection-modal__title">Select Playlists</h2>
 
+    <!-- Control bar with search and sort options -->
     <div class="selection-modal__body">
       <ControlBar>
         <SearchBar v-model="query" placeholder="Filter playlists…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
       </ControlBar>
 
+    <!-- Playlist list with selection -->
       <div class="selection-modal__list">
         <ScrollableList :items="displayItems" key-field="id" :estimate-size="56">
           <template #item="{ item }">
@@ -109,6 +112,7 @@ function confirmSelection(): void {
       </div>
     </div>
 
+    <!-- Footer with select all and action buttons -->
     <div class="selection-modal__footer">
       <button class="btn btn--secondary playlist-select__select-all" @click="toggleSelectAll">
         {{ allSelected ? 'Deselect All' : 'Select All' }}

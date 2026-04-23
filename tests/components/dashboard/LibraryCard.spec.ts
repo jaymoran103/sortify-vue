@@ -14,8 +14,10 @@ const router = createRouter({
 let mockTracks: unknown[] = []
 let mockPlaylists: Playlist[] = []
 
+const mockDeleteTracks = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
 vi.mock('@/stores/tracks', () => ({
-  useTrackStore: () => ({ tracks: mockTracks, clearTracks: vi.fn() }),
+  useTrackStore: () => ({ tracks: mockTracks, clearTracks: vi.fn(), deleteTracks: mockDeleteTracks }),
 }))
 
 const mockUpdatePlaylist = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -96,6 +98,7 @@ describe('LibraryCard', () => {
     mockModalOpen.mockClear()
     mockModalOpen.mockResolvedValue(null)
     mockUpdatePlaylist.mockClear()
+    mockDeleteTracks.mockClear()
   })
 
   it('displays track count from store', () => {
@@ -246,7 +249,7 @@ describe('LibraryCard', () => {
     expect(wrapper.findAll('.library-card__rename-btn')).toHaveLength(2)
   })
 
-  it('clicking rename opens modal with the correct playlist', async () => {
+  it('calling rename opens modal with the correct playlist', async () => {
     mockPlaylists = [{ id: 3, name: 'Jazz Night', trackIDs: [] }]
     const wrapper = mountCard()
     await wrapper.find('.library-card__rename-btn').trigger('click')
@@ -262,5 +265,76 @@ describe('LibraryCard', () => {
     await wrapper.find('.library-card__rename-btn').trigger('click')
     await flushPromises()
     expect(mockUpdatePlaylist).toHaveBeenCalledWith(3, { name: 'Renamed Jazz' })
+  })
+
+  // ── Delete Tracks handler ──────────────────────────────────────────────────
+  it('management menu includes Delete Tracks item', async () => {
+    const wrapper = mountCard()
+    await wrapper.find('[toggle-mode="management-menu"]').trigger('click')
+    const [, entries] = mockContextMenuShow.mock.calls[0] as [unknown, Array<{ label?: string }>]
+    const labels = entries.filter((e) => 'label' in e).map((e) => e.label)
+    expect(labels).toContain('Delete Tracks…')
+  })
+
+  it('Delete Tracks action opens TrackSelectModal and calls deleteTracks on confirm', async () => {
+    mockModalOpen.mockResolvedValueOnce(['t1', 't2'])
+    const wrapper = mountCard()
+    await wrapper.find('[toggle-mode="management-menu"]').trigger('click')
+    const [, entries] = mockContextMenuShow.mock.calls[0] as [unknown, Array<{ label?: string; action?: () => void }>]
+    const action = entries.find((e) => e.label === 'Delete Tracks…')?.action
+    action?.()
+    await flushPromises()
+    expect(mockDeleteTracks).toHaveBeenCalledWith(['t1', 't2'])
+  })
+
+  it('Delete Tracks action does nothing when modal is cancelled', async () => {
+    mockModalOpen.mockResolvedValueOnce(null)
+    const wrapper = mountCard()
+    await wrapper.find('[toggle-mode="management-menu"]').trigger('click')
+    const [, entries] = mockContextMenuShow.mock.calls[0] as [unknown, Array<{ label?: string; action?: () => void }>]
+    const action = entries.find((e) => e.label === 'Delete Tracks…')?.action
+    action?.()
+    await flushPromises()
+    expect(mockDeleteTracks).not.toHaveBeenCalled()
+  })
+
+  // ── Delete Unreferenced Tracks handler ─────────────────────────────────────
+  it('management menu includes Delete Unreferenced Tracks item', async () => {
+    const wrapper = mountCard()
+    await wrapper.find('[toggle-mode="management-menu"]').trigger('click')
+    const [, entries] = mockContextMenuShow.mock.calls[0] as [unknown, Array<{ label?: string }>]
+    const labels = entries.filter((e) => 'label' in e).map((e) => e.label)
+    expect(labels).toContain('Delete Unreferenced Tracks…')
+  })
+
+  it('Delete Unreferenced Tracks calls deleteTracks with orphaned IDs on confirm', async () => {
+    mockTracks = [
+      { trackID: 'ref', title: 'Referenced', artist: 'A', album: 'B', source: 'csv' },
+      { trackID: 'orphan', title: 'Orphan', artist: 'A', album: 'B', source: 'csv' },
+    ]
+    mockPlaylists = [{ id: 1, name: 'PL', trackIDs: ['ref'] }]
+    mockModalOpen.mockResolvedValueOnce(true)
+    const wrapper = mountCard()
+    await wrapper.find('[toggle-mode="management-menu"]').trigger('click')
+    const [, entries] = mockContextMenuShow.mock.calls[0] as [unknown, Array<{ label?: string; action?: () => void }>]
+    const action = entries.find((e) => e.label === 'Delete Unreferenced Tracks…')?.action
+    action?.()
+    await flushPromises()
+    expect(mockDeleteTracks).toHaveBeenCalledWith(['orphan'])
+  })
+
+  it('Delete Unreferenced Tracks shows info modal when no orphans exist', async () => {
+    mockTracks = [{ trackID: 'ref', title: 'Referenced', artist: 'A', album: 'B', source: 'csv' }]
+    mockPlaylists = [{ id: 1, name: 'PL', trackIDs: ['ref'] }]
+    const wrapper = mountCard()
+    await wrapper.find('[toggle-mode="management-menu"]').trigger('click')
+    const [, entries] = mockContextMenuShow.mock.calls[0] as [unknown, Array<{ label?: string; action?: () => void }>]
+    const action = entries.find((e) => e.label === 'Delete Unreferenced Tracks…')?.action
+    action?.()
+    await flushPromises()
+    expect(mockModalOpen).toHaveBeenCalledOnce()
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { title: string }]
+    expect(props.title).toBe('No Unreferenced Tracks')
+    expect(mockDeleteTracks).not.toHaveBeenCalled()
   })
 })

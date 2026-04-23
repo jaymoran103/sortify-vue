@@ -12,6 +12,7 @@ import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
+import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
 import RenamePlaylistModal from '@/components/dashboard/RenamePlaylistModal.vue'
 import type { Playlist, Track } from '@/types/models'
 import type { SortOption } from '@/types/ui'
@@ -97,6 +98,38 @@ async function openDeletePlaylists(): Promise<void> {
   await playlistStore.deletePlaylists(ids)
 }
 
+async function openDeleteTracks(): Promise<void> {
+  const ids = await modal.open<string[]>(TrackSelectModal, {})
+  if (!ids?.length) return
+  await trackStore.deleteTracks(ids)
+}
+
+async function openDeleteUnreferencedTracks(): Promise<void> {
+  const referencedIds = new Set((playlistStore.playlists ?? []).flatMap((p) => p.trackIDs))
+  const orphanedIds = (trackStore.tracks ?? [])
+    .map((t) => t.trackID)
+    .filter((id) => !referencedIds.has(id))
+
+  if (orphanedIds.length === 0) {
+    await modal.open<true>(ConfirmModal, {
+      title: 'No Unreferenced Tracks',
+      message: 'All tracks are referenced by at least one playlist.',
+      confirmLabel: 'OK',
+      danger: false,
+    })
+    return
+  }
+
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Delete Unreferenced Tracks',
+    message: `This will permanently delete ${orphanedIds.length} track(s) not in any playlist. This cannot be undone.`,
+    confirmLabel: `Delete ${orphanedIds.length} track(s)`,
+    danger: true,
+  })
+  if (!confirmed) return
+  await trackStore.deleteTracks(orphanedIds)
+}
+
 // Action handler for "Clear Library" option: destructive action with confirmation modal
 async function openClearLibrary(): Promise<void> {
   const confirmed = await modal.open<true>(ConfirmModal, {
@@ -122,6 +155,9 @@ async function openRenamePlaylist(playlist: Playlist): Promise<void> {
 function showManagementMenu(event: MouseEvent): void {
   contextMenu.show(event, [
     { label: 'Delete Playlists…', action: openDeletePlaylists },
+    { label: 'Delete Tracks…',    action: openDeleteTracks },
+    { divider: true },
+    { label: 'Delete Unreferenced Tracks…', action: openDeleteUnreferencedTracks },
     { divider: true },
     { label: 'Clear Library…',    action: openClearLibrary },
   ])
