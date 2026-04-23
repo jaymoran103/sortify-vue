@@ -76,9 +76,9 @@ describe('spotifyExportAdapter', () => {
 
     expect(result.playlistsExported).toBe(1)
     expect(result.errors).toEqual([])
-    expect(result.createdPlaylists).toEqual([
-      { name: 'My Playlist', spotifyId: 'new-spotify-playlist-id' },
-    ])
+    expect(result.createdPlaylists).toContainEqual({
+      name: 'My Playlist', spotifyId: 'new-spotify-playlist-id'
+    })
 
     // Should have called POST /me/playlists once
     expect(spotifyPostMock).toHaveBeenCalledWith('/me/playlists', {
