@@ -192,7 +192,7 @@ async function handleExport(): Promise<void> {
     if (format.value === 'csv') {
       await adapter.export({ playlistIds, profile: profile.value as 'full' | 'minimal' })
     } else {
-      await adapter.export({})
+      await adapter.export({ playlistIds })
     }
     activityStore.completeOperation(operationId, {
       playlists: ids.length > 0 ? ids.length : (playlistStore.playlists?.length ?? 0),
