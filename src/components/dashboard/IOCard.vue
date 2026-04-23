@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+  import { computed, watch } from 'vue'
 import { useModal } from '@/composables/useModal'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
@@ -41,14 +41,18 @@ async function offerLogout() {
   }
 }
 
-// After OAuth redirect, IOCard is the first dashboard component to mount.
-// If a pending action was saved before the redirect, consume and act on it.
-onMounted(() => {
-  if (pendingAction.value === PENDING_ACTIONS.OPEN_SPOTIFY_PICKER) {
+// Watch for pending action set asynchronously after the OAuth callback completes.
+// onMounted fires before handleSpotifyCallback() resolves, so a reactive watch is required.
+// immediate: true also handles the (unlikely) case where the action was set before this component mounted.
+watch(pendingAction, (action) => {
+  if (action === PENDING_ACTIONS.OPEN_SPOTIFY_PICKER) {
     clearPendingAction()
     modal.open(ImportModal, { autoSpotify: true })
+  } else if (action === PENDING_ACTIONS.OPEN_SPOTIFY_EXPORTER) {
+    clearPendingAction()
+    modal.open(ExportModal, { autoSpotify: true })
   }
-})
+}, { immediate: true })
 </script>
 
 <template>

@@ -47,6 +47,7 @@ vi.mock('@/composables/useSpotifyAuth', async () => {
 vi.mock('@/spotify/pendingIntent', () => ({
   PENDING_ACTIONS: {
     OPEN_SPOTIFY_PICKER: 'open-spotify-picker',
+    OPEN_SPOTIFY_EXPORTER: 'open-spotify-exporter',
     CONNECT_ONLY: 'connect-only',
   },
 }))
@@ -121,6 +122,13 @@ describe('IOCard', () => {
     mountCard()
     expect(mockClearPendingAction).toHaveBeenCalled()
     expect(mockOpen).toHaveBeenCalledWith(ImportModal, { autoSpotify: true })
+  })
+
+  it('opens ExportModal with autoSpotify:true when pending action is open-spotify-exporter', () => {
+    mockAuthState.pendingAction = 'open-spotify-exporter'
+    mountCard()
+    expect(mockClearPendingAction).toHaveBeenCalled()
+    expect(mockOpen).toHaveBeenCalledWith(ExportModal, { autoSpotify: true })
   })
 
   it('does not open any modal when pending action is null', () => {

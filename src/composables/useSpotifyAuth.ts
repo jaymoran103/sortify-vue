@@ -73,7 +73,10 @@ export function useSpotifyAuth(): {
   // pendingAction defaults to CONNECT_ONLY so the IOCard connect button never leaves a stale pending action.
   async function login(pendingAction: string = PENDING_ACTIONS.CONNECT_ONLY): Promise<void> {
     _error.value = null
-    savePendingIntent({ action: pendingAction, returnRoute: window.location.hash || '#/' })
+    // Strip the leading '#' — router.push() with createWebHashHistory() expects '/path', not '#/path'.
+    // window.location.hash is '#/dashboard'; we store '/dashboard' so router.push(returnRoute) works.
+    // FUTURE: Review and ensure this works in all cases where login() can be called
+    savePendingIntent({ action: pendingAction, returnRoute: window.location.hash.slice(1) || '/' })
     await spotifyAuth.authenticate()
   }
 

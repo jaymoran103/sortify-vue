@@ -103,7 +103,7 @@ describe('useSpotifyAuth', () => {
     )
   })
 
-  it('login() saves the current hash as returnRoute', async () => {
+  it('login() saves the hash path (without leading #) as returnRoute', async () => {
     const { savePendingIntent } = await import('@/spotify/pendingIntent')
     Object.defineProperty(window, 'location', {
       value: { ...window.location, hash: '#/dashboard' },
@@ -112,7 +112,7 @@ describe('useSpotifyAuth', () => {
     const { login } = useInComponent()
     await login('connect-only')
     expect(savePendingIntent).toHaveBeenCalledWith(
-      expect.objectContaining({ returnRoute: '#/dashboard' }),
+      expect.objectContaining({ returnRoute: '/dashboard' }),
     )
   })
 

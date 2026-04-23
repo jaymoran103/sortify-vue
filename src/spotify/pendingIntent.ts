@@ -9,6 +9,7 @@ export interface PendingIntent {
 
 export const PENDING_ACTIONS = {
   OPEN_SPOTIFY_PICKER: 'open-spotify-picker',
+  OPEN_SPOTIFY_EXPORTER: 'open-spotify-exporter',
   CONNECT_ONLY: 'connect-only',
 } as const
 
