@@ -1,0 +1,55 @@
+/* Shared mock UI primitives — imported by WorkspaceMock and SimilarityMock */
+/** FUTURE: Ensure look here stays up to date with real implementation
+* Of note: checkbox affordance changes, updated column hover emphasis.
+*/
+/* TODO consider inheriting styling from actual workspace? */
+
+
+
+/* Workspace header and top-level layout */
+.ws-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.ws-title { font-weight: var(--font-weight-semibold); color: var(--color-text); }
+.ws-meta { font-size: var(--font-size-xs); color: var(--color-text-muted); flex: 1; }
+.ws-header-actions { display: flex; align-items: center; gap: var(--space-2); }
+
+/* Workspace buttons */
+.ws-btn {
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-xs);
+  cursor: default;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+.ws-btn-primary { background: var(--color-accent); color: var(--color-text-on-accent); border-color: var(--color-accent); cursor: pointer; }
+.ws-btn-ghost { background: transparent; color: var(--color-text-muted); cursor: pointer; }
+.ws-btn-disabled { opacity: 0.4; }
+
+.ws-table { display: flex; flex-direction: column; }
+.ws-row { display: grid; border-bottom: 1px solid var(--color-border-subtle); }
+.ws-row:hover:not(.ws-row-head) { background: var(--color-row-hover); }
+.ws-row-head { background: var(--color-surface-raised); position: sticky; top: 0; }
+.ws-cell { padding: var(--space-2) var(--space-3); display: flex; align-items: center; }
+
+.ws-track-col { flex-direction: column; align-items: flex-start; gap: 2px; }
+.ws-track-title { color: var(--color-text); font-size: var(--font-size-sm); }
+.ws-track-artist { color: var(--color-text-muted); font-size: var(--font-size-xs); }
+
+.ws-checkbox {
+  width: 15px; height: 15px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: var(--color-text-on-accent);
+}
+.ws-checked { background: var(--color-accent); border-color: var(--color-accent); }
+.ws-muted { opacity: 0.4; }
+.ws-checked-muted { background: var(--color-accent); border-color: var(--color-accent); opacity: 0.4; }

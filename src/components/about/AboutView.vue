@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import TabbedDiveSection from './TabbedDiveSection.vue'
 import WorkspaceMock from './WorkspaceMock.vue'
+import SimilarityMock from './SimilarityMock.vue'
 import FeatureCard from './FeatureCard.vue'
 
 const workspaceTabs = [
   { label: 'Edit memberships', sub: 'Toggle tracks across playlists. Nothing writes until you save.' },
   { label: 'Manage playlists', sub: 'Rename, duplicate, or remove columns. Reorder by drag.' },
   { label: 'Save & Export', sub: 'Write back to your library or download as CSV / JSON.' },
+]
+const simTabs = [
+  { label: 'Overlap scan', sub: 'Find every track in your library that already lives in a selected playlist.' },
+  { label: 'Equivalents', sub: 'Match alternate versions, live recordings, and covers across your playlists.' },
+  { label: 'Similarity graph', sub: 'A visual map of how your playlists relate — shared tracks as edges, clusters as communities.' },
 ]
 const featureCards = [
   {
@@ -51,8 +57,18 @@ const featureCards = [
       <p class="hero-sub">the Workspace helps visualize track membership, and change it at scale.</p>
       <p class="hero-sub">the configurable Library helps visualize overlap, and makes big changes painless.</p> -->
 
-
+            <!-- Text: Development Disclaimer -->
+      <div class="hero-dev-banner">
+        <p class="hero-dev-note">
+          This website is still in development and may contain bugs.</p>
+          <p>For a more robust version with a broader feature set (for now), try
+          <a class="hero-dev-link" href="https://jaymoran103.github.io/sortify-feb" target="_blank" rel="noopener">Sortify Vanilla</a>.
+        </p>
+      </div>
+      <!-- <div class="hero-mock-placeholder">[workspace mock]</div> -->
     </section>
+
+    
 
     <!-- SECTION: ISSUES-->
     <section class="feature-cards">
@@ -138,23 +154,18 @@ const featureCards = [
       </div>
     </section>
 
-    <!-- SECTION: WORKSPACE -->
-    <!-- <section>
-      <h2 class="section-heading">Multi-playlist Workspace</h2>
-    </section> -->
-
-    
-
-    <!--SECTION: DATA MODEL -->
-     
-    <section class="data-model">
-      <h2 class="section-heading">Move your data, flexibly</h2>
-      <p class="data-model-sub">Pull from Spotify once. Edit in your browser. Save to a file you own. Loop it as many times as you want.</p>
-      
+    <!--SECTION: SIMILARITY (coming soon) -->
+    <section class="workspace-dive">
+      <div class="coming-soon-header">
+        <h2 class="section-heading">Similarity. <span class="coming-soon-badge">Coming soon</span></h2>
+        <p class="coming-soon-sub">Tools for understanding how your library fits together — and cleaning up the mess.</p>
+      </div>
+      <TabbedDiveSection :tabs="simTabs" mock-class="sim-mock">
+        <template #default="{ activeTab }">
+          <SimilarityMock :activeTab="activeTab" />
+        </template>
+      </TabbedDiveSection>
     </section>
-
-    <!-- SECTION SIMILARITY (coming soon) -->
-    <!-- <section"> </section> -->
 
     <!-- SECTION: ETHOS -->
     <section class="ethos">
@@ -185,7 +196,7 @@ const featureCards = [
 
     <!-- 7. CTA -->
     <section class="cta">
-      <h2 class="cta-heading">Time to sort.</h2>
+      <h2 class="cta-heading">Time to sort!</h2>
       <div class="cta-actions">
         <RouterLink to="/dashboard" class="cta-btn cta-btn-primary">Open Sortify</RouterLink>
         <a href="https://github.com/jaymoran103/sortify-vue" target="_blank" rel="noopener" class="cta-btn cta-btn-ghost">View source</a>
@@ -219,6 +230,22 @@ const featureCards = [
   color: var(--color-text-muted);
   max-width: 580px;
   margin: 0 auto var(--space-6);
+}
+.hero-dev-banner {
+  border: 1px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.hero-dev-note {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+.hero-dev-link {
+  color: var(--blue-450);
+  text-decoration: underline;
 }
 
 /* ── Section baseline ── */
@@ -307,7 +334,22 @@ const featureCards = [
   margin-top: var(--space-5);
 }
 
-/* ── Ethos Section── */
+/* ── Similarity section ── */
+.coming-soon-header { margin-bottom: var(--space-5); }
+.coming-soon-badge {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text-muted);
+  vertical-align: middle;
+  margin-left: var(--space-2);
+}
+.coming-soon-sub { color: var(--color-text-muted); font-size: var(--font-size-md); margin-bottom: var(--space-4); }
+
+/* ── Ethos ── */
 .ethos-list {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

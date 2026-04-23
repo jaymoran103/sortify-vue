@@ -98,57 +98,18 @@ const tracks = [
 </template>
 
 <style scoped>
-
-.ws-title { 
-    font-weight: var(--font-weight-semibold); 
-    color: var(--color-text); 
-}
-.ws-meta { 
-    font-size: var(--font-size-xs); 
-    color: var(--color-text-muted); 
-    flex: 1; 
-}
-.ws-header-actions { 
-    display: flex; 
-    align-items: center; 
-    gap: var(--space-2); 
-}
-.ws-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-.ws-row { grid-template-columns: 40px minmax(160px, 1fr) repeat(4, minmax(90px, 130px)); }
-
-
-.ws-table { 
-    display: flex; 
-    flex-direction: column; 
-}
+@import './mock-shared.css';
 .ws-row { 
-    display: grid; 
-    border-bottom: 1px solid var(--color-border-subtle); 
+    grid-template-columns: 40px minmax(160px, 1fr) repeat(4, minmax(90px, 130px)); 
 }
-.ws-row:hover:not(.ws-row-head) { 
-    background: var(--color-row-hover);
- }
-.ws-row-head { 
-    background: var(--color-surface-raised); 
-    position: sticky; 
-    top: 0; 
-}
-.ws-cell { 
-    padding: var(--space-2) var(--space-3); 
-    display: flex; align-items: center; }
+
 .ws-idx {
   position: relative;
   justify-content: center;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
+/* TODO: Tentative feature, planning to add to workspace along with direct play */
 .ws-idx::after {
   content: '▶';
   position: absolute;
@@ -163,58 +124,21 @@ const tracks = [
 .ws-row:hover:not(.ws-row-head) .ws-idx { color: transparent; }
 .ws-row:hover:not(.ws-row-head) .ws-idx::after { opacity: 1; }
 
-.ws-track-col { flex-direction: column; align-items: flex-start; gap: 2px; }
-.ws-track-title { color: var(--color-text); font-size: var(--font-size-sm); }
-.ws-track-artist { color: var(--color-text-muted); font-size: var(--font-size-xs); }
-
-
-.ws-checked { background: var(--color-accent); border-color: var(--color-accent); }
-.ws-muted { opacity: 0.4; }
-.ws-checked-muted { background: var(--color-accent); border-color: var(--color-accent); opacity: 0.4; }
-
 .ws-pl-col {
   justify-content: center;
   font-weight: var(--font-weight-medium);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
-.ws-col-menu { opacity: 0.5; font-size: 10px; margin-left: 2px; }
-.ws-unsaved { font-size: var(--font-size-xs); color: var(--color-text-muted); }
-
-
-
-.ws-btn {
-  padding: 3px var(--space-3);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-subtle);
-  font-size: var(--font-size-xs);
-  cursor: default;
-  background: var(--color-surface-raised);
-  color: var(--color-text);
-}
-.ws-btn-primary { 
-    background: var(--color-accent); 
-    color: var(--color-text-on-accent); 
-    border-color: var(--color-accent); 
-    cursor: pointer; 
-}
-.ws-btn-ghost { 
-    background: transparent; 
+.ws-col-menu { 
+    opacity: 0.5; 
+    font-size: 10px; 
+    margin-left: 2px;
+ }
+.ws-unsaved { 
+    font-size: var(--font-size-xs); 
     color: var(--color-text-muted); 
-    cursor: pointer; 
 }
-.ws-btn-disabled { 
-    opacity: 0.4; 
-}
-
-.ws-checkbox {
-  width: 15px; height: 15px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 3px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9px; color: var(--color-text-on-accent);
-}
-
 
 .ws-col-dropdown {
   position: absolute;
@@ -245,8 +169,6 @@ const tracks = [
 .ws-dropdown-item:hover { background: var(--color-surface); color: var(--color-text); }
 .ws-dropdown-danger { color: var(--color-danger); }
 
-
-
 .ws-export-panel {
   position: absolute;
   bottom: 0; left: 0; right: 0;
@@ -257,7 +179,11 @@ const tracks = [
   flex-direction: column;
   gap: var(--space-3);
 }
-.ws-export-row { display: flex; align-items: center; gap: var(--space-3); }
+.ws-export-row { 
+    display: flex; 
+    align-items: center; 
+    gap: var(--space-3); 
+}
 .ws-unsaved-badge {
   font-size: var(--font-size-xs);
   padding: 2px var(--space-2);
@@ -276,16 +202,4 @@ const tracks = [
 }
 .ws-export-option strong { color: var(--color-text); min-width: 36px; }
 .ws-export-option span { flex: 1; color: var(--color-text-muted); }
-
-
-
-
-
-
-
-
-
-
-
-
 </style>
