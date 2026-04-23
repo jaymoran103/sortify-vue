@@ -169,12 +169,12 @@ const featureCards = [
 
     <!-- 7. CTA -->
     <section class="cta">
-      <h2 class="h2">Time to sort.</h2>
+      <h2 class="cta-heading">Time to sort.</h2>
       <div class="cta-actions">
-        <button class="cta-btn" @click="$router.push('/dashboard')">Get Started</button>
-        <a class="cta-btn" href="https://github.com/jaymoran103/sortify-vue" target="_blank" rel="noopener" >View Code</a>
+        <RouterLink to="/dashboard" class="cta-btn cta-btn-primary">Get Started</RouterLink>
+        <a href="https://github.com/jaymoran103/sortify-vue" target="_blank" rel="noopener" class="cta-btn cta-btn-ghost">View Code</a>
       </div>
-      <p>No signup. No install. Works offline.</p>
+      <p class="cta-note">No signup. No install. Works offline.</p>
     </section>
 
   </div>
@@ -285,9 +285,7 @@ const featureCards = [
 }
 .ethos-item { 
   display: flex; 
-  flex-direction: column; 
-  gap: var(--space-2); 
-}
+  flex-direction: column; gap: var(--space-2); }
 .ethos-item dt { 
     font-size: var(--font-size-md); 
     font-weight: var(--font-weight-semibold); 
@@ -308,13 +306,35 @@ const featureCards = [
   align-items: center;
   gap: var(--space-5);
 }
+.cta-heading { 
+  font-size: 2rem; 
+  font-weight: var(--font-weight-bold); 
+}
+.cta-actions { 
+  display: flex; 
+  gap: var(--space-4); 
+  align-items: center; 
+  }
 .cta-btn {
   padding: var(--space-3) var(--space-6);
   border-radius: var(--radius-md);
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
-  background-color: var(--color-accent);
-  color: var(--color);
-  border: 2px solid var(--color-border);
+  text-decoration: none;
+  transition: opacity 0.1s;
+}
+.cta-btn:hover {opacity: 0.85; }
+.cta-btn-primary { 
+  background: var(--color-accent); 
+  color: var(--color-text-on-accent); 
+}
+.cta-btn-ghost { 
+  border: 1px solid var(--color-border-subtle); 
+  color: var(--color-text-muted); 
+  cursor: pointer; 
+}
+.cta-note { 
+  font-size: var(--font-size-sm); 
+  color: var(--color-text-muted); 
 }
 </style>
