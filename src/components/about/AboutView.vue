@@ -85,7 +85,7 @@ const featureCards = [
 
     <!-- SECTION:DATA MODEL DIAGRAM -->
     <section class="data-model">
-      <h2 class="section-heading">Your data makes a loop.</h2>
+      <h2 class="section-heading">Move your data flexibly.</h2>
       <p class="data-model-sub">Pull from Spotify once. Edit in your browser. Save to a file you own. Loop it as many times as you want.</p>
       <div class="stack-diagram">
 
@@ -171,8 +171,8 @@ const featureCards = [
     <section class="cta">
       <h2 class="cta-heading">Time to sort.</h2>
       <div class="cta-actions">
-        <RouterLink to="/dashboard" class="cta-btn cta-btn-primary">Get Started</RouterLink>
-        <a href="https://github.com/jaymoran103/sortify-vue" target="_blank" rel="noopener" class="cta-btn cta-btn-ghost">View Code</a>
+        <RouterLink to="/dashboard" class="cta-btn cta-btn-primary">Open Sortify</RouterLink>
+        <a href="https://github.com/jaymoran103/sortify-vue" target="_blank" rel="noopener" class="cta-btn cta-btn-ghost">View source</a>
       </div>
       <p class="cta-note">No signup. No install. Works offline.</p>
     </section>
@@ -206,7 +206,10 @@ const featureCards = [
 }
 
 /* ── Section baseline ── */
+.workspace-dive,
 .feature-cards,
+.data-model,
+.ethos,
 .cta {
   padding: var(--space-6) 0;
   border-top: 1px solid var(--color-border-subtle);
@@ -225,11 +228,15 @@ const featureCards = [
 .stack-diagram { display: flex; align-items: center; }
 
 .stack-node {
+  flex: 1;
+  display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-6);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
   background: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
   text-align: center;
 }
 .stack-node-accent {
@@ -258,6 +265,14 @@ const featureCards = [
   content: '▶'; 
   position: absolute; 
   right: -6px; 
+  top: -7px; 
+  font-size: 10px; 
+  color: var(--color-text-muted); 
+}
+.stack-arrow-line::before { 
+  content: '◀'; 
+  position: absolute; 
+  right: 50px; 
   top: -7px; 
   font-size: 10px; 
   color: var(--color-text-muted); 
