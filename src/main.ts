@@ -36,11 +36,16 @@ app.mount('#app')
 
 // After mount: check if this is a Spotify PKCE callback.
 // The redirect lands on the base URL with ?code= in the search portion
+// After handling (success or failure), navigate to the dashboard so the user isn't left on the about/home page.
 if (new URLSearchParams(window.location.search).has('code')) {
   import('@/composables/useSpotifyAuth').then(({ handleSpotifyCallback }) => {
-    handleSpotifyCallback().catch((err: unknown) => {
-      console.error('Spotify callback failed:', err)
-    })
+    handleSpotifyCallback()
+      .catch((err: unknown) => {
+        console.error('Spotify callback failed:', err)
+      })
+      .finally(() => {
+        void router.push({ name: 'dashboard' })
+      })
   })
 }
 
