@@ -175,3 +175,78 @@ describe('Playlist Store', () => {
     expect(count).toBe(0)
   })
 })
+
+// These tests verify that the full reactive chain works with fake-indexeddb: 
+// Dexie write -> liveQuery fires -> playlists ref updates -> downstream computed
+
+describe('Playlist Store — liveQuery integration', () => {
+  // Polls at 20 ms intervals until predicate is true or timeout expires.
+  // Needed because Dexie's liveQuery fires asynchronously after IDB commits.
+  async function waitFor(
+    predicate: () => boolean,
+    timeoutMs = 2000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (!predicate()) {
+      if (Date.now() > deadline) throw new Error('waitFor timed out')
+      // Flush pending microtasks (Dexie uses Promise chains internally)
+      await new Promise((r) => setTimeout(r, 20))
+    }
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  afterEach(async () => {
+    await db.playlists.clear()
+  })
+
+  it('playlists ref updates reactively after addPlaylist', async () => {
+    const store = usePlaylistStore()
+
+    // Wait for initial liveQuery emission (empty array from DB)
+    await waitFor(() => Array.isArray(store.playlists))
+
+    await store.addPlaylist({ name: 'Reactive PL', trackIDs: [] })
+
+    // liveQuery fires asynchronously after the IDB transaction commits
+    await waitFor(() => (store.playlists?.length ?? 0) > 0)
+
+    expect(store.playlists?.some((p) => p.name === 'Reactive PL')).toBe(true)
+  })
+
+  it('playlists ref updates reactively after batchUpdatePlaylists', async () => {
+    const store = usePlaylistStore()
+
+    await waitFor(() => Array.isArray(store.playlists))
+
+    const id = await store.addPlaylist({ name: 'Before Update', trackIDs: ['t1'] })
+    await waitFor(() => (store.playlists?.length ?? 0) > 0)
+
+    // batchUpdatePlaylists is the write path used by workspace save()
+    await store.batchUpdatePlaylists([
+      { id, changes: { name: 'After Update', trackIDs: ['t1', 't2'] } },
+    ])
+
+    await waitFor(() => store.playlists?.some((p) => p.name === 'After Update') ?? false)
+
+    const updated = store.playlists?.find((p) => p.id === id)
+    expect(updated?.name).toBe('After Update')
+    expect(updated?.trackIDs).toEqual(['t1', 't2'])
+  })
+
+  it('downstream computed re-evaluates after liveQuery fires', async () => {
+    const store = usePlaylistStore()
+
+    await waitFor(() => Array.isArray(store.playlists))
+    expect(store.playlistCount).toBe(0)
+
+    await store.addPlaylist({ name: 'PL A', trackIDs: ['t1', 't2'] })
+    await store.addPlaylist({ name: 'PL B', trackIDs: ['t3'] })
+
+    await waitFor(() => store.playlistCount === 2)
+
+    expect(store.playlistCount).toBe(2)
+  })
+})

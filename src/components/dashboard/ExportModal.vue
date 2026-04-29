@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { getExporter } from '@/adapters/registry'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useActivityStore } from '@/stores/activity'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
+import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
 import type { SpotifyExportOptions } from '@/adapters/spotifyExport'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
@@ -17,6 +18,8 @@ import type { Playlist } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
 type Step = 'source' | 'playlists' | 'options'
+
+const props = withDefaults(defineProps<{ autoSpotify?: boolean }>(), { autoSpotify: false })
 
 const emit = defineEmits<{
   cancel: []
@@ -100,12 +103,19 @@ function selectLocalFiles(): void {
 
 function selectSpotify(): void {
   if (!isAuthenticated.value) {
-    login()
+    login(PENDING_ACTIONS.OPEN_SPOTIFY_EXPORTER)
     return
   }
   destination.value = 'spotify'
   step.value = 'playlists'
 }
+
+// When opened after an OAuth redirect with autoSpotify:true, skip source picker and go straight to Spotify playlists.
+onMounted(() => {
+  if (props.autoSpotify) {
+    selectSpotify()
+  }
+})
 
 function confirmPlaylists(): void {
   if (destination.value === 'spotify') {

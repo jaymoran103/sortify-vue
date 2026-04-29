@@ -16,6 +16,7 @@ import { jsonExportAdapter } from '@/adapters/jsonExport'
 import { spotifyImportAdapter } from '@/adapters/spotifyImport'
 import { spotifyExportAdapter } from '@/adapters/spotifyExport'
 import { initDatabase } from '@/db/dbInit'
+import { consumePendingIntent } from '@/spotify/pendingIntent'
 
 registerImporter(csvImportAdapter)
 registerExporter(csvExportAdapter)
@@ -35,16 +36,26 @@ app.use(router)
 app.mount('#app')
 
 // After mount: check if this is a Spotify PKCE callback.
-// The redirect lands on the base URL with ?code= in the search portion
-// After handling (success or failure), navigate to the dashboard so the user isn't left on the about/home page.
+// The redirect lands on the base URL with ?code= in the search portion.
+// After handling, resume any pending intent or fall back to the dashboard.
 if (new URLSearchParams(window.location.search).has('code')) {
-  import('@/composables/useSpotifyAuth').then(({ handleSpotifyCallback }) => {
+  import('@/composables/useSpotifyAuth').then(({ handleSpotifyCallback, setPendingAction }) => {
     handleSpotifyCallback()
+      .then(() => {
+        const intent = consumePendingIntent()
+        if (intent) {
+          setPendingAction(intent.action)
+          void router.push(intent.returnRoute)
+        } else {
+          void router.push({ name: 'dashboard' })
+        }
+      })
       .catch((err: unknown) => {
         console.error('Spotify callback failed:', err)
-      })
-      .finally(() => {
-        void router.push({ name: 'dashboard' })
+        // Still navigate to dashboard so the user is not left on the bare callback URL.
+        // The error state is already captured in useSpotifyAuth's _error ref.
+        const intent = consumePendingIntent()
+        void router.push(intent?.returnRoute ?? { name: 'dashboard' })
       })
   })
 }

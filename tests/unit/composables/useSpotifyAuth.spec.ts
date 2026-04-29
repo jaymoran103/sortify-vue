@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent } from 'vue'
-import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
+import { useSpotifyAuth, setPendingAction } from '@/composables/useSpotifyAuth'
 
 // Stub spotifyAuth and spotifyApi at the module level
 vi.mock('@/spotify/auth', () => ({
@@ -24,6 +24,26 @@ vi.mock('@/spotify/api', () => ({
   },
 }))
 
+vi.mock('@/spotify/pendingIntent', () => ({
+  savePendingIntent: vi.fn(),
+  consumePendingIntent: vi.fn().mockReturnValue(null),
+  PENDING_ACTIONS: {
+    OPEN_SPOTIFY_PICKER: 'open-spotify-picker',
+    CONNECT_ONLY: 'connect-only',
+  },
+}))
+
+// jsdom's localStorage.clear() is not implemented; stub it manually
+const localStorageData: Record<string, string> = {}
+const localStorageMock: Storage = {
+  getItem: (key) => localStorageData[key] ?? null,
+  setItem: (key, value) => { localStorageData[key] = String(value) },
+  removeItem: (key) => { delete localStorageData[key] },
+  clear: () => { for (const key in localStorageData) delete localStorageData[key] },
+  key: (index) => Object.keys(localStorageData)[index] ?? null,
+  get length() { return Object.keys(localStorageData).length },
+}
+
 // Helper to test composable in a component
 function useInComponent() {
   let result: ReturnType<typeof useSpotifyAuth> | undefined
@@ -40,11 +60,16 @@ function useInComponent() {
 
 describe('useSpotifyAuth', () => {
   beforeEach(() => {
+    vi.stubGlobal('localStorage', localStorageMock)
+    localStorageMock.clear()
     sessionStorage.clear()
     vi.clearAllMocks()
+    // Reset module-level pendingAction between tests
+    setPendingAction(null as unknown as string)
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     sessionStorage.clear()
   })
 
@@ -58,6 +83,56 @@ describe('useSpotifyAuth', () => {
     const { login } = useInComponent()
     await login()
     expect(spotifyAuth.authenticate).toHaveBeenCalled()
+  })
+
+  it('login() with no argument saves connect-only pending intent', async () => {
+    const { savePendingIntent } = await import('@/spotify/pendingIntent')
+    const { login } = useInComponent()
+    await login()
+    expect(savePendingIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'connect-only' }),
+    )
+  })
+
+  it('login("open-spotify-picker") saves open-spotify-picker pending intent', async () => {
+    const { savePendingIntent } = await import('@/spotify/pendingIntent')
+    const { login } = useInComponent()
+    await login('open-spotify-picker')
+    expect(savePendingIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'open-spotify-picker' }),
+    )
+  })
+
+  it('login() saves the hash path (without leading #) as returnRoute', async () => {
+    const { savePendingIntent } = await import('@/spotify/pendingIntent')
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, hash: '#/dashboard' },
+      writable: true,
+    })
+    const { login } = useInComponent()
+    await login('connect-only')
+    expect(savePendingIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ returnRoute: '/dashboard' }),
+    )
+  })
+
+  it('pendingAction is initially null', () => {
+    const { pendingAction } = useInComponent()
+    expect(pendingAction.value).toBeNull()
+  })
+
+  it('clearPendingAction() sets pendingAction to null', () => {
+    setPendingAction('open-spotify-picker')
+    const { pendingAction, clearPendingAction } = useInComponent()
+    expect(pendingAction.value).toBe('open-spotify-picker')
+    clearPendingAction()
+    expect(pendingAction.value).toBeNull()
+  })
+
+  it('setPendingAction() (standalone export) sets the module-level pendingAction ref', () => {
+    setPendingAction('open-spotify-picker')
+    const { pendingAction } = useInComponent()
+    expect(pendingAction.value).toBe('open-spotify-picker')
   })
 
   it('logout() calls spotifyAuth.clearAuth() and resets state', async () => {

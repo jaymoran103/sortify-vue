@@ -36,8 +36,10 @@ vi.mock('@/composables/useSpotifyAuth', async () => {
       user: ref(null),
       isLoading: ref(testState.authValues.isLoading),
       error: ref(null),
+      pendingAction: ref(null),
       login: testState.mockLogin,
       logout: vi.fn(),
+      clearPendingAction: vi.fn(),
       handleCallback: vi.fn(),
     }),
   }

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+  import { computed, watch } from 'vue'
 import { useModal } from '@/composables/useModal'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
+import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
 import ImportModal from './ImportModal.vue'
 import ExportModal from './ExportModal.vue'
 import ConfirmModal from '../modals/ConfirmModal.vue'
@@ -16,7 +17,7 @@ const playlistStore = usePlaylistStore()
 const hasPlaylists = computed(() => (playlistStore.playlists ?? []).length > 0)
 
 // Access Spotify auth state for status indicator and login action
-const { isAuthenticated, user, isLoading, error, login, logout } = useSpotifyAuth()
+const { isAuthenticated, user, isLoading, error, login, logout, pendingAction, clearPendingAction } = useSpotifyAuth()
 
 function openImportModal() {
   modal.open(ImportModal)
@@ -39,6 +40,19 @@ async function offerLogout() {
     logout()
   }
 }
+
+// Watch for pending action set asynchronously after the OAuth callback completes.
+// onMounted fires before handleSpotifyCallback() resolves, so a reactive watch is required.
+// immediate: true also handles the (unlikely) case where the action was set before this component mounted.
+watch(pendingAction, (action) => {
+  if (action === PENDING_ACTIONS.OPEN_SPOTIFY_PICKER) {
+    clearPendingAction()
+    modal.open(ImportModal, { autoSpotify: true })
+  } else if (action === PENDING_ACTIONS.OPEN_SPOTIFY_EXPORTER) {
+    clearPendingAction()
+    modal.open(ExportModal, { autoSpotify: true })
+  }
+}, { immediate: true })
 </script>
 
 <template>

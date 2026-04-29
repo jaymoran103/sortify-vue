@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { getImporter } from '@/adapters/registry'
 import { useModal } from '@/composables/useModal'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import { useActivityStore } from '@/stores/activity'
+import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
 import SpotifyPlaylistPickerModal from './SpotifyPlaylistPickerModal.vue'
 import type { ImportResult } from '@/types/adapters'
+
+const props = withDefaults(defineProps<{
+  // When true, immediately triggers the Spotify picker on mount.
+  // Set by IOCard when resuming an interrupted import after OAuth redirect.
+  autoSpotify?: boolean
+}>(), {
+  autoSpotify: false,
+})
 
 const emit = defineEmits<{
   cancel: []
@@ -25,7 +34,7 @@ function selectLocalFiles(): void {
 
 async function openSpotifyImport(): Promise<void> {
   if (!isAuthenticated.value) {
-    await login()
+    await login(PENDING_ACTIONS.OPEN_SPOTIFY_PICKER)
     return
   }
   emit('cancel')
@@ -33,6 +42,12 @@ async function openSpotifyImport(): Promise<void> {
     // Ignore modal promise rejections from user cancellation.
   })
 }
+
+onMounted(() => {
+  if (props.autoSpotify) {
+    openSpotifyImport()
+  }
+})
 
 // Main file handling function: CSVs are batched into one adapter call; each JSON is imported individually.
 // Handles UI state for importing process and any errors that occur.
