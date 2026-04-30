@@ -11,9 +11,9 @@ const workspaceTabs = [
   // { label: 'Track Actions', sub: 'Toggle across multiple playlists at once, or open in Spotify' },
 ]
 const simTabs = [
-  { label: 'Overlap scan', sub: 'Find every track in your library that already lives in a selected playlist.' },
-  { label: 'Equivalents', sub: 'Match alternate versions, live recordings, and covers across your playlists.' },
-  { label: 'Similarity graph', sub: 'A visual map of how your playlists relate — shared tracks as edges, clusters as communities.' },
+  { label: 'Overlap scan', sub: 'Search for playlists that overlap with eachother or a given set of tracks.' },
+  { label: 'Equivalents', sub: 'Review alternate versions of the same song, and consolidate across your playlists.' },
+  { label: 'Similarity Display', sub: 'Visualize playlist relationships, and decide which to tackle next.' },
 ]
 const featureCards = [
   {
