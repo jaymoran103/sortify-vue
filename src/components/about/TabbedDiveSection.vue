@@ -5,19 +5,21 @@ const props = defineProps<{
   tabs: { label: string; sub: string }[]
   mockClass?: string
 }>()
-
-const activeTab = ref(0)
+// Active tab defaults to none (-1), but retains value on mouse leave
+const activeTab = ref(-1)
 </script>
 
 <template>
   <div class="dive-body">
 
-    <!-- Dive Sidebar Tabs TODO clean up-->
+    <!-- Dive Sidebar Tabs: highlight when hovered, retain styling on leave -->
     <div class="dive-tabs">
+    <!-- <div class="dive-tabs" @mouseleave="activeTab = -1"> -->
       <div
+        v-show="activeTab >= 0"
         class="dive-tab-glider"
         :style="{ 
-            transform: `translateY(  ${activeTab * 100} %)`, 
+            transform: `translateY(${activeTab * 100}%)`, 
             height: `${100 / props.tabs.length}%` 
         }"
       ></div>
@@ -70,7 +72,7 @@ const activeTab = ref(0)
   gap: var(--space-1);
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  cursor: default;
+  cursor: pointer;
 }
 
 .dive-tab strong {
@@ -83,14 +85,11 @@ const activeTab = ref(0)
 .dive-tab span {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
-  opacity: 0;
-  transition: opacity 0.15s ease;
   line-height: var(--line-height-normal);
 }
 
 .dive-tab.is-active strong,
 .dive-tab:hover strong { color: var(--color-text); }
-.dive-tab.is-active span { opacity: 1; }
 
 .dive-mock {
   position: relative;

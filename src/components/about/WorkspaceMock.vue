@@ -37,8 +37,7 @@ const tracks = [
 
       <!-- For each playlist, display a column -->
       <div v-for="pl in playlists" :key="pl" class="ws-cell ws-pl-col">
-        <span v-if="activeTab === 1">{{ pl }} <span class="ws-col-menu"></span></span>
-        <span v-else>{{ pl }}</span>
+        <span>{{ pl }} <span class="ws-col-menu" :style="activeTab !== 1 ? 'visibility: hidden' : ''"></span></span>
       </div>
     </div>
 
@@ -62,8 +61,8 @@ const tracks = [
        case 1: disabled checkboxes with muted styling, emphasizes column menu 
        -->
       <div v-for="(checked, ci) in track.cols" :key="ci" class="ws-cell ws-pl-col">
-        <span v-if="activeTab === 0 || activeTab === 2" :class="['ws-checkbox', checked && 'ws-checked']">{{ checked ? '✓' : '' }}</span>
-        <span v-else-if="activeTab === 1"  :class="['ws-checkbox', 'ws-muted', checked && 'ws-checked-muted']">{{ checked ? '✓' : '' }}</span>
+        <span v-if="activeTab !== 1" :class="['ws-checkbox', checked && 'ws-checked']">{{ checked ? '✓' : '' }}</span>
+        <span v-else :class="['ws-checkbox', 'ws-muted', checked && 'ws-checked-muted']">{{ checked ? '✓' : '' }}</span>
       </div>
     </div>
   </div>
