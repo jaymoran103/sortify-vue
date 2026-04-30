@@ -80,9 +80,9 @@ describe('spotifyExportAdapter', () => {
       name: 'My Playlist', spotifyId: 'new-spotify-playlist-id'
     })
 
-    // Should have called POST /me/playlists once
+    // Should have called POST /me/playlists once with the [Sortify] prefix applied to the name
     expect(spotifyPostMock).toHaveBeenCalledWith('/me/playlists', {
-      name: 'My Playlist',
+      name: '[Sortify] - My Playlist',
       public: false,
       description: 'Exported from Sortify',
     })

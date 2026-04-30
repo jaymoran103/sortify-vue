@@ -37,6 +37,7 @@ app.mount('#app')
 
 // After mount: check if this is a Spotify PKCE callback.
 // The redirect lands on the base URL with ?code= in the search portion.
+// After handling, resume any pending intent or fall back to the dashboard.
 if (new URLSearchParams(window.location.search).has('code')) {
   import('@/composables/useSpotifyAuth').then(({ handleSpotifyCallback, setPendingAction }) => {
     handleSpotifyCallback()
@@ -44,9 +45,9 @@ if (new URLSearchParams(window.location.search).has('code')) {
         const intent = consumePendingIntent()
         if (intent) {
           setPendingAction(intent.action)
-          router.push(intent.returnRoute)
+          void router.push(intent.returnRoute)
         } else {
-          router.push('/dashboard')
+          void router.push({ name: 'dashboard' })
         }
       })
       .catch((err: unknown) => {
@@ -54,7 +55,7 @@ if (new URLSearchParams(window.location.search).has('code')) {
         // Still navigate to dashboard so the user is not left on the bare callback URL.
         // The error state is already captured in useSpotifyAuth's _error ref.
         const intent = consumePendingIntent()
-        router.push(intent?.returnRoute ?? '/dashboard')
+        void router.push(intent?.returnRoute ?? { name: 'dashboard' })
       })
   })
 }

@@ -113,8 +113,9 @@ onBeforeRouteLeave(async (_to, _from, next) => {
   }
 })
 
+// Navigate back to the main app view. Currently specifying as dashboard, since the root page is currently the about view.
 function goBack(): void {
-  router.push('/')
+  router.push({ name: 'dashboard' }) 
 }
 
 // Handle save action: call the store's save method, which persists the session to IndexedDB.

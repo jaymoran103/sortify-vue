@@ -61,7 +61,8 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: { template: '<div />' } },
-    { path: '/workspace', component: { template: '<div />' } },
+    { path: '/dashboard', name: 'dashboard', component: { template: '<div />' } },
+    { path: '/workspace', name: 'workspace', component: { template: '<div />' } },
   ],
 })
 
@@ -146,6 +147,15 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.error = 'Session not found.'
     const wrapper = mountWorkspace()
     expect(wrapper.find('.workspace__error button').exists()).toBe(true)
+  })
+
+  it('clicking Back to Dashboard navigates to the dashboard route', async () => {
+    const wrapper = mountWorkspace()
+    const pushSpy = vi.spyOn(router, 'push')
+    const btn = wrapper.find('button.btn--secondary')
+    await btn.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith({ name: 'dashboard' })
+    pushSpy.mockRestore()
   })
 
   it('renders the track table when data is loaded', () => {
