@@ -5,9 +5,10 @@ import SimilarityMock from './SimilarityMock.vue'
 import FeatureCard from './FeatureCard.vue'
 
 const workspaceTabs = [
-  { label: 'Edit memberships', sub: 'Toggle tracks across playlists. Nothing writes until you save.' },
-  { label: 'Manage playlists', sub: 'Rename, duplicate, or remove columns. Reorder by drag.' },
-  { label: 'Save & Export', sub: 'Write back to your library or download as CSV / JSON.' },
+  { label: 'Edit memberships', sub: 'Toggle tracks across playlists. Nothing is permanent until you save.' },
+  { label: 'Manage playlists', sub: 'Rename, duplicate, or remove playlists. Perform mass actions.' },
+  { label: 'Save & Export', sub: 'Send back to Spotify, or download as CSV / JSON.' },
+  // { label: 'Track Actions', sub: 'Toggle across multiple playlists at once, or open in Spotify' },
 ]
 const simTabs = [
   { label: 'Overlap scan', sub: 'Find every track in your library that already lives in a selected playlist.' },
@@ -17,16 +18,19 @@ const simTabs = [
 const featureCards = [
   {
     icon: '⊞',
+    // icon: '',
     title: 'Workspace',
-    description: 'Load any set of playlists into a shared grid. View and toggle track membership. Create, combine and refine.',
+    description: 'Load any set of playlists into a shared grid, viewing and toggling track membership. Create, combine and refine.',
   },
   {
-    icon: '⊙',
+    icon: 'ᯤ',
+    // icon: '⊙',
     title: 'Spotify Sync',
     description: "Sign in once to pull your Spotify library in. No passwords stored — just a token that lets Sortify read your playlists.",
   },
   {
-    icon: '▤',
+    icon: '☰',
+    // icon: '▤',
     title: 'Local Files',
     description: "Import from CSV or JSON, export any time. If Spotify disappears tomorrow, your organized library doesn't.",
   },
