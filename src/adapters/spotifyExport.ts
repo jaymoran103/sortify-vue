@@ -5,9 +5,8 @@ import { spotifyAuth } from '@/spotify/auth'
 import { spotifyApi } from '@/spotify/api'
 import { SLEEP_BETWEEN_PLAYLISTS_MS } from '@/spotify/config'
 
-//TODO: add as optional input
-// const PREFIX_PLAYLIST_NAME = '[Sortify] - '
-const PREFIX_PLAYLIST_NAME = ''
+//TODO: let users optionally specify export playlist name and description
+const PREFIX_PLAYLIST_NAME = '[Sortify] - '
 const PLAYLIST_DESCRIPTION = 'Exported from Sortify'
 // const PLAYLIST_DESCRIPTION = 'Exported from Sortify - jaymoran103.github.io/sortify-vue'
 
