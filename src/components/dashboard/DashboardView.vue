@@ -7,7 +7,10 @@ import WorkspaceCard from './WorkspaceCard.vue'
 
 <template>
   <div class="dashboard">
-    <h1 class="dashboard__title">Dashboard</h1>
+    <div class="dashboard__header">
+      <h1 class="dashboard__title">Dashboard</h1>
+      <button class="about-btn" @click="$router.push({ name: 'about' })">About Sortify</button>
+    </div>
 
     <!-- Main Dashboard Section -->
     <section class="dash-section">
@@ -36,10 +39,32 @@ import WorkspaceCard from './WorkspaceCard.vue'
   margin: 0 auto;
 }
 
+.dashboard__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
 .dashboard__title {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-6);
+  margin: 0;
+}
+
+.dashboard .about-btn {
+  color: var(--color-text-muted);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+    
+  border: 2px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.dashboard .about-btn:hover {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
 }
 
 .dashboard__grid {
