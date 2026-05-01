@@ -11,40 +11,39 @@ const workspaceTabs = [
   // { label: 'Track Actions', sub: 'Toggle across multiple playlists at once, or open in Spotify' },
 ]
 const simTabs = [
-  { label: 'Overlap scan', sub: 'Find every track in your library that already lives in a selected playlist.' },
-  { label: 'Equivalents', sub: 'Match alternate versions, live recordings, and covers across your playlists.' },
-  { label: 'Similarity graph', sub: 'A visual map of how your playlists relate — shared tracks as edges, clusters as communities.' },
+  { label: 'Overlap scan', sub: 'Search for playlists that overlap with eachother or a given set of tracks.' },
+  { label: 'Equivalents', sub: 'Review alternate versions of the same song, and consolidate across your playlists.' },
+  { label: 'Similarity Display', sub: 'Visualize playlist relationships, and decide which to tackle next.' },
 ]
 const featureCards = [
   {
     icon: '⊞',
     // icon: '',
     title: 'Workspace',
-    description: 'Load any set of playlists into a shared grid, viewing and toggling track membership. Create, combine and refine.',
+    description: 'View playlists in a shared grid, and toggle membership across playlists. Create, combine and refine.',
   },
   {
-    icon: 'ᯤ',
-    // icon: '⊙',
+    // icon: 'ᯤ',
+    icon: '⊙',
     title: 'Spotify Sync',
-    description: "Sign in once to pull your Spotify library in. No passwords stored — just a token that lets Sortify read your playlists.",
+    description: "Connect to Spotify to load in your playlists, then send them back once you're done.",
   },
   {
     icon: '☰',
     // icon: '▤',
     title: 'Local Files',
-    description: "Import from CSV or JSON, export any time. If Spotify disappears tomorrow, your organized library doesn't.",
+    description: "Import playlists from CSV or JSON files, export any time.",
+    // description: "Import playlists from CSV or JSON files, export any time. If Spotify disappears tomorrow, your organized library doesn't.",
+    // description: "Import playlists from CSV or JSON files, export any time. Works with sources like Exportify and TuneMyMusic.",
   },
   {
     icon: '◈',
     title: 'Similarity',
-    // description: "Hunt down duplicates, equivalents, and overlaps across your library. Then clean up the mess.",
     description: "Scan your library for duplicates, equivalents, and overlaps. Then sort them out.",
-    // description: "Find the playlists that overlap the most, the songs you add everywhere, and equivalent versions with different names.",
-    // description: "Find the playlists that overlap the most, the songs you add everywhere, and equivalent versions with different names. Then do something about it",
+    badge: 'Coming soon!',
 
-    // feature spam
-    // description: "Find that song saved in six different playlists. Spot the live version you forgot about. See which playlists actually share the same fifteen songs, and condense.",
-    badge: 'Coming soon',
+    // description: "Hunt down duplicates, equivalents, and overlaps across your library. Then clean up the mess.",
+    // description: "Find the playlists that overlap the most, the songs you add everywhere, and equivalent versions with different names. Then do something about it",
   },
 ]
 </script>
@@ -55,18 +54,14 @@ const featureCards = [
     <!-- SECTION: HERO -->
     <section class="hero">
       <h1 class="hero-tagline">Your Library, Your Way.</h1>
-      <p class="hero-sub">Sortify is a playlist manager that puts your content first.</p>
-      <!-- <p class="hero-sub">Visualize, organize, and analyze your music, with a clean and quick interface. </p>
-      <p class="hero-sub">Analysis tools highlight patterns for revision</p>
-      <p class="hero-sub">the Workspace helps visualize track membership, and change it at scale.</p>
-      <p class="hero-sub">the configurable Library helps visualize overlap, and makes big changes painless.</p> -->
+      <p class="hero-sub">Sortify – a playlist manager that puts your content first.</p>
 
-            <!-- Text: Development Disclaimer -->
+      <!-- Text: Development Disclaimer -->
       <div class="hero-dev-banner">
         <p class="hero-dev-note">
           This website is still in development and may contain bugs.</p>
-          <p>For a more robust version with a broader feature set (for now), try
-          <a class="hero-dev-link" href="https://jaymoran103.github.io/sortify-feb" target="_blank" rel="noopener">Sortify Vanilla</a>.
+          <p>For a more robust version with a broader feature set (for now), try the
+          <a class="hero-dev-link" href="https://jaymoran103.github.io/sortify-feb" target="_blank" rel="noopener">Original Version</a>.
         </p>
       </div>
       <!-- <div class="hero-mock-placeholder">[workspace mock]</div> -->
@@ -74,20 +69,12 @@ const featureCards = [
 
     
 
-    <!-- SECTION: ISSUES-->
+    <!-- SECTION: PROBLEM STATEMENT-->
     <section class="feature-cards">
       <h2 class="section-heading">The problem.</h2>
-      <!-- <p> Most music platforms prioritize discovery over organization. It's easy to find cool new content, and harder to keep your existing collections organized.</p> -->
-      <!-- <p> Most music platforms prioritize discovery over organization. It's easier to find cool new content than it is to keep your existing collections organized.</p> -->
-      <p> Most music platforms prioritize discovery over organization. It's much easier to find cool new content than to keep your existing collections organized.</p>
-      <div style="height: var(--space-2)"></div>
-      <p> Sortify is built to solve that problem. It separates your library from all the other noise, with simple but powerful tools to sort out your library.</p>
-
-      <!-- <p> Spotify separates your library from all the other noise, providing simple but powerful tools to sort out your library.</p> -->
-      <!-- <p class="hero-sub">As a result, there are far more ways to find cool mew content than there are to manage the music you've accumuluated.</p> -->
-      <!-- <p class="hero-sub"> As a result, most people end up with a sprawling, unsorted collection of playlists — and no good way to manage it.</p> -->
-      <!-- <p> Sortify is built to solve that problem.</p> -->
-
+     
+      <p class="section-sub">Most music platforms prioritize discovery over organization. It's much easier to find cool new content than to keep your existing library clean.</p>
+      <p class="section-sub"><b>Sortify</b> is built to solve that problem.It separates your library from all the other noise, with simple but powerful tools to sort out your music.</p>
             
     </section>
 
@@ -121,14 +108,15 @@ const featureCards = [
 
     <!-- DATA MODEL DIAGRAM -->
     <section class="data-model">
-      <h2 class="section-heading">Move your data flexibly.</h2>
-      <p class="data-model-sub">Pull from Spotify once. Edit in your browser. Save to a file you own. Loop it as many times as you want.</p>
-      <div class="stack-diagram">
 
+      <h2 class="section-heading">Move your data flexibly.</h2>
+      <p class="data-model-sub">Sync from Spotify once. Edit in your browser. Save to a file you own. Move data around as many times as you want.</p>
+      
+      <div class="stack-diagram">
         <div class="stack-node">
           <div class="stack-icon">⊙</div>
           <div class="stack-label">Spotify</div>
-          <div class="stack-desc">Your listening history and saved playlists. Sign in once to pull them in — or skip it entirely.</div>
+          <div class="stack-desc">Your main library playlists. Sign in and load the content you want — or skip it entirely.</div>
         </div>
 
         <div class="stack-arrow">
@@ -136,11 +124,11 @@ const featureCards = [
           <div class="stack-arrow-label">sync</div>
         </div>
 
-        <div class="stack-node stack-node-accent">
+        <div class="stack-node">
           <!-- <div class="stack-icon">◻</div> -->
           <div class="stack-icon">⎈</div>
-          <div class="stack-label">Browser</div>
-          <div class="stack-desc">Stored locally in IndexedDB. Private, offline-capable, no login required. This is your working copy.</div>
+          <div class="stack-label">Your Browser</div>
+          <div class="stack-desc">This is your working copy. This data is completely private, and stays stored until you clear browser data.</div>
         </div>
 
         <div class="stack-arrow">
@@ -149,19 +137,17 @@ const featureCards = [
         </div>
 
         <div class="stack-node">
-          <!-- <div class="stack-icon">🖴</div> -->
-          <div class="stack-icon">▤</div>
+          <div class="stack-icon">☰</div>
           <div class="stack-label">Your files</div>
-          <div class="stack-desc">CSV or JSON — yours forever. Opens in any spreadsheet app. Re-importable into Sortify on any device.</div>
+          <div class="stack-desc">Save data to your device as CSV or JSON files. Re-importable on any device. </div>
         </div>
-
       </div>
     </section>
 
     <!--SECTION: SIMILARITY (coming soon) -->
     <section class="workspace-dive">
       <div class="coming-soon-header">
-        <h2 class="section-heading">Similarity. <span class="coming-soon-badge">Coming soon</span></h2>
+        <h2 class="section-heading">Similarity Module <span class="coming-soon-badge">Coming soon!</span></h2>
         <p class="coming-soon-sub">Tools for understanding how your library fits together — and cleaning up the mess.</p>
       </div>
       <TabbedDiveSection :tabs="simTabs" mock-class="sim-mock">
@@ -171,8 +157,18 @@ const featureCards = [
       </TabbedDiveSection>
     </section>
 
+    <!-- SECTION: ACCOUNTLESS-->
+    <section class="feature-cards">
+      <h2 class="section-heading">Private, Simple, Flexible.</h2>
+     
+      <p class="section-sub">Sortify runs entirely in your browser. Your data is never tracked, shared, or fed to robots :)</p>
+      <p class="section-sub">Syncing from Spotify is an <i>optional</i> way to add data, but never required.</p>
+
+                    
+    </section>
+
     <!-- SECTION: ETHOS -->
-    <section class="ethos">
+    <!-- <section class="ethos">
       <h2 class="section-heading">Built for you, not for engagement.</h2>
       <dl class="ethos-list">
         <div class="ethos-item">
@@ -181,29 +177,26 @@ const featureCards = [
           <dd>Your data is never tracked, shared, or fed to robots :) </dd>
         </div>
         <div class="ethos-item">
-          <dt>Nothing runs on its own.</dt>
-          <!-- <dt>Your tools, your decisions.</dt> -->
-          <dd>Every feature is something you invoke. </dd>
+          <dt>Your tools, your decisions.</dt>
+          <dd>Every action is one you choose. Your playlists stay the way you organized them.</dd>
           <dd>No autoplay, recommendations, no algorithmic suggestions cramed into your display.</dd>
-          <!-- <dd>Every action is one you trigger. Your playlists stay the way you organized them.</dd> -->
         </div>
         <div class="ethos-item">
-          <dt>Library first.</dt>
-          <!-- <dt>Your library first.</dt> -->
-        <dd>Sortify prioritizes your existing library over new content. </dd>
-        <dd>You remain in control of what you see and hear.</dd>
-          <!-- <dd>Most streaming apps bury what you've saved to surface what they want you to stream.</dd> -->
-          <!-- <dd>Sortify starts with your existing collection and stays there.</dd> -->
+          <dt>Your Library first.</dt>
+          <dd>Sortify prioritizes your existing library over new content. </dd>
+          <dd>You remain in control of what you see and hear.</dd>
+          <dd>Most streaming apps bury what you've saved to surface what they want you to stream.</dd>
+          <dd>Sortify starts with your existing collection and stays there.</dd>
         </div>
       </dl>
-    </section>
+    </section> -->
 
     <!-- 7. CTA -->
     <section class="cta">
       <h2 class="cta-heading">Time to sort!</h2>
       <div class="cta-actions">
         <RouterLink to="/dashboard" class="cta-btn cta-btn-primary">Open Sortify</RouterLink>
-        <a href="https://github.com/jaymoran103/sortify-vue" target="_blank" rel="noopener" class="cta-btn cta-btn-ghost">View source</a>
+        <a href="https://github.com/jaymoran103/sortify-vue" target="_blank" rel="noopener" class="cta-btn cta-btn-ghost">View Codebase</a>
       </div>
       <p class="cta-note">No signup. No install. Works offline.</p>
     </section>
@@ -240,7 +233,8 @@ const featureCards = [
   background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
   border-radius: var(--radius-lg);
   padding: var(--space-4);
-  margin-bottom: var(--space-4);
+  max-width: 600px;
+  margin: 0 auto var(--space-4);
 }
 .hero-dev-note {
   margin: 0;
@@ -270,6 +264,7 @@ const featureCards = [
 }
 
 /* ── Data model ── */
+.section-sub { color: var(--color-text-muted); font-size: var(--font-size-md); line-height: var(--line-height-normal); margin-bottom: var(--space-4); }
 .data-model-sub { color: var(--color-text-muted); font-size: var(--font-size-md); max-width: 560px; margin-bottom: var(--space-6); }
 
 .stack-diagram { display: flex; align-items: center; }

@@ -4,13 +4,13 @@ defineProps<{ activeTab: number }>()
 const overlapRows = [
   { name: 'Classic Blues', total: 44,  shared: 18, pct: 64, selected: true  },
   { name: 'Blues Covers',  total: 31,  shared: 11, pct: 36, selected: true  },
-  { name: 'Best Licks',    total: 22,  shared: 7,  pct: 32, selected: false },
+  { name: 'Best Riffs',    total: 22,  shared: 7,  pct: 32, selected: false },
   { name: 'Classic Rock',  total: 66,  shared: 9,  pct: 14, selected: false },
   { name: 'Slow Burn',     total: 58,  shared: 4,  pct: 7,  selected: false },
   { name: 'Favorites',     total: 209, shared: 8,  pct: 4,  selected: false },
 ]
 
-const equivPlaylists = ["R&B Classics", "Soul and Funk", "Good Horns", "90's Hip-Hop"]
+const equivPlaylists = ["R&B Classics", "Soul and Funk", "Horn Section", "90's Hip-Hop"]
 const equivVersions = [
   { title: 'Respect',                    artist: 'Aretha Franklin',        album: 'I Never Loved a Man the Way I Love You',  preferred: true,  certainty: 'source',   cols: [true,  false, true,  false] },
   { title: 'Respect - Live',             artist: 'Aretha Franklin',        album: 'Aretha in Paris',                         preferred: false, certainty: 'high',     cols: [false, true,  false, false] },
@@ -111,18 +111,18 @@ const equivVersions = [
       </div>
     </div>
     <div class="sim-equiv-footer">
-      <button class="ws-btn ws-btn-ghost">Consolidate to preferred</button>
-      <button class="ws-btn ws-btn-ghost">Keep all versions</button>
-      <button class="ws-btn ws-btn-ghost">Remove duplicates</button>
-      <button class="ws-btn ws-btn-ghost">Add Manually</button>
+      <button class="ws-btn ws-btn-ghost">Consolidate</button>
+      <button class="ws-btn ws-btn-ghost">Approve All</button>
+      <button class="ws-btn ws-btn-ghost">Re-scan</button>
+      <!-- <button class="ws-btn ws-btn-ghost">Add Manually</button> -->
     </div>
   </div>
 
   <!-- Tab 2: Similarity graph -->
   <div v-else class="sim-panel">
     <div class="sim-panel-header">
-      <span class="ws-title">Similarity graph</span>
-      <span class="ws-meta">node size = track count · edges = shared tracks above threshold</span>
+      <span class="ws-title">Similarity Display</span>
+      <span class="ws-meta">Playlist size = track count • Line thickness = overlap</span>
     </div>
     <div class="sim-graph">
       <svg viewBox="0 0 840 320" fill="none" xmlns="http://www.w3.org/2000/svg" class="sim-graph-svg">

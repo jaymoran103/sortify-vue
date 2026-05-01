@@ -28,8 +28,14 @@ defineProps<{
   background: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
+  transition: background var(--duration-fast) var(--ease-default), border-color var(--duration-fast) var(--ease-default);
 }
-.feat-card-muted { opacity: 0.6; }
+.feat-card:hover {
+  background: var(--color-surface-raised);
+  /* border-color: var(--color-border); */
+}
+.feat-card-muted { opacity: 0.5; }
+.feat-card-muted:hover {  background: var(--color-surface);}
 .feat-card-badge {
   position: absolute;
   top: var(--space-3);
