@@ -14,6 +14,7 @@ export function resetPlaylistCache(): void {
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
+import { useModal } from '@/composables/useModal'
 import { useListFilter } from '@/composables/useListFilter'
 import { useListSelection } from '@/composables/useListSelection'
 import { useListSort } from '@/composables/useListSort'
@@ -30,6 +31,7 @@ import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
 import SelectableItem from '@/components/common/SelectableItem.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
+import UnapprovedSpotifyModal from '../modals/UnapprovedSpotifyModal.vue'
 import type { ImportResult } from '@/types/adapters'
 import type { SpotifyPaginatedResponse } from '@/spotify/types'
 import type { SortOption } from '@/types/ui'
@@ -40,7 +42,9 @@ const emit = defineEmits<{
 }>()
 
 const activityStore = useActivityStore()
-const { isAuthenticated, login } = useSpotifyAuth()
+const auth = useSpotifyAuth()
+const { isAuthenticated, login } = auth
+const modal = useModal()
 const LOADING_STEP_LABEL = 'Loading Spotify playlists...'
 
 const step = ref<'loading' | 'ready' | 'progress' | 'done' | 'error'>('loading')
@@ -239,7 +243,23 @@ async function fetchPlaylists(): Promise<void> {
     logInfo('Finished loading Spotify playlists', { totalLoaded: fetched.length })
     step.value = 'ready'
   } catch (err) {
-    errorMsg.value = err instanceof Error ? err.message : 'Failed to fetch playlists'
+    const errorMessage = err instanceof Error ? err.message : 'Failed to fetch playlists'
+    const is403 = errorMessage.includes('403')
+
+    // If 403, show the unapproved modal and close this picker
+    if (is403) {
+      emit('cancel')
+      // Show the unapproved modal after picker closes
+      setTimeout(async () => {
+        const result = await modal.open<string | undefined>(UnapprovedSpotifyModal)
+        if (result === 'exportify') {
+          window.open('https://exportify.net', '_blank')
+        }
+      }, 0)
+      return
+    }
+
+    errorMsg.value = errorMessage
     statusMsg.value = 'Spotify playlist loading failed.'
     logError(errorMsg.value, err)
     step.value = 'error'

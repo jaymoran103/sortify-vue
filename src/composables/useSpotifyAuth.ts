@@ -10,6 +10,7 @@ const _cachedUser = ref<SpotifyUserProfile | null>(null)
 const _isAuthenticated = ref(spotifyAuth.isAuthenticated())
 const _isLoading = ref(false)
 const _error = ref<string | null>(null)
+const _isUnapprovedError = ref(false)
 // Set after OAuth callback completes; consumed by IOCard to re-open the intended action.
 const _pendingAction = ref<string | null>(null)
 let _fetchUserInFlight: Promise<void> | null = null
@@ -17,15 +18,19 @@ let _fetchUserInFlight: Promise<void> | null = null
 // Module-level helpers: operate on shared state, safe to call outside a component.
 // Fetches the Spotify user profile from GET /me and updates the cached user ref.
 // Uses an in-flight guard so concurrent callers (multiple onMounted hooks) collapse onto a single request instead of firing duplicates.
-// TODO: review caching strategy, clearing more frequently or on certain triggers. 
+// TODO: review caching strategy, clearing more frequently or on certain triggers.
 async function fetchUser(): Promise<void> {
   if (_fetchUserInFlight) return _fetchUserInFlight
   _fetchUserInFlight = (async () => {
     try {
       const profile = await spotifyApi.get<SpotifyUserProfile>('/me')
       _cachedUser.value = profile
+      _isUnapprovedError.value = false
     } catch (err) {
-      _error.value = err instanceof Error ? err.message : 'Failed to fetch user profile'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch user profile'
+      const is403 = errorMessage.includes('403')
+      _isUnapprovedError.value = is403
+      _error.value = errorMessage
     } finally {
       _fetchUserInFlight = null
     }
@@ -38,6 +43,7 @@ async function fetchUser(): Promise<void> {
 export async function handleSpotifyCallback(): Promise<void> {
   _isLoading.value = true
   _error.value = null
+  _isUnapprovedError.value = false
   try {
     await spotifyAuth.handleCallback()
     _isAuthenticated.value = true
@@ -63,10 +69,12 @@ export function useSpotifyAuth(): {
   user: Ref<SpotifyUserProfile | null>
   isLoading: Ref<boolean>
   error: Ref<string | null>
+  isUnapprovedError: Ref<boolean>
   pendingAction: Ref<string | null>
   login: (pendingAction?: string) => Promise<void>
   logout: () => void
   clearPendingAction: () => void
+  clearError: () => void
   handleCallback: () => Promise<void>
 } {
   // Initiates PKCE login flow — saves pending intent then redirects to Spotify authorization page.
@@ -93,6 +101,12 @@ export function useSpotifyAuth(): {
     _pendingAction.value = null
   }
 
+  // Clears the error and unapproved state
+  function clearError(): void {
+    _error.value = null
+    _isUnapprovedError.value = false
+  }
+
   onMounted(() => {
     _isAuthenticated.value = spotifyAuth.isAuthenticated()
     if (_isAuthenticated.value && !_cachedUser.value) {
@@ -105,10 +119,12 @@ export function useSpotifyAuth(): {
     user: _cachedUser,
     isLoading: _isLoading,
     error: _error,
+    isUnapprovedError: _isUnapprovedError,
     pendingAction: _pendingAction,
     login,
     logout,
     clearPendingAction,
+    clearError,
     handleCallback: handleSpotifyCallback,
   }
 }
