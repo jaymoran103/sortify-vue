@@ -85,21 +85,57 @@ onBeforeUnmount(() => {
   workspaceStore.$reset()
 })
 
-// Before navigating away from the workspace, check for unsaved changes and warn user if necessary.
-onBeforeRouteLeave(async (_to, _from, next) => {
+/**
+ * Assemble the leave-guard warning for the current session state.
+ *
+ * Returns a single merged message, or null when nothing is at risk — one modal, never two.
+ * No side effects.
+ *
+ * Empty-playlist mentions are restricted to playlists in modifiedIds, i.e. ones this session
+ * actually touched. A pre-existing empty playlist the user never edited is not their problem
+ * on the way out, so it stays quiet.
+ *
+ * Known edge, accepted: modifiedIds marks a playlist modified for any reason, so renaming or
+ * reordering an already-empty playlist will surface it here.
+ */
+function buildLeaveWarning(): string | null {
+  const clauses: string[] = []
 
-  // If there are no unsaved changes, reset the store and navigate away.
-  if (!workspaceStore.hasUnsavedChanges) {
+  if (workspaceStore.hasUnsavedChanges) {
+    clauses.push('You have unsaved changes.')
+  }
+
+  const touchedEmpty = workspaceStore.playlists.filter(
+    (p) => p.trackIDs.length === 0 && workspaceStore.modifiedIds.has(p.id),
+  )
+  if (touchedEmpty.length > 0) {
+    const names = touchedEmpty.map((p) => `"${p.name}"`).join(', ')
+    clauses.push(
+      touchedEmpty.length === 1
+        ? `${names} has no tracks.`
+        : `${touchedEmpty.length} playlists have no tracks: ${names}.`,
+    )
+  }
+
+  if (clauses.length === 0) return null
+  return `${clauses.join(' ')} Leave without saving?`
+}
+
+// Before navigating away from the workspace, warn only if something is actually at stake.
+// FUTURE: Give option to save changes here as well.
+onBeforeRouteLeave(async (_to, _from, next) => {
+  const warning = buildLeaveWarning()
+
+  // Nothing at risk — reset the store and navigate away without interrupting.
+  if (warning === null) {
     workspaceStore.$reset()
     next()
     return
   }
 
-  // Build and show confirmation modal if there are unsaved changes, await user response.
-  // FUTURE: Give option to save changes here as well.
   const confirmed = await modal.open<true>(ConfirmModal, {
-    title: 'Unsaved Changes',
-    message: 'You have unsaved changes. Leave without saving?',
+    title: 'Leave Workspace',
+    message: warning,
     confirmLabel: 'Leave',
     cancelLabel: 'Stay',
   })
@@ -118,9 +154,16 @@ function goBack(): void {
   router.push({ name: 'dashboard' }) 
 }
 
+// Time of the most recent successful save, formatted for display. Deliberately
+// component-local: it dies with the component on unmount, which is the correct lifecycle
+// for it, so no reset wiring is needed.
+const lastSavedTime = ref<string | null>(null)
+
 // Handle save action: call the store's save method, which persists the session to IndexedDB.
+// Stamps lastSavedTime only after the write resolves, so the label never claims a save that failed.
 async function handleSave(): Promise<void> {
   await workspaceStore.save()
+  lastSavedTime.value = new Date().toLocaleTimeString()
 }
 
 // Helper to get track at a given virtualizer row index from the filtered+sorted displayTracks list.
@@ -323,8 +366,12 @@ useKeyboardShortcuts({
       <div class="workspace__header-actions">
         <button class="btn btn--secondary" @click="handleAddPlaylistToWorkspace">+ Add Playlist</button>
         <button class="btn btn--secondary" @click="handleCreatePlaylist">+ New Playlist</button>
+        <!-- Unsaved indicator or last-saved time, never both. -->
         <span v-if="workspaceStore.hasUnsavedChanges" class="workspace__unsaved-indicator">
           Unsaved changes
+        </span>
+        <span v-else-if="lastSavedTime" class="workspace__saved-indicator text-muted">
+          Saved at {{ lastSavedTime }}
         </span>
         <button
           class="btn btn--primary"
@@ -452,6 +499,10 @@ useKeyboardShortcuts({
 .workspace__unsaved-indicator {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+
+.workspace__saved-indicator {
+  font-size: var(--font-size-sm);
 }
 
 .workspace__error,

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { reactive, nextTick } from 'vue'
@@ -71,6 +71,13 @@ vi.mock('@/composables/useContextMenu', () => ({
   }),
 }))
 
+// ─── Mock useModal ───────────────────────────────────────────────────────────
+
+const mockModalOpen = vi.hoisted(() => vi.fn().mockResolvedValue(null))
+vi.mock('@/composables/useModal', () => ({
+  useModal: () => ({ open: mockModalOpen, close: vi.fn() }),
+}))
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 const router = createRouter({
@@ -78,7 +85,8 @@ const router = createRouter({
   routes: [
     { path: '/', component: { template: '<div />' } },
     { path: '/dashboard', name: 'dashboard', component: { template: '<div />' } },
-    { path: '/workspace', name: 'workspace', component: { template: '<div />' } },
+    // Renders the real component so onBeforeRouteLeave guards fire in mountViaRouter().
+    { path: '/workspace', name: 'workspace', component: WorkspaceView },
   ],
 })
 
@@ -102,6 +110,20 @@ function mountWorkspace() {
   return mount(WorkspaceView, {
     global: { plugins: [router, createPinia()] },
   })
+}
+
+// Mounting through <router-view> so onBeforeRouteLeave is registered against the
+// matched route — a directly-mounted component's leave guard never fires.
+let routerWrapper: ReturnType<typeof mount> | null = null
+
+async function mountViaRouter() {
+  await router.push('/workspace?session=1')
+  routerWrapper = mount(
+    { template: '<router-view />' },
+    { global: { plugins: [router, createPinia()] } },
+  )
+  await flushPromises()
+  return routerWrapper
 }
 
 // ─── Column menu helpers ─────────────────────────────────────────────────────
@@ -159,6 +181,15 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.bulkRemoveFromWorkspace.mockReset()
     mockWorkspaceStore.$reset.mockReset()
     mockContextMenuShow.mockClear()
+    mockModalOpen.mockReset()
+    mockModalOpen.mockResolvedValue(null)
+  })
+
+  afterEach(() => {
+    // A router-mounted WorkspaceView keeps its leave guard registered until unmount.
+    // Leaving one alive would fire a stale guard during a later test's navigation.
+    routerWrapper?.unmount()
+    routerWrapper = null
   })
 
   it('renders loading state when store is loading', () => {
@@ -419,6 +450,132 @@ describe('WorkspaceView', () => {
       const albumEl = wrapper.find('.track-row__album')
       expect(artistEl.text()).not.toContain('AlbumName')
       expect(albumEl.text()).not.toContain('ArtistName')
+    })
+  })
+
+  // ─── Save timestamp (W1-G) ─────────────────────────────────────────────────
+
+  describe('save timestamp', () => {
+    it('shows a saved timestamp after a successful save', async () => {
+      mockWorkspaceStore.hasUnsavedChanges = true
+      const wrapper = mountWorkspace()
+      await wrapper.find('button.btn--primary').trigger('click')
+      await flushPromises()
+      mockWorkspaceStore.hasUnsavedChanges = false
+      await nextTick()
+      expect(wrapper.find('.workspace__saved-indicator').text()).toContain('Saved at')
+    })
+
+    it('shows no saved timestamp before any save', () => {
+      mockWorkspaceStore.hasUnsavedChanges = false
+      const wrapper = mountWorkspace()
+      expect(wrapper.find('.workspace__saved-indicator').exists()).toBe(false)
+    })
+
+    it('unsaved changes takes precedence over the saved timestamp', async () => {
+      mockWorkspaceStore.hasUnsavedChanges = true
+      const wrapper = mountWorkspace()
+      await wrapper.find('button.btn--primary').trigger('click')
+      await flushPromises()
+      await nextTick()
+      expect(wrapper.find('.workspace__unsaved-indicator').exists()).toBe(true)
+      expect(wrapper.find('.workspace__saved-indicator').exists()).toBe(false)
+    })
+  })
+
+  // ─── Leave guard (W1-G / design decision D5) ───────────────────────────────
+  // One merged modal, fired only when something is actually at risk. Empty-playlist
+  // mentions are scoped to modifiedIds — playlists this session actually touched.
+
+  describe('leave guard', () => {
+    it('leaves silently when a pre-existing empty playlist was never touched', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Empty', [])]
+      mockWorkspaceStore.modifiedIds = new Set()
+      mockWorkspaceStore.hasUnsavedChanges = false
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(mockModalOpen).not.toHaveBeenCalled()
+      expect(router.currentRoute.value.path).toBe('/dashboard')
+    })
+
+    it('warns about unsaved changes only, when no touched playlist is empty', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Has tracks', ['t1'])]
+      mockWorkspaceStore.modifiedIds = new Set([1])
+      mockWorkspaceStore.hasUnsavedChanges = true
+      mockModalOpen.mockResolvedValueOnce(true)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(mockModalOpen).toHaveBeenCalledOnce()
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+      expect(props.message).toContain('unsaved changes')
+      expect(props.message).not.toContain('no tracks')
+    })
+
+    it('names a playlist that this session created and left empty', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist('pending-1', 'New Mix', [])]
+      mockWorkspaceStore.modifiedIds = new Set(['pending-1'])
+      mockWorkspaceStore.hasUnsavedChanges = true
+      mockModalOpen.mockResolvedValueOnce(true)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+      expect(props.message).toContain('"New Mix"')
+      expect(props.message).toContain('has no tracks')
+    })
+
+    it('does not mention an untouched empty playlist alongside unrelated edits', async () => {
+      mockWorkspaceStore.playlists = [
+        makePlaylist(1, 'Untouched Empty', []),
+        makePlaylist(2, 'Edited', ['t1']),
+      ]
+      mockWorkspaceStore.modifiedIds = new Set([2])
+      mockWorkspaceStore.hasUnsavedChanges = true
+      mockModalOpen.mockResolvedValueOnce(true)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+      expect(props.message).not.toContain('Untouched Empty')
+    })
+
+    it('lists multiple emptied playlists with a count', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      mockWorkspaceStore.modifiedIds = new Set([1, 2])
+      mockWorkspaceStore.hasUnsavedChanges = true
+      mockModalOpen.mockResolvedValueOnce(true)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+      expect(props.message).toContain('2 playlists have no tracks')
+    })
+
+    it('shows exactly one modal when both conditions hold', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist('pending-1', 'New Mix', [])]
+      mockWorkspaceStore.modifiedIds = new Set(['pending-1'])
+      mockWorkspaceStore.hasUnsavedChanges = true
+      mockModalOpen.mockResolvedValueOnce(true)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(mockModalOpen).toHaveBeenCalledOnce()
+    })
+
+    it('stays on the page when the warning is dismissed', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Edited', ['t1'])]
+      mockWorkspaceStore.modifiedIds = new Set([1])
+      mockWorkspaceStore.hasUnsavedChanges = true
+      mockModalOpen.mockResolvedValueOnce(null)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(router.currentRoute.value.path).toBe('/workspace')
+    })
+
+    it('resets the store when leaving is confirmed', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Edited', ['t1'])]
+      mockWorkspaceStore.modifiedIds = new Set([1])
+      mockWorkspaceStore.hasUnsavedChanges = true
+      mockModalOpen.mockResolvedValueOnce(true)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(mockWorkspaceStore.$reset).toHaveBeenCalled()
     })
   })
 
