@@ -12,6 +12,7 @@ import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import PromptModal from '@/components/modals/PromptModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
+import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
@@ -114,6 +115,18 @@ function buildLeaveWarning(): string | null {
       touchedEmpty.length === 1
         ? `${names} has no tracks.`
         : `${touchedEmpty.length} playlists have no tracks: ${names}.`,
+    )
+  }
+
+  // Tracks added but never assigned live only in the in-memory buffer and vanish on reload.
+  // Adding them marks no playlist modified, so without this clause hasUnsavedChanges stays
+  // false and the guard would not fire at all for an add-then-abandon flow (D6).
+  const unassigned = workspaceStore.unassignedTrackIds.length
+  if (unassigned > 0) {
+    clauses.push(
+      unassigned === 1
+        ? '1 track is not in any playlist and will be discarded.'
+        : `${unassigned} tracks are not in any playlist and will be discarded.`,
     )
   }
 
@@ -360,10 +373,31 @@ async function handleAddPlaylistToWorkspace(): Promise<void> {
   }
 }
 
+/**
+ * Add library tracks to the workspace without assigning them to a playlist.
+ *
+ * Opens TrackSelectModal with the workspace's current track IDs excluded, so the picker only
+ * offers genuine additions — that exclusion replaces the "no new tracks" pre-check the
+ * original spec described. Side effect: extends the workspace buffer via the store.
+ */
+async function handleAddTracks(): Promise<void> {
+  const selectedIds = await modal.open<string[]>(TrackSelectModal, {
+    excludeIds: [...workspaceStore.tracks.keys()],
+    confirmLabel: 'Add',
+    confirmVariant: 'primary',
+  })
+  if (!selectedIds?.length) return
+  await workspaceStore.addTracksToWorkspace(selectedIds)
+}
+
 async function handleCreatePlaylist(): Promise<void> {
-  // window.prompt is a temporary scaffold — replace with modal in polish pass
-  const name = window.prompt('New playlist name:')
-  if (name && name.trim()) {
+  const name = await modal.open<string>(PromptModal, {
+    title: 'New Playlist',
+    label: 'Playlist name',
+    initialValue: '',
+    confirmLabel: 'Create',
+  })
+  if (name?.trim()) {
     workspaceStore.createEmptyPlaylist(name.trim())
   }
 }
@@ -394,6 +428,7 @@ useKeyboardShortcuts({
       <!-- Actions/Save Section -->
       <div class="workspace__header-actions">
         <button class="btn btn--secondary" @click="handleAddPlaylistToWorkspace">+ Add Playlist</button>
+        <button class="btn btn--secondary" @click="handleAddTracks">+ Add Tracks</button>
         <button class="btn btn--secondary" @click="handleCreatePlaylist">+ New Playlist</button>
         <!-- Unsaved indicator or last-saved time, never both. -->
         <span v-if="workspaceStore.hasUnsavedChanges" class="workspace__unsaved-indicator">

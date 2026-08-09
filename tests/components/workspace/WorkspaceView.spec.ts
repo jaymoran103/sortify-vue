@@ -36,6 +36,8 @@ const mockWorkspaceStore = reactive({
   bulkRemoveFromAll: vi.fn(),
   bulkRemoveFromWorkspace: vi.fn(),
   setTracksInPlaylist: vi.fn(),
+  addTracksToWorkspace: vi.fn().mockResolvedValue(undefined),
+  unassignedTrackIds: [] as string[],
   $reset: vi.fn(),
 })
 
@@ -176,6 +178,7 @@ describe('WorkspaceView', () => {
       modifiedIds: new Set<PlaylistId>(),
       hasUnsavedChanges: false,
       tracks: new Map(),
+      unassignedTrackIds: [],
     })
     mockWorkspaceStore.loadSession.mockResolvedValue(undefined)
     mockWorkspaceStore.toggleTrack.mockReset()
@@ -193,6 +196,8 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.bulkRemoveFromAll.mockReset()
     mockWorkspaceStore.bulkRemoveFromWorkspace.mockReset()
     mockWorkspaceStore.setTracksInPlaylist.mockReset()
+    mockWorkspaceStore.addTracksToWorkspace.mockReset()
+    mockWorkspaceStore.addTracksToWorkspace.mockResolvedValue(undefined)
     mockWorkspaceStore.$reset.mockReset()
     mockContextMenuShow.mockClear()
     mockModalOpen.mockReset()
@@ -582,6 +587,34 @@ describe('WorkspaceView', () => {
       expect(router.currentRoute.value.path).toBe('/workspace')
     })
 
+    // ─── Unassigned tracks (design decision D6) ──────────────────────────────
+    // Adding tracks dirties no playlist, so without this clause the guard would not
+    // fire at all for an add-then-abandon flow.
+
+    it('warns about tracks assigned to no playlist', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', ['t1'])]
+      mockWorkspaceStore.modifiedIds = new Set()
+      mockWorkspaceStore.hasUnsavedChanges = false
+      mockWorkspaceStore.unassignedTrackIds = ['t9', 't8']
+      mockModalOpen.mockResolvedValueOnce(true)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+      expect(props.message).toContain('2 tracks are not in any playlist')
+    })
+
+    it('uses the singular form for one unassigned track', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', ['t1'])]
+      mockWorkspaceStore.modifiedIds = new Set()
+      mockWorkspaceStore.hasUnsavedChanges = false
+      mockWorkspaceStore.unassignedTrackIds = ['t9']
+      mockModalOpen.mockResolvedValueOnce(true)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+      expect(props.message).toContain('1 track is not in any playlist')
+    })
+
     it('resets the store when leaving is confirmed', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'Edited', ['t1'])]
       mockWorkspaceStore.modifiedIds = new Set([1])
@@ -590,6 +623,78 @@ describe('WorkspaceView', () => {
       await mountViaRouter()
       await router.push('/dashboard')
       expect(mockWorkspaceStore.$reset).toHaveBeenCalled()
+    })
+  })
+
+  // ─── Add content flows (W1-H) ──────────────────────────────────────────────
+
+  describe('add content flows', () => {
+    function headerButton(wrapper: ReturnType<typeof mountWorkspace>, label: string) {
+      return wrapper.findAll('button').find((b) => b.text() === label)!
+    }
+
+    it('opens TrackSelectModal excluding tracks already in the workspace', async () => {
+      mockWorkspaceStore.tracks = new Map([['t1', makeTrack('t1', 'Song A', 'Artist 1')]])
+      const wrapper = mountWorkspace()
+      await headerButton(wrapper, '+ Add Tracks').trigger('click')
+      const [, props] = mockModalOpen.mock.calls[0] as [
+        unknown,
+        { excludeIds: string[]; confirmLabel: string; confirmVariant: string },
+      ]
+      expect(props.excludeIds).toEqual(['t1'])
+      expect(props.confirmLabel).toBe('Add')
+      expect(props.confirmVariant).toBe('primary')
+    })
+
+    it('adds the selected ids to the workspace', async () => {
+      mockModalOpen.mockResolvedValueOnce(['t9'])
+      const wrapper = mountWorkspace()
+      await headerButton(wrapper, '+ Add Tracks').trigger('click')
+      await flushPromises()
+      expect(mockWorkspaceStore.addTracksToWorkspace).toHaveBeenCalledWith(['t9'])
+    })
+
+    it('does nothing when the track picker is cancelled', async () => {
+      mockModalOpen.mockResolvedValueOnce(null)
+      const wrapper = mountWorkspace()
+      await headerButton(wrapper, '+ Add Tracks').trigger('click')
+      await flushPromises()
+      expect(mockWorkspaceStore.addTracksToWorkspace).not.toHaveBeenCalled()
+    })
+
+    it('does nothing when the track picker returns an empty selection', async () => {
+      mockModalOpen.mockResolvedValueOnce([])
+      const wrapper = mountWorkspace()
+      await headerButton(wrapper, '+ Add Tracks').trigger('click')
+      await flushPromises()
+      expect(mockWorkspaceStore.addTracksToWorkspace).not.toHaveBeenCalled()
+    })
+
+    it('creates a playlist from the prompt modal rather than window.prompt', async () => {
+      const promptSpy = vi.spyOn(window, 'prompt')
+      mockModalOpen.mockResolvedValueOnce('My Playlist')
+      const wrapper = mountWorkspace()
+      await headerButton(wrapper, '+ New Playlist').trigger('click')
+      await flushPromises()
+      expect(promptSpy).not.toHaveBeenCalled()
+      expect(mockWorkspaceStore.createEmptyPlaylist).toHaveBeenCalledWith('My Playlist')
+      promptSpy.mockRestore()
+    })
+
+    it('trims the new playlist name', async () => {
+      mockModalOpen.mockResolvedValueOnce('  Padded  ')
+      const wrapper = mountWorkspace()
+      await headerButton(wrapper, '+ New Playlist').trigger('click')
+      await flushPromises()
+      expect(mockWorkspaceStore.createEmptyPlaylist).toHaveBeenCalledWith('Padded')
+    })
+
+    it('does not create a playlist when the prompt is cancelled', async () => {
+      mockModalOpen.mockResolvedValueOnce(null)
+      const wrapper = mountWorkspace()
+      await headerButton(wrapper, '+ New Playlist').trigger('click')
+      await flushPromises()
+      expect(mockWorkspaceStore.createEmptyPlaylist).not.toHaveBeenCalled()
     })
   })
 

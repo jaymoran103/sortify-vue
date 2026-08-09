@@ -39,6 +39,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const hasUnsavedChanges = computed(() => modifiedIds.value.size > 0)
 
+  // Tracks sitting in the workspace but in no playlist — stableOrder entries found in no
+  // playlist's trackIdSet. These exist only in the in-memory buffer: WorkspaceSession persists
+  // only playlistIds, so loadSession rebuilds the track set from playlist contents and these
+  // would not survive a reload. The leave guard warns about them for exactly that reason (D6).
+  const unassignedTrackIds = computed<string[]>(() =>
+    stableOrder.value.filter((id) => !playlists.value.some((p) => p.trackIdSet.has(id))),
+  )
+
   /**
    * Load a workspace session by ID. Clears any currently loaded session first.
    * Validates the ID, fetches session + playlists + tracks from IDB, and touches lastOpened.
@@ -379,6 +387,38 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   /**
+   * Add tracks to the workspace buffer without assigning them to any playlist.
+   *
+   * Input: library track IDs. Records are fetched from IDB via getTracksByIds, mirroring how
+   * addPlaylist resolves novel tracks — the track store's reactive list is a liveQuery that
+   * starts empty, so it cannot be read synchronously here without dropping tracks.
+   *
+   * Side effects: extends the tracks Map and appends to stableOrder, so new rows render at the
+   * bottom. IDs already in the workspace, and IDs with no library record, are skipped.
+   *
+   * Deliberately does NOT touch modifiedIds: adding a track dirties no playlist. The leave
+   * guard covers the resulting data-loss window via unassignedTrackIds (design decision D6).
+   */
+  async function addTracksToWorkspace(trackIds: string[]): Promise<void> {
+    const novelIds = trackIds.filter((tid) => !tracks.value.has(tid))
+    if (novelIds.length === 0) return
+
+    const trackStore = useTrackStore()
+    const fetched = await trackStore.getTracksByIds(novelIds)
+    if (fetched.length === 0) return
+
+    const nextTracks = new Map(tracks.value)
+    for (const track of fetched) {
+      nextTracks.set(track.trackID, track)
+    }
+
+    tracks.value = nextTracks
+    // Extend from the fetched records, not the requested IDs, so an ID with no library
+    // record never lands in the display order without a matching entry in the tracks Map.
+    stableOrder.value = [...stableOrder.value, ...fetched.map((t) => t.trackID)]
+  }
+
+  /**
    * Toggle a track's membership in a playlist.
    * 
    * Keeps trackIDs in sync within playlist lookup set and ordered array.
@@ -489,6 +529,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     error,
     trackList,
     hasUnsavedChanges,
+    unassignedTrackIds,
     loadSession,
     addPlaylist,
     removePlaylist,
@@ -503,6 +544,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     bulkRemoveFromAll,
     bulkRemoveFromWorkspace,
     setTracksInPlaylist,
+    addTracksToWorkspace,
     toggleTrack,
     save,
     $reset,
