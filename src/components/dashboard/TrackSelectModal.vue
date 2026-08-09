@@ -13,6 +13,21 @@ import SelectableItem from '@/components/common/SelectableItem.vue'
 import type { Track } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
+// Neutral by default. Destructive styling is opt-in so a caller that omits these props
+// gets a plain Confirm button rather than a red Delete one it did not ask for.
+const props = withDefaults(
+  defineProps<{
+    excludeIds?: string[]
+    confirmLabel?: string
+    confirmVariant?: 'primary' | 'danger'
+  }>(),
+  {
+    excludeIds: () => [],
+    confirmLabel: 'Confirm',
+    confirmVariant: 'primary',
+  },
+)
+
 const emit = defineEmits<{
   cancel: []
   confirm: [ids: string[]]
@@ -20,7 +35,14 @@ const emit = defineEmits<{
 
 const trackStore = useTrackStore()
 
-const allTracks = computed((): Track[] => trackStore.tracks ?? [])
+const excludeSet = computed(() => new Set(props.excludeIds))
+
+// Excluded tracks are dropped before the filter/sort pipeline rather than at render time,
+// so the confirm count, Select All, and the selected-first display all operate on the
+// same candidate set.
+const allTracks = computed((): Track[] =>
+  (trackStore.tracks ?? []).filter((t: Track) => !excludeSet.value.has(t.trackID)),
+)
 
 const sortOptions: SortOption<Track>[] = [
   { key: 'title', label: 'Title', compareFn: (a, b) => a.title.localeCompare(b.title) },
@@ -115,12 +137,14 @@ function confirmSelection(): void {
       </button>
       <div class="track-select__footer-actions">
         <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
+        <!-- Label and variant come from the caller; see the props block for defaults. -->
         <button
-          class="btn btn--danger"
+          class="btn track-select__confirm"
+          :class="confirmVariant === 'danger' ? 'btn--danger' : 'btn--primary'"
           :disabled="selection.selectedIds.value.size === 0"
           @click="confirmSelection"
         >
-          Delete ({{ selection.selectedCount.value }})
+          {{ confirmLabel }} ({{ selection.selectedCount.value }})
         </button>
       </div>
     </div>
