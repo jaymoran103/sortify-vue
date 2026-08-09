@@ -17,7 +17,7 @@ import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import TrackRow from './TrackRow.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
-import type { Track } from '@/types/models'
+import type { Track, PlaylistId } from '@/types/models'
 import type { SortOption, MenuEntry } from '@/types/ui'
 
 const route = useRoute()
@@ -132,7 +132,7 @@ function trackAt(index: number): Track {
 
 // ─── Playlist column action handlers ────────────────────────────────────────
 
-async function handleRename(playlistId: number | string): Promise<void> {
+async function handleRename(playlistId: PlaylistId): Promise<void> {
   const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
   if (!pl) return
   const newName = await modal.open<string>(PromptModal, {
@@ -146,12 +146,47 @@ async function handleRename(playlistId: number | string): Promise<void> {
   }
 }
 
-function handleRemove(playlistId: number | string): void {
+function handleRemove(playlistId: PlaylistId): void {
   workspaceStore.removePlaylist(playlistId)
 }
 
-function handleDuplicate(playlistId: number | string): void {
+function handleDuplicate(playlistId: PlaylistId): void {
   workspaceStore.duplicatePlaylist(playlistId)
+}
+
+/**
+ * Assemble and show the context menu for one playlist column.
+ *
+ * Inputs: the requesting playlist's id, and the originating mouse event used to position
+ * the menu. Side effect: opens the shared context menu via useContextMenu().show().
+ *
+ * This is the single assembly point for the column menu. It lives here rather than in
+ * PlaylistColumnHeader because upcoming entries depend on state only this view owns —
+ * the filtered track count, the active sort, and Spotify URIs (design decision D1).
+ * No-ops if the playlist is no longer in the workspace.
+ */
+function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
+  const index = workspaceStore.playlists.findIndex((p) => p.id === playlistId)
+  if (index === -1) return
+
+  const items: MenuEntry[] = [
+    { label: 'Rename', action: () => void handleRename(playlistId) },
+    { label: 'Duplicate', action: () => handleDuplicate(playlistId) },
+  ]
+
+  // Move entries are offered only where there is somewhere to move to. The view knows each
+  // playlist's index already, so the header no longer needs canMoveLeft/canMoveRight props.
+  if (index > 0) {
+    items.push({ label: 'Move Left', action: () => workspaceStore.movePlaylist(playlistId, -1) })
+  }
+  if (index < workspaceStore.playlists.length - 1) {
+    items.push({ label: 'Move Right', action: () => workspaceStore.movePlaylist(playlistId, 1) })
+  }
+
+  items.push({ divider: true })
+  items.push({ label: 'Remove from Workspace', action: () => handleRemove(playlistId) })
+
+  ctx.show(event, items)
 }
 
 // ─── Row selection + context menu handlers ────────────────────
@@ -346,16 +381,10 @@ useKeyboardShortcuts({
 
             <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
             <PlaylistColumnHeader
-              v-for="(pl, i) in workspaceStore.playlists"
+              v-for="pl in workspaceStore.playlists"
               :key="pl.id"
               :playlist="pl"
-              :can-move-left="i > 0"
-              :can-move-right="i < workspaceStore.playlists.length - 1"
-              @rename="handleRename"
-              @remove="handleRemove"
-              @duplicate="handleDuplicate"
-              @move-left="(id) => workspaceStore.movePlaylist(id, -1)"
-              @move-right="(id) => workspaceStore.movePlaylist(id, 1)"
+              @request-menu="buildColumnMenu"
             />
           </div>
 

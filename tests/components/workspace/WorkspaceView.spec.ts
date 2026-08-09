@@ -6,6 +6,7 @@ import { reactive, nextTick } from 'vue'
 import WorkspaceView from '@/components/workspace/WorkspaceView.vue'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 import type { Track } from '@/types/models'
+import type { MenuEntry, MenuItem } from '@/types/ui'
 
 // ─── Mock workspace store ────────────────────────────────────────────────────
 
@@ -55,6 +56,21 @@ vi.mock('@tanstack/vue-virtual', () => ({
   }),
 }))
 
+// ─── Mock useContextMenu ─────────────────────────────────────────────────────
+// WorkspaceView now builds the playlist column menu itself (design decision D1),
+// so menu-content assertions live here rather than in PlaylistColumnHeader.spec.ts.
+
+const mockContextMenuShow = vi.hoisted(() => vi.fn())
+vi.mock('@/composables/useContextMenu', () => ({
+  useContextMenu: () => ({
+    show: mockContextMenuShow,
+    close: vi.fn(),
+    isOpen: { value: false },
+    position: { value: { x: 0, y: 0 } },
+    entries: { value: [] },
+  }),
+}))
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 const router = createRouter({
@@ -86,6 +102,28 @@ function mountWorkspace() {
   return mount(WorkspaceView, {
     global: { plugins: [router, createPinia()] },
   })
+}
+
+// ─── Column menu helpers ─────────────────────────────────────────────────────
+
+function lastMenuEntries(): MenuEntry[] {
+  const calls = mockContextMenuShow.mock.calls
+  return (calls[calls.length - 1]?.[1] ?? []) as MenuEntry[]
+}
+
+function lastMenuLabels(): string[] {
+  return lastMenuEntries()
+    .filter((e): e is MenuItem => 'label' in e)
+    .map((e) => e.label)
+}
+
+function findMenuAction(label: string): (() => void) | undefined {
+  const entry = lastMenuEntries().find((e) => 'label' in e && e.label === label)
+  return entry && 'action' in entry ? entry.action : undefined
+}
+
+async function openColumnMenu(wrapper: ReturnType<typeof mountWorkspace>, columnIndex = 0) {
+  await wrapper.findAll('.playlist-col-header__menu-btn')[columnIndex]!.trigger('click')
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -120,6 +158,7 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.bulkRemoveFromAll.mockReset()
     mockWorkspaceStore.bulkRemoveFromWorkspace.mockReset()
     mockWorkspaceStore.$reset.mockReset()
+    mockContextMenuShow.mockClear()
   })
 
   it('renders loading state when store is loading', () => {
@@ -380,6 +419,108 @@ describe('WorkspaceView', () => {
       const albumEl = wrapper.find('.track-row__album')
       expect(artistEl.text()).not.toContain('AlbumName')
       expect(albumEl.text()).not.toContain('ArtistName')
+    })
+  })
+
+  // ─── Playlist column menu ──────────────────────────────────────────────────
+  // Migrated from PlaylistColumnHeader.spec.ts when D1 moved menu construction here.
+
+  describe('playlist column menu', () => {
+    it('opens from the ellipsis button', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      expect(mockContextMenuShow).toHaveBeenCalledOnce()
+    })
+
+    it('opens from a right-click anywhere on the header', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
+      const wrapper = mountWorkspace()
+      await wrapper.find('.playlist-col-header').trigger('contextmenu')
+      expect(mockContextMenuShow).toHaveBeenCalledOnce()
+    })
+
+    it('always includes Rename, Duplicate, and Remove from Workspace', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      const labels = lastMenuLabels()
+      expect(labels).toContain('Rename')
+      expect(labels).toContain('Duplicate')
+      expect(labels).toContain('Remove from Workspace')
+    })
+
+    it('omits Move Left for the leftmost column and Move Right for the rightmost', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 0)
+      expect(lastMenuLabels()).not.toContain('Move Left')
+      expect(lastMenuLabels()).toContain('Move Right')
+      await openColumnMenu(wrapper, 1)
+      expect(lastMenuLabels()).toContain('Move Left')
+      expect(lastMenuLabels()).not.toContain('Move Right')
+    })
+
+    it('offers both move directions for a middle column', async () => {
+      mockWorkspaceStore.playlists = [
+        makePlaylist(1, 'A', []),
+        makePlaylist(2, 'B', []),
+        makePlaylist(3, 'C', []),
+      ]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 1)
+      expect(lastMenuLabels()).toContain('Move Left')
+      expect(lastMenuLabels()).toContain('Move Right')
+    })
+
+    it('includes a divider immediately before Remove from Workspace', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      const entries = lastMenuEntries()
+      const removeIdx = entries.findIndex((e) => 'label' in e && e.label === 'Remove from Workspace')
+      expect(removeIdx).toBeGreaterThan(0)
+      expect(entries[removeIdx - 1]).toHaveProperty('divider', true)
+    })
+
+    it('Duplicate calls duplicatePlaylist with the column id', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(7, 'PL', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Duplicate')?.()
+      expect(mockWorkspaceStore.duplicatePlaylist).toHaveBeenCalledWith(7)
+    })
+
+    it('Remove from Workspace calls removePlaylist with the column id', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(7, 'PL', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Remove from Workspace')?.()
+      expect(mockWorkspaceStore.removePlaylist).toHaveBeenCalledWith(7)
+    })
+
+    it('Move Right calls movePlaylist with direction 1', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 0)
+      findMenuAction('Move Right')?.()
+      expect(mockWorkspaceStore.movePlaylist).toHaveBeenCalledWith(1, 1)
+    })
+
+    it('Move Left calls movePlaylist with direction -1', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 1)
+      findMenuAction('Move Left')?.()
+      expect(mockWorkspaceStore.movePlaylist).toHaveBeenCalledWith(2, -1)
+    })
+
+    it('builds the menu for the column that requested it', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 1)
+      findMenuAction('Duplicate')?.()
+      expect(mockWorkspaceStore.duplicatePlaylist).toHaveBeenCalledWith(2)
     })
   })
 
