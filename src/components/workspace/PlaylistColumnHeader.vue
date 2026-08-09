@@ -24,10 +24,17 @@ function onMenu(event: MouseEvent): void {
 <template>
   <!-- Right-click anywhere on the header requests the menu at the cursor position. -->
   <div class="playlist-col-header" @contextmenu.prevent="onMenu">
-    <!-- Playlist Title. FUTURE: Find solution for long playlist names in tight displays -->
-    <span class="playlist-col-header__name" :title="playlist.name">
-      {{ playlist.name }}
-    </span>
+    <!-- Name over count. Stacked in their own column so the ellipsis button below stays a
+         flex sibling on the right rather than being pushed down. -->
+    <div class="playlist-col-header__text">
+      <!-- Playlist Title. FUTURE: Find solution for long playlist names in tight displays -->
+      <span class="playlist-col-header__name" :title="playlist.name">
+        {{ playlist.name }}
+      </span>
+      <span class="playlist-col-header__count">
+        {{ playlist.trackIDs.length }} track{{ playlist.trackIDs.length === 1 ? '' : 's' }}
+      </span>
+    </div>
     <!-- Ellipsis button: hidden by default, revealed on header hover. -->
     <!-- Also triggered by right-click anywhere on the header. -->
     <button
@@ -57,13 +64,29 @@ function onMenu(event: MouseEvent): void {
   background: var(--color-border-subtle);
 }
 
-.playlist-col-header__name {
+/* Stacks name over count. min-width: 0 lets the name ellipsise instead of forcing
+   the flex row wider than the column. */
+.playlist-col-header__text {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.playlist-col-header__name {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
+}
+
+.playlist-col-header__count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 /* Ellipsis button: hidden until the column header is hovered. */

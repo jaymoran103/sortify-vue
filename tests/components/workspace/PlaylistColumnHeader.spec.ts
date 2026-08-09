@@ -9,8 +9,8 @@ import type { WorkspacePlaylist } from '@/types/models'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function makePlaylist(id: number, name: string): WorkspacePlaylist {
-  return { id, name, trackIDs: [], trackIdSet: new Set(), origin: 'library' }
+function makePlaylist(id: number, name: string, trackIDs: string[] = []): WorkspacePlaylist {
+  return { id, name, trackIDs, trackIdSet: new Set(trackIDs), origin: 'library' }
 }
 
 function mountHeader(playlist: WorkspacePlaylist) {
@@ -39,6 +39,31 @@ describe('PlaylistColumnHeader', () => {
     const btn = wrapper.find('.playlist-col-header__menu-btn')
     expect(btn.exists()).toBe(true)
     expect(btn.attributes('aria-label')).toBe('Playlist actions')
+  })
+
+  describe('track count', () => {
+    it('renders a pluralised track count', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'PL', ['t1', 't2', 't3']))
+      expect(wrapper.find('.playlist-col-header__count').text()).toBe('3 tracks')
+    })
+
+    it('renders the singular form for exactly one track', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'PL', ['t1']))
+      expect(wrapper.find('.playlist-col-header__count').text()).toBe('1 track')
+    })
+
+    it('renders zero tracks as a plural', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'PL'))
+      expect(wrapper.find('.playlist-col-header__count').text()).toBe('0 tracks')
+    })
+
+    it('updates reactively when the playlist track list changes', async () => {
+      const playlist = makePlaylist(1, 'PL', ['t1'])
+      const wrapper = mountHeader(playlist)
+      expect(wrapper.find('.playlist-col-header__count').text()).toBe('1 track')
+      await wrapper.setProps({ playlist: makePlaylist(1, 'PL', ['t1', 't2']) })
+      expect(wrapper.find('.playlist-col-header__count').text()).toBe('2 tracks')
+    })
   })
 
   describe('menu requests', () => {
