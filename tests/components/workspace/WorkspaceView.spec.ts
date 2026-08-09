@@ -35,6 +35,7 @@ const mockWorkspaceStore = reactive({
   bulkAddToAll: vi.fn(),
   bulkRemoveFromAll: vi.fn(),
   bulkRemoveFromWorkspace: vi.fn(),
+  setTracksInPlaylist: vi.fn(),
   $reset: vi.fn(),
 })
 
@@ -46,13 +47,19 @@ vi.mock('@/stores/workspace', () => ({
 // Returns a plain object (not a Ref) — Vue does not unwrap it, so
 // virtualizer.getTotalSize() and virtualizer.getVirtualItems() are called directly.
 
+// Reads the `count` it is actually given rather than the raw store list, so a filtered
+// or sorted view yields exactly the rows the component intends to render. Deriving from
+// the unfiltered store list makes trackAt() throw as soon as a filter narrows the list.
 vi.mock('@tanstack/vue-virtual', () => ({
-  useVirtualizer: () => ({
-    getTotalSize: () => mockWorkspaceStore.trackList.length * 48,
+  useVirtualizer: (options: { value: { count: number } }) => ({
+    getTotalSize: () => options.value.count * 48,
     getVirtualItems: () =>
-      mockWorkspaceStore.trackList.map(
-        (_, i) => ({ index: i, key: String(i), start: i * 48, size: 48 }) as const,
-      ),
+      Array.from({ length: options.value.count }, (_, i) => ({
+        index: i,
+        key: String(i),
+        start: i * 48,
+        size: 48,
+      })),
   }),
 }))
 
@@ -69,6 +76,12 @@ vi.mock('@/composables/useContextMenu', () => ({
     position: { value: { x: 0, y: 0 } },
     entries: { value: [] },
   }),
+}))
+
+// Make debounce a pass-through so filter-dependent assertions run synchronously.
+// useListFilter debounces by 200ms; without this the filtered list lags the query.
+vi.mock('@/composables/useDebounce', () => ({
+  useDebounce: (value: unknown) => value,
 }))
 
 // ─── Mock useModal ───────────────────────────────────────────────────────────
@@ -179,6 +192,7 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.bulkAddToAll.mockReset()
     mockWorkspaceStore.bulkRemoveFromAll.mockReset()
     mockWorkspaceStore.bulkRemoveFromWorkspace.mockReset()
+    mockWorkspaceStore.setTracksInPlaylist.mockReset()
     mockWorkspaceStore.$reset.mockReset()
     mockContextMenuShow.mockClear()
     mockModalOpen.mockReset()
@@ -670,6 +684,75 @@ describe('WorkspaceView', () => {
       await openColumnMenu(wrapper, 1)
       findMenuAction('Move Left')?.()
       expect(mockWorkspaceStore.movePlaylist).toHaveBeenCalledWith(2, -1)
+    })
+
+    // ─── Bulk membership (W1-B / design decision D4) ─────────────────────────
+    // Labels name their own scope: edits are buffered until Save with no per-action
+    // undo, so making the scope visible at click time is the cheap safeguard.
+
+    it('labels bulk actions with the total count when no search is active', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', [])]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'Song A', 'Artist 1'),
+        makeTrack('t2', 'Song B', 'Artist 2'),
+      ]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      const labels = lastMenuLabels()
+      expect(labels).toContain('Add all 2 tracks')
+      expect(labels).toContain('Remove all 2 tracks')
+    })
+
+    it('labels bulk actions with the visible count when a search is active', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', [])]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'Beatles One', 'The Beatles'),
+        makeTrack('t2', 'Beatles Two', 'The Beatles'),
+        makeTrack('t3', 'Other Song', 'Someone'),
+      ]
+      const wrapper = mountWorkspace()
+      await wrapper.find('.search-bar__input').setValue('beatles')
+      await nextTick()
+      await openColumnMenu(wrapper)
+      const labels = lastMenuLabels()
+      expect(labels).toContain('Add 2 visible tracks')
+      expect(labels).toContain('Remove 2 visible tracks')
+    })
+
+    it('bulk add applies to the filtered set only', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', [])]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'Beatles One', 'The Beatles'),
+        makeTrack('t2', 'Beatles Two', 'The Beatles'),
+        makeTrack('t3', 'Other Song', 'Someone'),
+      ]
+      const wrapper = mountWorkspace()
+      await wrapper.find('.search-bar__input').setValue('beatles')
+      await nextTick()
+      await openColumnMenu(wrapper)
+      lastMenuEntries()
+        .filter((e): e is MenuItem => 'label' in e)
+        .find((e) => e.label.startsWith('Add'))
+        ?.action()
+      expect(mockWorkspaceStore.setTracksInPlaylist).toHaveBeenCalledWith(1, ['t1', 't2'], true)
+    })
+
+    it('bulk remove passes member false', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', ['t1'])]
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist 1')]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Remove all 1 tracks')?.()
+      expect(mockWorkspaceStore.setTracksInPlaylist).toHaveBeenCalledWith(1, ['t1'], false)
+    })
+
+    it('places a divider between the bulk actions and Rename', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      const entries = lastMenuEntries()
+      const renameIdx = entries.findIndex((e) => 'label' in e && e.label === 'Rename')
+      expect(entries[renameIdx - 1]).toHaveProperty('divider', true)
     })
 
     it('builds the menu for the column that requested it', async () => {

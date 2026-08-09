@@ -198,6 +198,21 @@ function handleDuplicate(playlistId: PlaylistId): void {
 }
 
 /**
+ * Set membership of every currently visible track in one playlist.
+ *
+ * Operates on displayTracks — the post-filter, post-sort list — so a search narrows the
+ * action to what is on screen, matching vanilla. Side effect: mutates the workspace buffer
+ * via the store; hidden tracks are left untouched.
+ */
+function handleSetAllInPlaylist(playlistId: PlaylistId, member: boolean): void {
+  workspaceStore.setTracksInPlaylist(
+    playlistId,
+    displayTracks.value.map((t) => t.trackID),
+    member,
+  )
+}
+
+/**
  * Assemble and show the context menu for one playlist column.
  *
  * Inputs: the requesting playlist's id, and the originating mouse event used to position
@@ -212,7 +227,21 @@ function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
   const index = workspaceStore.playlists.findIndex((p) => p.id === playlistId)
   if (index === -1) return
 
+  // Bulk membership acts on what the user can currently see. The label says so explicitly:
+  // these edits are buffered until Save and have no per-action undo, so naming the scope at
+  // click time is the cheap safeguard against a filtered "select all" surprising someone.
+  //
+  // "Filtered" is derived from the visible count rather than from `query`, because the query
+  // ref updates immediately while useListFilter debounces by 200ms. Reading `query` here
+  // would let the label claim a scope the action would not actually apply.
+  const visibleCount = displayTracks.value.length
+  const isFiltered = visibleCount < workspaceStore.trackList.length
+  const scope = isFiltered ? `${visibleCount} visible tracks` : `all ${visibleCount} tracks`
+
   const items: MenuEntry[] = [
+    { label: `Add ${scope}`, action: () => handleSetAllInPlaylist(playlistId, true) },
+    { label: `Remove ${scope}`, action: () => handleSetAllInPlaylist(playlistId, false) },
+    { divider: true },
     { label: 'Rename', action: () => void handleRename(playlistId) },
     { label: 'Duplicate', action: () => handleDuplicate(playlistId) },
   ]

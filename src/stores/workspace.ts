@@ -340,7 +340,46 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   /**
-   * Toggle a track's membership in a playlist. 
+   * Set membership of many tracks in a single playlist to a desired state.
+   *
+   * Inputs: the target playlist, the track IDs to act on, and `member` — true adds any that
+   * are absent, false removes any that are present.
+   *
+   * Side effects: mutates the playlist's trackIDs and trackIdSet together, and adds the
+   * playlist to modifiedIds — but only when something actually changed, so a no-op call does
+   * not dirty the session. Does NOT touch stableOrder, so rows never move or disappear.
+   *
+   * No-op if the playlist is not in the workspace.
+   */
+  function setTracksInPlaylist(playlistId: PlaylistId, trackIds: string[], member: boolean): void {
+    const pl = playlists.value.find((p) => p.id === playlistId)
+    if (!pl) return
+
+    let changed = false
+
+    if (member) {
+      for (const tid of trackIds) {
+        if (!pl.trackIdSet.has(tid)) {
+          pl.trackIDs.push(tid)
+          pl.trackIdSet.add(tid)
+          changed = true
+        }
+      }
+    } else {
+      // Collect first, then filter once. Filtering per-id would be O(n·m) on large workspaces.
+      const removing = new Set(trackIds.filter((tid) => pl.trackIdSet.has(tid)))
+      if (removing.size > 0) {
+        pl.trackIDs = pl.trackIDs.filter((id) => !removing.has(id))
+        for (const tid of removing) pl.trackIdSet.delete(tid)
+        changed = true
+      }
+    }
+
+    if (changed) modifiedIds.value.add(playlistId)
+  }
+
+  /**
+   * Toggle a track's membership in a playlist.
    * 
    * Keeps trackIDs in sync within playlist lookup set and ordered array.
    * Marks the playlist as modified for dirty tracking.
@@ -463,6 +502,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     bulkAddToAll,
     bulkRemoveFromAll,
     bulkRemoveFromWorkspace,
+    setTracksInPlaylist,
     toggleTrack,
     save,
     $reset,
