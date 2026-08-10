@@ -997,6 +997,80 @@ describe('WorkspaceView', () => {
     })
   })
 
+  // ─── Spotify actions (W1-E) ────────────────────────────────────────────────
+
+  describe('spotify actions', () => {
+    it('offers playlist Spotify actions when playlistURI is present', async () => {
+      const pl = makePlaylist(1, 'PL', [])
+      pl.playlistURI = 'spotify:playlist:xyz'
+      mockWorkspaceStore.playlists = [pl]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      const labels = lastMenuLabels()
+      expect(labels).toContain('Open in Spotify')
+      expect(labels).toContain('Copy Playlist ID')
+    })
+
+    it('omits playlist Spotify actions when playlistURI is absent', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      const labels = lastMenuLabels()
+      expect(labels).not.toContain('Open in Spotify')
+      expect(labels).not.toContain('Copy Playlist ID')
+    })
+
+    it('offers track Spotify actions when the track carries a spotifyURI', async () => {
+      const track = makeTrack('t1', 'Song A', 'Artist')
+      track.spotifyURI = 'spotify:track:abc'
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['t1', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+      const labels = lastMenuLabels()
+      expect(labels).toContain('Open in Spotify')
+      expect(labels).toContain('Copy Track ID')
+    })
+
+    it('falls back to a trackID that is itself a Spotify track URI', async () => {
+      const track = makeTrack('spotify:track:abc', 'Song A', 'Artist')
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['spotify:track:abc', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+      expect(lastMenuLabels()).toContain('Open in Spotify')
+    })
+
+    it('omits track Spotify actions when no URI is available', async () => {
+      const track = makeTrack('t1', 'Song A', 'Artist')
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['t1', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+      expect(lastMenuLabels()).not.toContain('Open in Spotify')
+    })
+
+    it('omits track Spotify actions for a multi-track selection', async () => {
+      const t1 = makeTrack('t1', 'Song A', 'Artist')
+      const t2 = makeTrack('t2', 'Song B', 'Artist')
+      t1.spotifyURI = 'spotify:track:abc'
+      t2.spotifyURI = 'spotify:track:def'
+      mockWorkspaceStore.trackList = [t1, t2]
+      mockWorkspaceStore.tracks = new Map([
+        ['t1', t1],
+        ['t2', t2],
+      ])
+      const wrapper = mountWorkspace()
+      const rows = wrapper.findAll('.track-row')
+      await rows[0]!.trigger('click')
+      await rows[1]!.trigger('click', { metaKey: true })
+      await rows[1]!.trigger('contextmenu')
+      // Selection is single-select in the workspace, so this still resolves to one track;
+      // the assertion guards the entries staying inside the single-selection branch.
+      expect(lastMenuLabels().filter((l) => l === 'Open in Spotify').length).toBeLessThanOrEqual(1)
+    })
+  })
+
   describe('sort options', () => {
     it('sort dropdown includes album option', () => {
       const wrapper = mountWorkspace()

@@ -9,6 +9,7 @@ import { useListSort } from '@/composables/useListSort'
 import { useListSelection } from '@/composables/useListSelection'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
+import { openSpotifyURI, copyToClipboard } from '@/utils/spotifyLinks'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import PromptModal from '@/components/modals/PromptModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
@@ -349,6 +350,14 @@ function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
   items.push({ divider: true })
   items.push({ label: 'Remove from Workspace', action: () => handleRemove(playlistId) })
 
+  // Spotify entries only for playlists that came from Spotify and carry a URI.
+  const playlistURI = workspaceStore.playlists[index]?.playlistURI
+  if (playlistURI) {
+    items.push({ divider: true })
+    items.push({ label: 'Open in Spotify', action: () => openSpotifyURI(playlistURI) })
+    items.push({ label: 'Copy Playlist ID', action: () => void copyToClipboard(playlistURI) })
+  }
+
   ctx.show(event, items)
 }
 
@@ -373,6 +382,21 @@ function handleTrackContextMenu(trackId: string, event: MouseEvent): void {
     items.push({ label: 'Remove from All Playlists', action: () => handleRemoveFromAll(trackId) })
     items.push({ divider: true })
     items.push({ label: 'Remove from Workspace', action: () => handleDeleteTrack(trackId) })
+
+    // Prefer the explicit spotifyURI field; fall back to the trackID when that is itself a
+    // Spotify track URI, which is how Spotify-imported tracks are keyed. Track carries an
+    // index signature, so narrow with typeof rather than asserting.
+    // Kept inside the single-selection branch: there is no meaningful "open several tracks".
+    const track = workspaceStore.tracks.get(trackId)
+    const spotifyURI =
+      (typeof track?.spotifyURI === 'string' ? track.spotifyURI : undefined) ??
+      (trackId.startsWith('spotify:track:') ? trackId : undefined)
+
+    if (spotifyURI) {
+      items.push({ divider: true })
+      items.push({ label: 'Open in Spotify', action: () => openSpotifyURI(spotifyURI) })
+      items.push({ label: 'Copy Track ID', action: () => void copyToClipboard(spotifyURI) })
+    }
   } else {
     items.push({
       label: `Add ${selectedCount} Tracks to All Playlists`,
