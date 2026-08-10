@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -27,13 +27,73 @@ const workspaceStore = useWorkspaceStore()
 const modal = useModal()
 const ctx = useContextMenu()
 
-// Sort options for workspace tracks.
-const sortOptions: SortOption<Track>[] = [
+// trackID → number of workspace playlists containing it.
+// Memoized because the "Most Playlists" comparator would otherwise re-scan every playlist for
+// both operands on every comparison — O(n log n × 2P). One pass per playlist change instead.
+// Read inside compareFn at sort time, so it always reflects current membership.
+const playlistCountMap = computed<Map<string, number>>(() => {
+  const counts = new Map<string, number>()
+  for (const pl of workspaceStore.playlists) {
+    for (const tid of pl.trackIdSet) {
+      counts.set(tid, (counts.get(tid) ?? 0) + 1)
+    }
+  }
+  return counts
+})
+
+// Sort options always available for workspace tracks.
+const staticSortOptions: SortOption<Track>[] = [
   { key: 'order-added', label: 'Order Added', compareFn: () => 0 },
   { key: 'title', label: 'Title', compareFn: (a, b) => a.title.localeCompare(b.title) },
   { key: 'artist', label: 'Artist', compareFn: (a, b) => a.artist.localeCompare(b.artist) },
   { key: 'album', label: 'Album', compareFn: (a, b) => a.album.localeCompare(b.album) },
+  {
+    key: 'most-playlists',
+    label: 'Most Playlists',
+    compareFn: (a, b) =>
+      (playlistCountMap.value.get(b.trackID) ?? 0) - (playlistCountMap.value.get(a.trackID) ?? 0),
+  },
 ]
+
+// Playlist whose order is currently driving the sort, or null when that sort is inactive.
+const playlistSortId = ref<PlaylistId | null>(null)
+
+/**
+ * Build a comparator ordering tracks by their position within one playlist.
+ * Members sort ahead of non-members, in playlist order; non-members keep their relative
+ * order. Returns a no-op comparator if the playlist has left the workspace.
+ */
+function buildPlaylistSortComparator(playlistId: PlaylistId): (a: Track, b: Track) => number {
+  return (a: Track, b: Track) => {
+    const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
+    if (!pl) return 0
+    const idxA = pl.trackIDs.indexOf(a.trackID)
+    const idxB = pl.trackIDs.indexOf(b.trackID)
+    // indexOf returns -1 for non-members, which would sort them first — map to Infinity
+    // so they fall to the bottom instead.
+    const posA = idxA === -1 ? Infinity : idxA
+    const posB = idxB === -1 ? Infinity : idxB
+    return posA - posB
+  }
+}
+
+// Static options plus, when active, a dynamic entry for the chosen playlist. Passing this
+// computed (rather than a plain array) to useListSort is why D2 widened that signature.
+// When the sorted playlist leaves the workspace the entry disappears and useListSort's
+// unknown-key fallback drops the view back to the first static option.
+const sortOptions = computed<SortOption<Track>[]>(() => {
+  if (playlistSortId.value === null) return staticSortOptions
+  const pl = workspaceStore.playlists.find((p) => p.id === playlistSortId.value)
+  if (!pl) return staticSortOptions
+  return [
+    ...staticSortOptions,
+    {
+      key: `playlist:${String(playlistSortId.value)}`,
+      label: `Playlist: ${pl.name}`,
+      compareFn: buildPlaylistSortComparator(playlistSortId.value),
+    },
+  ]
+})
 
 // Chain: trackList -> filtered -> sorted -> displayTracks
 const { query, filtered } = useListFilter<Track>(
@@ -48,6 +108,23 @@ const { query, filtered } = useListFilter<Track>(
   },
 )
 const { currentSort, sorted: displayTracks } = useListSort<Track>(filtered, sortOptions)
+
+// Retire the dynamic playlist option as soon as the user picks a static sort, so a stale
+// "Playlist: X" entry does not linger in the dropdown.
+watch(currentSort, (key) => {
+  if (playlistSortId.value !== null && !key.startsWith('playlist:')) {
+    playlistSortId.value = null
+  }
+})
+
+/**
+ * Activate the playlist-order sort for one column, adding its dynamic option and selecting it.
+ * Side effect: sets playlistSortId and currentSort.
+ */
+function handleSortByPlaylist(playlistId: PlaylistId): void {
+  playlistSortId.value = playlistId
+  currentSort.value = `playlist:${String(playlistId)}`
+}
 
 // Row selection: single-click selects, shift extends, cmd togglesss.
 // validItems uses full trackList so filter changes do not deselect.
@@ -254,6 +331,7 @@ function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
   const items: MenuEntry[] = [
     { label: `Add ${scope}`, action: () => handleSetAllInPlaylist(playlistId, true) },
     { label: `Remove ${scope}`, action: () => handleSetAllInPlaylist(playlistId, false) },
+    { label: 'Sort by this Playlist', action: () => handleSortByPlaylist(playlistId) },
     { divider: true },
     { label: 'Rename', action: () => void handleRename(playlistId) },
     { label: 'Duplicate', action: () => handleDuplicate(playlistId) },

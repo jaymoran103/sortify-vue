@@ -869,6 +869,134 @@ describe('WorkspaceView', () => {
     })
   })
 
+  // ─── Most Playlists sort (W1-D / design decision D7) ───────────────────────
+
+  describe('most-playlists sort', () => {
+    it('is offered in the sort dropdown', () => {
+      const wrapper = mountWorkspace()
+      const labels = wrapper.findAll('select.dropdown option').map((o) => o.text())
+      expect(labels).toContain('Most Playlists')
+    })
+
+    it('orders tracks by descending playlist count', async () => {
+      mockWorkspaceStore.playlists = [
+        makePlaylist(1, 'A', ['t2']),
+        makePlaylist(2, 'B', ['t2', 't3']),
+        makePlaylist(3, 'C', ['t2', 't3']),
+      ]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'Zero', 'Artist'),
+        makeTrack('t2', 'Three', 'Artist'),
+        makeTrack('t3', 'Two', 'Artist'),
+      ]
+      const wrapper = mountWorkspace()
+      await wrapper.find<HTMLSelectElement>('select.dropdown').setValue('most-playlists')
+      await nextTick()
+      const titles = wrapper.findAll('.track-row__title').map((n) => n.text())
+      expect(titles).toEqual(['Three', 'Two', 'Zero'])
+    })
+
+    it('sorts a track in no playlist last', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', ['t2'])]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'Orphan', 'Artist'),
+        makeTrack('t2', 'Member', 'Artist'),
+      ]
+      const wrapper = mountWorkspace()
+      await wrapper.find<HTMLSelectElement>('select.dropdown').setValue('most-playlists')
+      await nextTick()
+      const titles = wrapper.findAll('.track-row__title').map((n) => n.text())
+      expect(titles).toEqual(['Member', 'Orphan'])
+    })
+  })
+
+  // ─── Sort by this Playlist (W1-C) ──────────────────────────────────────────
+
+  describe('sort by this playlist', () => {
+    async function activatePlaylistSort(wrapper: ReturnType<typeof mountWorkspace>, col = 0) {
+      await openColumnMenu(wrapper, col)
+      findMenuAction('Sort by this Playlist')?.()
+      await nextTick()
+    }
+
+    it('is offered in the column menu', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', [])]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      expect(lastMenuLabels()).toContain('Sort by this Playlist')
+    })
+
+    it('adds a named dynamic option and activates it', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist')]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper)
+      const labels = wrapper.findAll('select.dropdown option').map((o) => o.text())
+      expect(labels).toContain('Playlist: Morning Mix')
+      expect(wrapper.find<HTMLSelectElement>('select.dropdown').element.value).toBe('playlist:1')
+    })
+
+    it('orders playlist members first in playlist order, then everything else', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', ['t3', 't1'])]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'One', 'Artist'),
+        makeTrack('t2', 'Two', 'Artist'),
+        makeTrack('t3', 'Three', 'Artist'),
+      ]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper)
+      const titles = wrapper.findAll('.track-row__title').map((n) => n.text())
+      expect(titles).toEqual(['Three', 'One', 'Two'])
+    })
+
+    it('drops the dynamic option when the user picks a static sort', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist')]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper)
+      await wrapper.find<HTMLSelectElement>('select.dropdown').setValue('title')
+      await nextTick()
+      const labels = wrapper.findAll('select.dropdown option').map((o) => o.text())
+      expect(labels).not.toContain('Playlist: Morning Mix')
+    })
+
+    it('drops the dynamic option when the playlist leaves the workspace', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist')]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper)
+      mockWorkspaceStore.playlists = []
+      await nextTick()
+      const labels = wrapper.findAll('select.dropdown option').map((o) => o.text())
+      expect(labels).not.toContain('Playlist: Morning Mix')
+    })
+
+    it('still renders rows after the sorted playlist is removed', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'Song A', 'Artist'),
+        makeTrack('t2', 'Song B', 'Artist'),
+      ]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper)
+      mockWorkspaceStore.playlists = []
+      await nextTick()
+      expect(wrapper.findAll('.track-row')).toHaveLength(2)
+    })
+
+    it('names the second column when that column requests the sort', async () => {
+      mockWorkspaceStore.playlists = [
+        makePlaylist(1, 'First', ['t1']),
+        makePlaylist(2, 'Second', ['t1']),
+      ]
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist')]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper, 1)
+      const labels = wrapper.findAll('select.dropdown option').map((o) => o.text())
+      expect(labels).toContain('Playlist: Second')
+    })
+  })
+
   describe('sort options', () => {
     it('sort dropdown includes album option', () => {
       const wrapper = mountWorkspace()
