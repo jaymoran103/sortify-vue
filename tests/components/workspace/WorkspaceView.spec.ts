@@ -629,14 +629,35 @@ describe('WorkspaceView', () => {
   // ─── Add content flows (W1-H) ──────────────────────────────────────────────
 
   describe('add content flows', () => {
-    function headerButton(wrapper: ReturnType<typeof mountWorkspace>, label: string) {
-      return wrapper.findAll('button').find((b) => b.text() === label)!
+    // The three add-actions now hang off one control-bar button rather than three header
+    // buttons, so the flows are driven through the context menu they open.
+    async function invokeAddAction(wrapper: ReturnType<typeof mountWorkspace>, label: string) {
+      await wrapper.find('.workspace__add-btn').trigger('click')
+      findMenuAction(label)?.()
+      await nextTick()
     }
+
+    it('offers the three add actions from one control-bar button', async () => {
+      const wrapper = mountWorkspace()
+      await wrapper.find('.workspace__add-btn').trigger('click')
+      expect(lastMenuLabels()).toEqual(['Add Playlist…', 'Add Tracks…', 'New Playlist…'])
+    })
+
+    it('opens PlaylistSelectModal in export mode and adds each chosen playlist', async () => {
+      mockModalOpen.mockResolvedValueOnce([4, 7])
+      const wrapper = mountWorkspace()
+      await invokeAddAction(wrapper, 'Add Playlist…')
+      await flushPromises()
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { mode: string }]
+      expect(props.mode).toBe('export')
+      expect(mockWorkspaceStore.addPlaylist).toHaveBeenCalledWith(4)
+      expect(mockWorkspaceStore.addPlaylist).toHaveBeenCalledWith(7)
+    })
 
     it('opens TrackSelectModal excluding tracks already in the workspace', async () => {
       mockWorkspaceStore.tracks = new Map([['t1', makeTrack('t1', 'Song A', 'Artist 1')]])
       const wrapper = mountWorkspace()
-      await headerButton(wrapper, '+ Add Tracks').trigger('click')
+      await invokeAddAction(wrapper, 'Add Tracks…')
       const [, props] = mockModalOpen.mock.calls[0] as [
         unknown,
         { excludeIds: string[]; confirmLabel: string; confirmVariant: string },
@@ -649,7 +670,7 @@ describe('WorkspaceView', () => {
     it('adds the selected ids to the workspace', async () => {
       mockModalOpen.mockResolvedValueOnce(['t9'])
       const wrapper = mountWorkspace()
-      await headerButton(wrapper, '+ Add Tracks').trigger('click')
+      await invokeAddAction(wrapper, 'Add Tracks…')
       await flushPromises()
       expect(mockWorkspaceStore.addTracksToWorkspace).toHaveBeenCalledWith(['t9'])
     })
@@ -657,7 +678,7 @@ describe('WorkspaceView', () => {
     it('does nothing when the track picker is cancelled', async () => {
       mockModalOpen.mockResolvedValueOnce(null)
       const wrapper = mountWorkspace()
-      await headerButton(wrapper, '+ Add Tracks').trigger('click')
+      await invokeAddAction(wrapper, 'Add Tracks…')
       await flushPromises()
       expect(mockWorkspaceStore.addTracksToWorkspace).not.toHaveBeenCalled()
     })
@@ -665,7 +686,7 @@ describe('WorkspaceView', () => {
     it('does nothing when the track picker returns an empty selection', async () => {
       mockModalOpen.mockResolvedValueOnce([])
       const wrapper = mountWorkspace()
-      await headerButton(wrapper, '+ Add Tracks').trigger('click')
+      await invokeAddAction(wrapper, 'Add Tracks…')
       await flushPromises()
       expect(mockWorkspaceStore.addTracksToWorkspace).not.toHaveBeenCalled()
     })
@@ -674,7 +695,7 @@ describe('WorkspaceView', () => {
       const promptSpy = vi.spyOn(window, 'prompt')
       mockModalOpen.mockResolvedValueOnce('My Playlist')
       const wrapper = mountWorkspace()
-      await headerButton(wrapper, '+ New Playlist').trigger('click')
+      await invokeAddAction(wrapper, 'New Playlist…')
       await flushPromises()
       expect(promptSpy).not.toHaveBeenCalled()
       expect(mockWorkspaceStore.createEmptyPlaylist).toHaveBeenCalledWith('My Playlist')
@@ -684,7 +705,7 @@ describe('WorkspaceView', () => {
     it('trims the new playlist name', async () => {
       mockModalOpen.mockResolvedValueOnce('  Padded  ')
       const wrapper = mountWorkspace()
-      await headerButton(wrapper, '+ New Playlist').trigger('click')
+      await invokeAddAction(wrapper, 'New Playlist…')
       await flushPromises()
       expect(mockWorkspaceStore.createEmptyPlaylist).toHaveBeenCalledWith('Padded')
     })
@@ -692,7 +713,7 @@ describe('WorkspaceView', () => {
     it('does not create a playlist when the prompt is cancelled', async () => {
       mockModalOpen.mockResolvedValueOnce(null)
       const wrapper = mountWorkspace()
-      await headerButton(wrapper, '+ New Playlist').trigger('click')
+      await invokeAddAction(wrapper, 'New Playlist…')
       await flushPromises()
       expect(mockWorkspaceStore.createEmptyPlaylist).not.toHaveBeenCalled()
     })

@@ -464,7 +464,25 @@ async function handleBulkDelete(): Promise<void> {
   }
 }
 
-// ─── Add playlist / create playlist ──────────────
+// ─── Add content menu + handlers ──────────────
+
+/**
+ * Show the "add content" menu for the control bar's single Add button.
+ *
+ * Input: the originating click event, used to position the menu. Side effect: opens the
+ * shared context menu via useContextMenu().show().
+ *
+ * One button rather than three: every entry below opens a modal of its own, so a card-grid
+ * modal in the style of Import/Export would put a dialog in front of a dialog on every path.
+ * Positioning follows the cursor, matching how TrackRow's ⋮ button opens its menu.
+ */
+function buildAddMenu(event: MouseEvent): void {
+  ctx.show(event, [
+    { label: 'Add Playlist…', action: () => void handleAddPlaylistToWorkspace() },
+    { label: 'Add Tracks…', action: () => void handleAddTracks() },
+    { label: 'New Playlist…', action: () => void handleCreatePlaylist() },
+  ])
+}
 
 async function handleAddPlaylistToWorkspace(): Promise<void> {
   const result = await modal.open<number[]>(PlaylistSelectModal, { mode: 'export' })
@@ -527,11 +545,8 @@ useKeyboardShortcuts({
       <span class="workspace__meta text-muted">
         {{ workspaceStore.playlists.length }} playlists · {{ workspaceStore.trackList.length }} tracks
       </span>
-      <!-- Actions/Save Section -->
+      <!-- Save section. Content actions live in the control bar, beside the list they act on. -->
       <div class="workspace__header-actions">
-        <button class="btn btn--secondary" @click="handleAddPlaylistToWorkspace">+ Add Playlist</button>
-        <button class="btn btn--secondary" @click="handleAddTracks">+ Add Tracks</button>
-        <button class="btn btn--secondary" @click="handleCreatePlaylist">+ New Playlist</button>
         <!-- Unsaved indicator or last-saved time, never both. -->
         <span v-if="workspaceStore.hasUnsavedChanges" class="workspace__unsaved-indicator">
           Unsaved changes
@@ -564,7 +579,7 @@ useKeyboardShortcuts({
     <div v-else class="workspace__main">
 
       <!-- Control Bar: search, sort, track count -->
-      <!-- FUTURE: Extract to separate module? --> 
+      <!-- FUTURE: Extract to separate module? -->
       <ControlBar class="workspace__control-bar">
         <SearchBar v-model="query" placeholder="Search tracks…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
@@ -578,6 +593,9 @@ useKeyboardShortcuts({
           <span class="text-muted text-sm">
             {{ displayTracks.length }}{{ query ? ` of ${workspaceStore.trackList.length}` : '' }} tracks
           </span>
+          <button class="btn btn--secondary workspace__add-btn" @click="buildAddMenu">
+            + Add ▾
+          </button>
         </template>
       </ControlBar>
 
