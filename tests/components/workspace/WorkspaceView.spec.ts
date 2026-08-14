@@ -971,6 +971,18 @@ describe('WorkspaceView', () => {
       expect(labels).not.toContain('Playlist: Morning Mix')
     })
 
+    // The option disappearing is only half the fix: the <select> stayed bound to the departed
+    // "playlist:1" key, matched no <option>, and rendered blank.
+    it('falls back to Order Added when the sorted playlist leaves the workspace', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist')]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper)
+      mockWorkspaceStore.playlists = []
+      await nextTick()
+      expect(wrapper.find<HTMLSelectElement>('select.dropdown').element.value).toBe('order-added')
+    })
+
     it('still renders rows after the sorted playlist is removed', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
       mockWorkspaceStore.trackList = [

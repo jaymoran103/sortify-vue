@@ -1,4 +1,4 @@
-import { ref, computed, toValue, type Ref, type ComputedRef, type MaybeRefOrGetter } from 'vue'
+import { ref, computed, watch, toValue, type Ref, type ComputedRef, type MaybeRefOrGetter } from 'vue'
 import type { SortOption } from '@/types/ui'
 
 /**
@@ -13,7 +13,9 @@ import type { SortOption } from '@/types/ui'
  *
  * Outputs: `currentSort` (writable active key) and `sorted` (derived list).
  *
- * No side effects — purely derived state. The source list is never mutated; `sorted` sorts a copy.
+ * Side effect: `currentSort` is rewritten to the first available key whenever the option it
+ * names leaves the list, so the key never dangles. Otherwise purely derived state — the
+ * source list is never mutated; `sorted` sorts a copy.
  */
 export function useListSort<T>(
   items: Ref<T[]> | ComputedRef<T[]>,
@@ -38,6 +40,24 @@ export function useListSort<T>(
     if (!option) return items.value
     return [...items.value].sort(option.compareFn)
   })
+
+  // The fallback above keeps `sorted` correct when a dynamic option is removed while active,
+  // but currentSort would keep naming the departed option. A <select> bound to a key matching
+  // no <option> renders blank, so the key is rewritten to match what `sorted` actually did.
+  //
+  // The getter returns a fresh array each run, so this fires on every options recomputation
+  // and the membership check — not the watcher — is what decides whether anything changes.
+  // An empty list is left alone: there is nothing to fall back to, and the caller may be
+  // mid-load rather than genuinely optionless.
+  watch(
+    () => toValue(options).map((o) => o.key),
+    (keys) => {
+      const fallback = keys[0]
+      if (fallback !== undefined && !keys.includes(currentSort.value)) {
+        currentSort.value = fallback
+      }
+    },
+  )
 
   return { currentSort, sorted }
 }

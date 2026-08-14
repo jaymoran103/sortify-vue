@@ -87,6 +87,40 @@ describe('useListSort', () => {
     expect(sorted.value.map((i: Item) => i.name)).toEqual(['Alpha', 'Beta', 'Charlie'])
   })
 
+  // The fallback above keeps `sorted` correct, but the key itself used to linger, leaving a
+  // bound <select> matching no option and rendering blank. currentSort must follow.
+  it('rewrites currentSort when the active option is removed', async () => {
+    const extra: SortOption<Item> = {
+      key: 'value-rev',
+      label: 'Value rev',
+      compareFn: (a: Item, b: Item) => b.value - a.value,
+    }
+    const dynamic = ref<SortOption<Item>[]>([...options, extra])
+    const { currentSort } = useListSort(items, dynamic, 'value-rev')
+    dynamic.value = [...options]
+    await nextTick()
+    expect(currentSort.value).toBe('name-asc')
+  })
+
+  it('leaves currentSort alone while its option is still present', async () => {
+    const dynamic = ref<SortOption<Item>[]>([...options])
+    const { currentSort } = useListSort(items, dynamic, 'value-desc')
+    dynamic.value = [
+      ...options,
+      { key: 'value-rev', label: 'Value rev', compareFn: (a: Item, b: Item) => b.value - a.value },
+    ]
+    await nextTick()
+    expect(currentSort.value).toBe('value-desc')
+  })
+
+  it('leaves currentSort alone when the options list empties out', async () => {
+    const dynamic = ref<SortOption<Item>[]>([...options])
+    const { currentSort } = useListSort(items, dynamic, 'value-desc')
+    dynamic.value = []
+    await nextTick()
+    expect(currentSort.value).toBe('value-desc')
+  })
+
   it('accepts a getter for options', () => {
     const { sorted } = useListSort(items, () => options, 'value-asc')
     expect(sorted.value.map((i: Item) => i.value)).toEqual([1, 2, 3])
