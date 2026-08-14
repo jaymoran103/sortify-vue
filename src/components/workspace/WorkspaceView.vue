@@ -578,21 +578,23 @@ useKeyboardShortcuts({
     <!-- Main Workspace Table -->
     <div v-else class="workspace__main">
 
-      <!-- Control Bar: search, sort, track count -->
+      <!-- Control Bar. Left holds what the list currently is — search, sort, and the counts
+           those two change. Right holds what can be done to it. -->
       <!-- FUTURE: Extract to separate module? -->
       <ControlBar class="workspace__control-bar">
         <SearchBar v-model="query" placeholder="Search tracks…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
 
-        <!-- Track Count: display number of shown tracks, plus selection count if active -->
+        <!-- Track Count: shown tracks, qualified by the unfiltered total while searching -->
+        <span class="text-muted text-sm">
+          {{ displayTracks.length }}{{ query ? ` of ${workspaceStore.trackList.length}` : '' }} tracks
+        </span>
+        <span v-if="rowSelection.selectedCount.value > 0" class="workspace__selection-count">
+          {{ rowSelection.selectedCount.value }} selected
+          <button class="btn btn--ghost btn--sm" @click="rowSelection.clear()">Clear</button>
+        </span>
+
         <template #actions>
-          <span v-if="rowSelection.selectedCount.value > 0" class="workspace__selection-count">
-            {{ rowSelection.selectedCount.value }} selected
-            <button class="btn btn--ghost btn--sm" @click="rowSelection.clear()">Clear</button>
-          </span>
-          <span class="text-muted text-sm">
-            {{ displayTracks.length }}{{ query ? ` of ${workspaceStore.trackList.length}` : '' }} tracks
-          </span>
           <button class="btn btn--secondary workspace__add-btn" @click="buildAddMenu">
             + Add ▾
           </button>
