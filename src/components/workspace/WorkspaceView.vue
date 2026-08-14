@@ -534,7 +534,9 @@ useKeyboardShortcuts({
 </script>
 
 <template>
-  <div class="workspace">
+  <!-- no-text-select covers the whole view, not just the rows: the sticky table header and
+       the control bar are just as easy to catch on a drag that starts over the list. -->
+  <div class="workspace no-text-select">
     <!-- Header -->
     <header class="workspace__header">
 

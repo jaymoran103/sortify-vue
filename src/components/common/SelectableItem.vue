@@ -11,8 +11,10 @@ const emit = defineEmits<{
 </script>
 
 <template>
+  <!-- no-text-select: the row is a click target, so dragging across a list of them should not
+       leave a text highlight. No shift guard here — these rows do not handle shift-click. -->
   <div
-    class="selectable-item"
+    class="selectable-item no-text-select"
     :class="{ 'selectable-item--selected': selected }"
     @click="emit('toggle')"
   >

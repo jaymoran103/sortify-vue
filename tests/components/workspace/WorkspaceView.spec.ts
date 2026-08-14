@@ -211,6 +211,13 @@ describe('WorkspaceView', () => {
     routerWrapper = null
   })
 
+  // Applied at the root rather than on the rows: the sticky table header and the control bar
+  // are just as catchable on a drag that starts over the list.
+  it('opts the whole view out of text selection', () => {
+    const wrapper = mountWorkspace()
+    expect(wrapper.find('.workspace').classes()).toContain('no-text-select')
+  })
+
   it('renders loading state when store is loading', () => {
     mockWorkspaceStore.isLoading = true
     const wrapper = mountWorkspace()

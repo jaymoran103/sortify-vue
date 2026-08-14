@@ -143,4 +143,24 @@ describe('TrackRow', () => {
     expect(wrapper.emitted('toggleTrack')).toBeDefined()
     expect(wrapper.emitted('toggleTrack')![0]).toEqual([42, 't1'])
   })
+
+  // ─── Text selection ────────────────────────────────────────────────────────
+  // Shift-click extends the document selection at mousedown, before any click handler runs,
+  // and no user-select value prevents that. The row denies the default instead.
+
+  function dispatchMouseDown(wrapper: ReturnType<typeof mountRow>, shiftKey: boolean): MouseEvent {
+    const event = new MouseEvent('mousedown', { shiftKey, bubbles: true, cancelable: true })
+    wrapper.find('.track-row').element.dispatchEvent(event)
+    return event
+  }
+
+  it('prevents the default on shift+mousedown', () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [])
+    expect(dispatchMouseDown(wrapper, true).defaultPrevented).toBe(true)
+  })
+
+  it('leaves an unmodified mousedown alone', () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [])
+    expect(dispatchMouseDown(wrapper, false).defaultPrevented).toBe(false)
+  })
 })
