@@ -4,9 +4,10 @@ import { createPinia } from 'pinia'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { reactive, nextTick } from 'vue'
 import WorkspaceView from '@/components/workspace/WorkspaceView.vue'
+import AddContentModal from '@/components/workspace/AddContentModal.vue'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 import type { Track } from '@/types/models'
-import type { MenuEntry, MenuItem } from '@/types/ui'
+import type { MenuEntry, MenuItem, AddContentChoice } from '@/types/ui'
 
 // ─── Mock workspace store ────────────────────────────────────────────────────
 
@@ -636,26 +637,40 @@ describe('WorkspaceView', () => {
   // ─── Add content flows (W1-H) ──────────────────────────────────────────────
 
   describe('add content flows', () => {
-    // The three add-actions now hang off one control-bar button rather than three header
-    // buttons, so the flows are driven through the context menu they open.
-    async function invokeAddAction(wrapper: ReturnType<typeof mountWorkspace>, label: string) {
+    // One control-bar button now opens AddContentModal, and the card chosen there decides
+    // which picker follows. Every flow therefore resolves two modals: call 0 is the card
+    // grid, call 1 is the picker whose props these tests assert on.
+    async function chooseAdd(
+      wrapper: ReturnType<typeof mountWorkspace>,
+      choice: AddContentChoice,
+      pickerResult: unknown = null,
+    ) {
+      mockModalOpen.mockResolvedValueOnce(choice).mockResolvedValueOnce(pickerResult)
       await wrapper.find('.workspace__add-btn').trigger('click')
-      findMenuAction(label)?.()
-      await nextTick()
+      await flushPromises()
     }
 
-    it('offers the three add actions from one control-bar button', async () => {
+    it('opens the add-content modal from the control bar', async () => {
       const wrapper = mountWorkspace()
       await wrapper.find('.workspace__add-btn').trigger('click')
-      expect(lastMenuLabels()).toEqual(['Add Playlist…', 'Add Tracks…', 'New Playlist…'])
+      const [component] = mockModalOpen.mock.calls[0] as [unknown]
+      expect(component).toBe(AddContentModal)
+    })
+
+    it('opens no picker when the add-content modal is dismissed', async () => {
+      const wrapper = mountWorkspace()
+      await chooseAdd(wrapper, 'tracks' as AddContentChoice)
+      mockModalOpen.mockClear()
+      mockModalOpen.mockResolvedValueOnce(null)
+      await wrapper.find('.workspace__add-btn').trigger('click')
+      await flushPromises()
+      expect(mockModalOpen).toHaveBeenCalledTimes(1)
     })
 
     it('opens PlaylistSelectModal in export mode and adds each chosen playlist', async () => {
-      mockModalOpen.mockResolvedValueOnce([4, 7])
       const wrapper = mountWorkspace()
-      await invokeAddAction(wrapper, 'Add Playlist…')
-      await flushPromises()
-      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { mode: string }]
+      await chooseAdd(wrapper, 'playlist', [4, 7])
+      const [, props] = mockModalOpen.mock.calls[1] as [unknown, { mode: string }]
       expect(props.mode).toBe('export')
       expect(mockWorkspaceStore.addPlaylist).toHaveBeenCalledWith(4)
       expect(mockWorkspaceStore.addPlaylist).toHaveBeenCalledWith(7)
@@ -664,8 +679,8 @@ describe('WorkspaceView', () => {
     it('opens TrackSelectModal excluding tracks already in the workspace', async () => {
       mockWorkspaceStore.tracks = new Map([['t1', makeTrack('t1', 'Song A', 'Artist 1')]])
       const wrapper = mountWorkspace()
-      await invokeAddAction(wrapper, 'Add Tracks…')
-      const [, props] = mockModalOpen.mock.calls[0] as [
+      await chooseAdd(wrapper, 'tracks')
+      const [, props] = mockModalOpen.mock.calls[1] as [
         unknown,
         { excludeIds: string[]; confirmLabel: string; confirmVariant: string },
       ]
@@ -675,53 +690,41 @@ describe('WorkspaceView', () => {
     })
 
     it('adds the selected ids to the workspace', async () => {
-      mockModalOpen.mockResolvedValueOnce(['t9'])
       const wrapper = mountWorkspace()
-      await invokeAddAction(wrapper, 'Add Tracks…')
-      await flushPromises()
+      await chooseAdd(wrapper, 'tracks', ['t9'])
       expect(mockWorkspaceStore.addTracksToWorkspace).toHaveBeenCalledWith(['t9'])
     })
 
     it('does nothing when the track picker is cancelled', async () => {
-      mockModalOpen.mockResolvedValueOnce(null)
       const wrapper = mountWorkspace()
-      await invokeAddAction(wrapper, 'Add Tracks…')
-      await flushPromises()
+      await chooseAdd(wrapper, 'tracks', null)
       expect(mockWorkspaceStore.addTracksToWorkspace).not.toHaveBeenCalled()
     })
 
     it('does nothing when the track picker returns an empty selection', async () => {
-      mockModalOpen.mockResolvedValueOnce([])
       const wrapper = mountWorkspace()
-      await invokeAddAction(wrapper, 'Add Tracks…')
-      await flushPromises()
+      await chooseAdd(wrapper, 'tracks', [])
       expect(mockWorkspaceStore.addTracksToWorkspace).not.toHaveBeenCalled()
     })
 
     it('creates a playlist from the prompt modal rather than window.prompt', async () => {
       const promptSpy = vi.spyOn(window, 'prompt')
-      mockModalOpen.mockResolvedValueOnce('My Playlist')
       const wrapper = mountWorkspace()
-      await invokeAddAction(wrapper, 'New Playlist…')
-      await flushPromises()
+      await chooseAdd(wrapper, 'new', 'My Playlist')
       expect(promptSpy).not.toHaveBeenCalled()
       expect(mockWorkspaceStore.createEmptyPlaylist).toHaveBeenCalledWith('My Playlist')
       promptSpy.mockRestore()
     })
 
     it('trims the new playlist name', async () => {
-      mockModalOpen.mockResolvedValueOnce('  Padded  ')
       const wrapper = mountWorkspace()
-      await invokeAddAction(wrapper, 'New Playlist…')
-      await flushPromises()
+      await chooseAdd(wrapper, 'new', '  Padded  ')
       expect(mockWorkspaceStore.createEmptyPlaylist).toHaveBeenCalledWith('Padded')
     })
 
     it('does not create a playlist when the prompt is cancelled', async () => {
-      mockModalOpen.mockResolvedValueOnce(null)
       const wrapper = mountWorkspace()
-      await invokeAddAction(wrapper, 'New Playlist…')
-      await flushPromises()
+      await chooseAdd(wrapper, 'new', null)
       expect(mockWorkspaceStore.createEmptyPlaylist).not.toHaveBeenCalled()
     })
   })

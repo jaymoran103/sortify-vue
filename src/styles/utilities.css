@@ -273,6 +273,11 @@
   gap: var(--space-3);
 }
 
+/* For a three-option picker; the modal it sits in widens to match. */
+.source-card-grid--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .source-card {
   display: flex;
   flex-direction: column;

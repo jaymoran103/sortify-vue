@@ -19,8 +19,9 @@ import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import TrackRow from './TrackRow.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
+import AddContentModal from './AddContentModal.vue'
 import type { Track, PlaylistId } from '@/types/models'
-import type { SortOption, MenuEntry } from '@/types/ui'
+import type { SortOption, MenuEntry, AddContentChoice } from '@/types/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -464,24 +465,32 @@ async function handleBulkDelete(): Promise<void> {
   }
 }
 
-// ─── Add content menu + handlers ──────────────
+// ─── Add content flow + handlers ──────────────
 
 /**
- * Show the "add content" menu for the control bar's single Add button.
+ * Run the add-content flow behind the control bar's single Add button.
  *
- * Input: the originating click event, used to position the menu. Side effect: opens the
- * shared context menu via useContextMenu().show().
+ * Opens AddContentModal, then hands off to the picker for whichever card was chosen. No
+ * side effects of its own — each branch below owns its own modal and store call. Resolving
+ * to null (cancelled, or dismissed) ends the flow.
  *
- * One button rather than three: every entry below opens a modal of its own, so a card-grid
- * modal in the style of Import/Export would put a dialog in front of a dialog on every path.
- * Positioning follows the cursor, matching how TrackRow's ⋮ button opens its menu.
+ * Two dialogs deep by design: the card grid is step one of the same shape Import and Export
+ * use, so the workspace asks the question the same way the rest of the app does.
  */
-function buildAddMenu(event: MouseEvent): void {
-  ctx.show(event, [
-    { label: 'Add Playlist…', action: () => void handleAddPlaylistToWorkspace() },
-    { label: 'Add Tracks…', action: () => void handleAddTracks() },
-    { label: 'New Playlist…', action: () => void handleCreatePlaylist() },
-  ])
+async function handleAddContent(): Promise<void> {
+  const choice = await modal.open<AddContentChoice>(AddContentModal)
+
+  switch (choice) {
+    case 'tracks':
+      await handleAddTracks()
+      break
+    case 'playlist':
+      await handleAddPlaylistToWorkspace()
+      break
+    case 'new':
+      await handleCreatePlaylist()
+      break
+  }
 }
 
 async function handleAddPlaylistToWorkspace(): Promise<void> {
@@ -597,8 +606,8 @@ useKeyboardShortcuts({
         </span>
 
         <template #actions>
-          <button class="btn btn--secondary workspace__add-btn" @click="buildAddMenu">
-            + Add ▾
+          <button class="btn btn--secondary workspace__add-btn" @click="handleAddContent">
+            + Add
           </button>
         </template>
       </ControlBar>
