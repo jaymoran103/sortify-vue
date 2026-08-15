@@ -38,3 +38,21 @@ export const NEAR_IDENTICAL_THRESHOLD = 0.7
 
 /** Co-occurrence ratio at which two tracks read as a pair rather than a coincidence. */
 export const ALWAYS_TOGETHER_THRESHOLD = 0.9
+
+/**
+ * Doubles detection thresholds.
+ *
+ * Candidates are blocked by normalized title, so only tracks sharing a title key are ever compared.
+ * A block larger than this is skipped and named in a scan note: a title shared by hundreds of
+ * tracks is a metadata artifact, not a set of variants.
+ */
+export const MAX_BLOCK_SIZE = 200
+
+/** Two durations this close are treated as the same recording, promoting the match by one tier. */
+export const DURATION_TOLERANCE_MS = 2000
+
+/** Token-set overlap at or above this, with a matching artist, reads as a moderate match. */
+export const MODERATE_OVERLAP_THRESHOLD = 0.8
+
+/** Token-set overlap at or above this, with a differing artist, reads as a low match. */
+export const LOW_OVERLAP_THRESHOLD = 0.6

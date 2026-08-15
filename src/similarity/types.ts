@@ -50,6 +50,41 @@ export interface IndexStats {
   builtAt: number
 }
 
+/** Confidence that two tracks are the same recording. */
+export type MatchTier = 'source' | 'high' | 'moderate' | 'low'
+
+/** Review state of a detected group. Rejections persist so a rescan never re-proposes them. */
+export type EquivalenceStatus = 'unconfirmed' | 'confirmed' | 'rejected'
+
+/** The narrowest track shape matching needs, keeping the worker payload small. */
+export interface TrackMatchInput {
+  trackID: string
+  title: string
+  artist: string
+  duration?: number | string
+}
+
+/** A group already on record, so a rescan can skip its tracks. */
+export interface KnownGroup {
+  trackIds: string[]
+  status: EquivalenceStatus
+}
+
+/** Live control values for a doubles scan. */
+export interface DoublesControls {
+  reviewFilter: EquivalenceStatus | 'all'
+  minTier: MatchTier
+  sortKey: string
+  sortDir: 'asc' | 'desc'
+}
+
+/** A detected group, before it reaches the database. */
+export interface DetectedGroup {
+  trackIds: string[]
+  matchTier: MatchTier
+  preferredTrackId?: string
+}
+
 /** Which measure a threshold gates on. */
 export type OverlapMeasureKey = 'jaccard' | 'containment' | 'ratio'
 
@@ -100,6 +135,8 @@ export type ScanNoteKind =
   | 'excluded-playlists'
   | 'raised-degree'
   | 'truncated-rows'
+  | 'unmatchable-tracks'
+  | 'oversized-block'
 
 /** A statement about what a scan did or declined to do, rendered above the result. */
 export interface ScanNote {
