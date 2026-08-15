@@ -33,15 +33,44 @@ const storeState = reactive({
     sortDir: 'desc' as const,
   },
   activePresetKey: 'overlap-any',
+  mode: 'overlap' as 'overlap' | 'doubles',
+  doublesControls: {
+    reviewFilter: 'unconfirmed' as const,
+    minTier: 'low' as const,
+    sortKey: 'variants',
+    sortDir: 'desc' as const,
+  },
+  equivalenceEnabled: true,
+  railFindings: [] as { presetKey: string; label: string; count: number }[],
   isScanning: false,
   scanProgress: null,
   error: null as string | null,
   run: runMock,
   applyPreset: applyPresetMock,
   setControls: setControlsMock,
+  setDoublesControls: vi.fn(),
+  setEquivalenceEnabled: vi.fn(),
+  refreshRail: vi.fn(),
   ensureIndex: vi.fn(),
   dispose: vi.fn(),
 })
+
+const equivalenceState = reactive({
+  all: [] as unknown[],
+  confirmedGroups: [] as unknown[],
+  setPreferred: vi.fn(),
+  confirm: vi.fn(),
+  reject: vi.fn(),
+  confirmAll: vi.fn(),
+})
+vi.mock('@/stores/equivalence', () => ({ useEquivalenceStore: () => equivalenceState }))
+
+const trackState = reactive({ tracks: [] as unknown[] })
+vi.mock('@/stores/tracks', () => ({ useTrackStore: () => trackState }))
+
+vi.mock('@/composables/useModal', () => ({
+  useModal: () => ({ open: vi.fn().mockResolvedValue(null), close: vi.fn() }),
+}))
 
 const playlistState = reactive({
   playlists: [
@@ -49,6 +78,7 @@ const playlistState = reactive({
     { id: 2, name: 'Beta', trackIDs: ['b', 'c'] },
   ] as Playlist[],
   addPlaylist: vi.fn().mockResolvedValue(9),
+  batchUpdatePlaylists: vi.fn().mockResolvedValue(undefined),
 })
 
 vi.mock('@/stores/similarity', () => ({ useSimilarityStore: () => storeState }))

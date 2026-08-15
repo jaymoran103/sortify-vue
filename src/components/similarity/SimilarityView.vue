@@ -1,22 +1,33 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSimilarityStore } from '@/stores/similarity'
 import { useCursorStore } from '@/stores/cursor'
 import { useSessionStore } from '@/stores/sessions'
 import { usePlaylistStore } from '@/stores/playlists'
+import { useTrackStore } from '@/stores/tracks'
+import { useEquivalenceStore } from '@/stores/equivalence'
 import { useListSelection } from '@/composables/useListSelection'
+import { useModal } from '@/composables/useModal'
+import { describeConsolidation, planConsolidation } from '@/similarity/consolidate'
+import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import CursorBar from '@/components/similarity/CursorBar.vue'
+import DoublesReviewPanel from '@/components/similarity/DoublesReviewPanel.vue'
+import NoticedRail from '@/components/similarity/NoticedRail.vue'
 import OperationPalette from '@/components/similarity/OperationPalette.vue'
 import ResultControlBar from '@/components/similarity/ResultControlBar.vue'
 import ResultTable from '@/components/similarity/ResultTable.vue'
 import ResultVerbStrip from '@/components/similarity/ResultVerbStrip.vue'
 import type { ResultRow } from '@/similarity/types'
+import type { EquivalenceGroup, Track } from '@/types/models'
 
 const store = useSimilarityStore()
 const cursor = useCursorStore()
 const sessionStore = useSessionStore()
 const playlistStore = usePlaylistStore()
+const trackStore = useTrackStore()
+const equivalence = useEquivalenceStore()
+const modal = useModal()
 const router = useRouter()
 
 // ── Selection ─────────────────────────────────────────────────────────────────
@@ -55,6 +66,130 @@ const emptyMessage = computed(() => {
   }
   return 'Nothing in this library overlaps.'
 })
+
+// ── Doubles review ────────────────────────────────────────────────────────────
+const reviewingGroupId = ref<number | null>(null)
+
+/** Groups currently listed, in the order the rows show them, so Next Set follows the eye. */
+const listedGroups = computed<EquivalenceGroup[]>(() => {
+  if (store.mode !== 'doubles') return []
+  const byId = new Map(equivalence.all.map((group) => [group.id, group]))
+  return rows.value
+    .map((row) => byId.get(Number(row.key.replace(/^g/, ''))))
+    .filter((group): group is EquivalenceGroup => group !== undefined)
+})
+
+const reviewingGroup = computed<EquivalenceGroup | null>(
+  () => listedGroups.value.find((group) => group.id === reviewingGroupId.value) ?? null,
+)
+
+const reviewPosition = computed(() => ({
+  index: listedGroups.value.findIndex((group) => group.id === reviewingGroupId.value),
+  total: listedGroups.value.length,
+}))
+
+const trackLookup = computed(() => {
+  const map = new Map<string, Track>()
+  for (const track of trackStore.tracks ?? []) map.set(track.trackID, track)
+  return map
+})
+
+const hasConfirmedDoubles = computed(() => equivalence.confirmedGroups.length > 0)
+
+/** Opens review for a row. Only doubles rows carry a group id. */
+function openReview(key: string): void {
+  if (store.mode !== 'doubles') return
+  const id = Number(key.replace(/^g/, ''))
+  reviewingGroupId.value = Number.isFinite(id) ? id : null
+}
+
+/** Advances to the next group in the list, wrapping to the start. */
+function reviewNext(): void {
+  const groups = listedGroups.value
+  if (groups.length === 0) return
+  const next = (reviewPosition.value.index + 1) % groups.length
+  reviewingGroupId.value = groups[next]?.id ?? null
+}
+
+async function preferVariant(trackId: string): Promise<void> {
+  if (reviewingGroupId.value === null) return
+  await equivalence.setPreferred(reviewingGroupId.value, trackId)
+}
+
+async function confirmGroup(): Promise<void> {
+  if (reviewingGroupId.value === null) return
+  await equivalence.confirm(reviewingGroupId.value)
+  reviewNext()
+  await store.run()
+}
+
+async function rejectGroup(): Promise<void> {
+  if (reviewingGroupId.value === null) return
+  await equivalence.reject(reviewingGroupId.value)
+  reviewNext()
+  await store.run()
+}
+
+async function approveAll(): Promise<void> {
+  const ids = listedGroups.value
+    .filter((group) => group.status === 'unconfirmed' && group.id !== undefined)
+    .map((group) => group.id as number)
+  if (ids.length === 0) return
+
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Approve all doubles',
+    message: `Mark ${ids.length} group(s) as confirmed? Overlap will start counting each group as one track.`,
+    confirmLabel: `Approve ${ids.length}`,
+    danger: false,
+  })
+  if (!confirmed) return
+
+  await equivalence.confirmAll(ids)
+  await store.run()
+}
+
+/**
+ * Rewrites the selected playlists to keep one variant per confirmed group.
+ *
+ * The module's only destructive action. Scoped to the cursor when it holds playlists, otherwise to
+ * the playlists the group actually touches, so it can never become a library-wide pass.
+ */
+async function consolidate(): Promise<void> {
+  const group = reviewingGroup.value
+  if (!group) return
+
+  const preferredTrackId = group.preferredTrackId ?? group.trackIds[0]
+  if (!preferredTrackId) return
+
+  const all = playlistStore.playlists ?? []
+  const scoped = cursor.subject === 'playlist' && !cursor.isEmpty
+    ? all.filter((playlist) => cursor.ids.includes(String(playlist.id)))
+    : all.filter((playlist) => group.trackIds.some((id) => playlist.trackIDs.includes(id)))
+
+  const plan = planConsolidation(
+    scoped
+      .filter((playlist) => playlist.id !== undefined)
+      .map((playlist) => ({
+        id: playlist.id as number,
+        name: playlist.name,
+        trackIDs: playlist.trackIDs,
+      })),
+    [{ trackIds: group.trackIds, preferredTrackId }],
+  )
+
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Consolidate playlists',
+    message: describeConsolidation(plan),
+    confirmLabel: plan.playlistCount === 0 ? 'OK' : `Consolidate ${plan.playlistCount} playlist(s)`,
+    danger: plan.playlistCount > 0,
+  })
+  if (!confirmed || plan.playlistCount === 0) return
+
+  await playlistStore.batchUpdatePlaylists(
+    plan.rewrites.map((rewrite) => ({ id: rewrite.id, changes: { trackIDs: rewrite.trackIDs } })),
+  )
+  await store.run()
+}
 
 // ── Verbs ─────────────────────────────────────────────────────────────────────
 /**
@@ -132,9 +267,23 @@ function analyze(): void {
   clearSelection()
 }
 
+/** Row clicks both select for the verb strip and, in doubles mode, open review. */
+function onRowClick(key: string, event: MouseEvent): void {
+  toggle(key, event)
+  openReview(key)
+}
+
+/** Applying a preset closes any open review, since the list beneath it just changed. */
+async function onSelectPreset(key: string): Promise<void> {
+  reviewingGroupId.value = null
+  await store.applyPreset(key)
+  await store.refreshRail()
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
-onMounted(() => {
-  void store.run()
+onMounted(async () => {
+  await store.run()
+  await store.refreshRail()
 })
 
 // applyPreset and setControls re-run themselves, so only the cursor needs a watcher here.
@@ -175,13 +324,27 @@ onBeforeUnmount(() => {
     />
 
     <div class="similarity-view__body">
-      <OperationPalette :active-key="store.activePresetKey" @select="store.applyPreset($event)" />
+      <OperationPalette :active-key="store.activePresetKey" @select="onSelectPreset">
+        <template #rail>
+          <NoticedRail
+            :findings="store.railFindings"
+            :is-stale="store.indexStatus === 'stale'"
+            @select="onSelectPreset"
+          />
+        </template>
+      </OperationPalette>
 
       <section class="similarity-view__result">
         <ResultControlBar
           :controls="store.controls"
+          :doubles-controls="store.doublesControls"
           :measures="rows[0]?.measures ?? []"
+          :mode="store.mode"
+          :equivalence-enabled="store.equivalenceEnabled"
+          :has-confirmed-doubles="hasConfirmedDoubles"
           @update="store.setControls($event)"
+          @update-doubles="store.setDoublesControls($event)"
+          @update-equivalence="store.setEquivalenceEnabled($event)"
         />
 
         <p v-if="store.error" class="similarity-view__error text-sm">{{ store.error }}</p>
@@ -197,7 +360,23 @@ onBeforeUnmount(() => {
           :rows="rows"
           :selected-keys="selectedIds"
           :empty-message="emptyMessage"
-          @row-click="toggle"
+          @row-click="onRowClick"
+        />
+
+        <DoublesReviewPanel
+          v-if="reviewingGroup"
+          :group="reviewingGroup"
+          :tracks="trackLookup"
+          :playlists="playlistStore.playlists ?? []"
+          :position="reviewPosition"
+          @prefer="preferVariant"
+          @confirm="confirmGroup"
+          @reject="rejectGroup"
+          @consolidate="consolidate"
+          @approve-all="approveAll"
+          @rescan="store.run()"
+          @next="reviewNext"
+          @close="reviewingGroupId = null"
         />
 
         <ResultVerbStrip

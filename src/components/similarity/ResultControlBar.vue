@@ -2,10 +2,40 @@
 import { computed } from 'vue'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
-import type { OverlapControls, ResultMeasure } from '@/similarity/types'
+import type {
+  DoublesControls,
+  EquivalenceStatus,
+  OverlapControls,
+  ResultMeasure,
+} from '@/similarity/types'
 
-const props = defineProps<{ controls: OverlapControls; measures: ResultMeasure[] }>()
-const emit = defineEmits<{ update: [patch: Partial<OverlapControls>] }>()
+const props = defineProps<{
+  controls: OverlapControls
+  doublesControls: DoublesControls
+  measures: ResultMeasure[]
+  mode: 'overlap' | 'doubles'
+  equivalenceEnabled: boolean
+  /** The toggle only renders once there is something for it to change. */
+  hasConfirmedDoubles: boolean
+}>()
+
+const emit = defineEmits<{
+  update: [patch: Partial<OverlapControls>]
+  updateDoubles: [patch: Partial<DoublesControls>]
+  updateEquivalence: [enabled: boolean]
+}>()
+
+const REVIEW_FILTERS: { key: EquivalenceStatus | 'all'; label: string }[] = [
+  { key: 'unconfirmed', label: 'Unreviewed' },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'rejected', label: 'Rejected' },
+  { key: 'all', label: 'All' },
+]
+
+const reviewFilter = computed({
+  get: () => props.doublesControls.reviewFilter,
+  set: (value: string) => emit('updateDoubles', { reviewFilter: value as EquivalenceStatus | 'all' }),
+})
 
 const thresholdPercent = computed(() => Math.round(props.controls.threshold * 100))
 
@@ -29,7 +59,17 @@ function onThreshold(event: Event): void {
 
 <template>
   <ControlBar class="result-control-bar">
-    <label class="result-control-bar__field">
+    <!-- Doubles has no threshold: a group either matched or it did not. The review filter is the
+         control that actually narrows the list. -->
+    <SelectDropdown
+      v-if="mode === 'doubles'"
+      v-model="reviewFilter"
+      class="result-control-bar__review-filter"
+      :options="REVIEW_FILTERS"
+      title="Filter by review state"
+    />
+
+    <label v-if="mode === 'overlap'" class="result-control-bar__field">
       <span class="text-muted text-xs">Threshold</span>
       <input
         class="result-control-bar__threshold"
@@ -49,8 +89,24 @@ function onThreshold(event: Event): void {
       title="Sort results by"
     />
 
+    <!-- Only shown once at least one group is confirmed: a control that changes nothing is
+         chrome. It rebuilds the index, so the number it moves is the number on screen. -->
+    <label
+      v-if="mode === 'overlap' && hasConfirmedDoubles"
+      class="result-control-bar__equivalence"
+      title="Count confirmed doubles as one track when measuring overlap"
+    >
+      <input
+        class="result-control-bar__equivalence-input"
+        type="checkbox"
+        :checked="equivalenceEnabled"
+        @change="emit('updateEquivalence', ($event.target as HTMLInputElement).checked)"
+      />
+      <span class="text-xs">Treat doubles as one track</span>
+    </label>
+
     <template #actions>
-      <div class="result-control-bar__axis">
+      <div v-if="mode === 'overlap'" class="result-control-bar__axis">
         <button
           class="result-control-bar__axis-btn result-control-bar__axis-playlist"
           :class="{ 'result-control-bar__axis-btn--active': controls.axis === 'playlist' }"
@@ -85,6 +141,19 @@ function onThreshold(event: Event): void {
 .result-control-bar__value {
   min-width: 4ch;
   color: var(--color-text-muted);
+}
+
+.result-control-bar__equivalence {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.result-control-bar__equivalence-input {
+  accent-color: var(--color-accent);
+  cursor: pointer;
 }
 
 .result-control-bar__axis {
