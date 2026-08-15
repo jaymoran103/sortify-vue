@@ -2,7 +2,19 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { nextTick, reactive } from 'vue'
 import type { Playlist } from '@/types/models'
-import type { IndexStats, ScanResult } from '@/similarity/types'
+import type { IndexStats, ResultRow, ScanResult } from '@/similarity/types'
+
+/** A minimal valid row, for tests that only care how many came back. */
+function stubRow(key: string): ResultRow {
+  return {
+    key,
+    subject: 'playlist',
+    primaryLabel: key,
+    measures: [],
+    denominator: '1 of 1',
+    memberIds: [key],
+  }
+}
 
 const buildMock = vi.fn<(playlists: unknown, canonical?: unknown) => Promise<IndexStats>>()
 const scanMock = vi.fn<(...args: unknown[]) => Promise<ScanResult | null>>()
@@ -330,11 +342,11 @@ describe('useSimilarityStore rail', () => {
   })
 
   it('ranks containment above near-identical, whatever the counts', async () => {
-    scanMock.mockImplementation(async (controls: unknown) => {
-      const measure = (controls as { measure: string }).measure
+    scanMock.mockImplementation(async (...args: unknown[]) => {
+      const measure = (args[0] as { measure: string }).measure
       return measure === 'containment'
-        ? { rows: [{}, {}], notes: [] }
-        : { rows: [{}, {}, {}, {}, {}], notes: [] }
+        ? { rows: [stubRow('a'), stubRow('b')], notes: [] }
+        : { rows: ['c', 'd', 'e', 'f', 'g'].map(stubRow), notes: [] }
     })
     const store = useSimilarityStore()
     await store.refreshRail()
@@ -346,7 +358,7 @@ describe('useSimilarityStore rail', () => {
   })
 
   it('includes unreviewed doubles between the two overlap findings', async () => {
-    scanMock.mockResolvedValue({ rows: [{}], notes: [] })
+    scanMock.mockResolvedValue({ rows: [stubRow('a')], notes: [] })
     setStoredGroups([
       { id: 1, trackIds: ['a', 'b'], status: 'unconfirmed', matchTier: 'high', detectedAt: 1 },
     ])

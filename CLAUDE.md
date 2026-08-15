@@ -124,8 +124,13 @@ convention below and an adjacent file disagree, follow the adjacent file and say
 - **A `useLiveQuery` store has three states but its ref shows two.** It seeds with `[]`, so "not
   yet loaded" is indistinguishable from "empty". Any consumer that behaves differently on empty
   must treat the empty case as "wait and retry". See `LEARNINGS.md` 2026-08-15-02.
-- **Dexie multiplies its declared version by ten.** `db.version(5)` is IndexedDB version 50. Open
+- **Dexie multiplies its declared version by ten.** `db.version(6)` is IndexedDB version 60. Open
   without a version number when attaching to a Dexie-owned database directly.
+- **Correctness reads from the database; rendering reads the liveQuery mirror.** A `computed` over
+  a `useLiveQuery` ref is fine in a template and wrong in an action: on a cold load it is empty and
+  indistinguishable from "no data". Anything that computes a result from it must read the table
+  directly instead. This has caused three separate silent-wrong-answer bugs — `LEARNINGS.md`
+  2026-08-15-02 and 2026-08-15-06.
 
 ### Components
 
@@ -210,3 +215,13 @@ Easy to break, expensive to debug.
 - A preset is a named set of control values and nothing else. If it needs new code it is a new
   operation, which is an architectural event.
 - No silent caps. Any exclusion a scan makes is named in the result.
+- **The UI says Doubles; the data model says `EquivalenceGroup`.** A deliberate divergence. Do not
+  "fix" one to match the other.
+- **Confirming a group is the application.** Equivalence resolves at read time through the canonical
+  map folded into `buildIndex`. `Consolidate` is the single destructive path, and it is scoped,
+  confirmed, and computed by a pure function.
+- **Detection skips tracks in any stored group**, whatever its review state. Skipping only decided
+  ones duplicates unconfirmed groups on every rescan.
+- **Any heuristic over user data is measured against a real library before its thresholds are
+  settled.** The cross-artist matching rule was rewritten after real data showed it producing 505
+  false groups — `LEARNINGS.md` 2026-08-15-05.
