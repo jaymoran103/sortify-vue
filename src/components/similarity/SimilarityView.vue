@@ -146,6 +146,17 @@ watch(
   },
 )
 
+// The library hydrates asynchronously through liveQuery, so arriving here on a cold load (a
+// bookmark, a refresh, a deep link) can run the first scan before any playlists exist. Re-run
+// once they arrive. Only the idle case retries: a ready index that goes stale after a user edit
+// stays stale until they ask for a rebuild, so editing a playlist never triggers surprise work.
+watch(
+  () => store.libraryRevision,
+  () => {
+    if (store.indexStatus === 'idle') void store.run()
+  },
+)
+
 onBeforeUnmount(() => {
   store.dispose()
 })

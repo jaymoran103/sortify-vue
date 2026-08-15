@@ -111,18 +111,45 @@ export class SimilarityWorkerClient {
     })
   }
 
-  /** Builds the inverted index inside the worker and resolves its summary stats. */
+  /**
+   * Builds the inverted index inside the worker and resolves its summary stats.
+   * Rebuilds each playlist as a plain object; see the note on scan() below.
+   */
   async build(playlists: IndexInput[]): Promise<IndexStats> {
-    return this.send<IndexStats>({ type: 'build', playlists }, false)
+    const plain = playlists.map((playlist) => ({
+      id: playlist.id,
+      name: playlist.name,
+      trackIDs: [...playlist.trackIDs],
+    }))
+    return this.send<IndexStats>({ type: 'build', playlists: plain }, false)
   }
 
-  /** Runs a scan. Resolves null when a newer scan has superseded this one. */
+  /**
+   * Runs a scan. Resolves null when a newer scan has superseded this one.
+   *
+   * Both arguments are rebuilt as plain values before they cross the boundary. Callers pass Vue
+   * reactive state (a ref's value, a computed's value), and structuredClone cannot clone a Proxy:
+   * postMessage throws "could not be cloned" and the scan never runs. Normalising here rather than
+   * at each call site keeps the constraint with the code that owns it.
+   */
   async scan(
     controls: OverlapControls,
     scope: CursorScope,
     onProgress?: ProgressCallback,
   ): Promise<ScanResult | null> {
-    return this.send<ScanResult | null>({ type: 'scan', controls, scope }, true, onProgress)
+    const plainControls: OverlapControls = {
+      axis: controls.axis,
+      measure: controls.measure,
+      threshold: controls.threshold,
+      sortKey: controls.sortKey,
+      sortDir: controls.sortDir,
+    }
+    const plainScope: CursorScope = { subject: scope.subject, ids: [...scope.ids] }
+    return this.send<ScanResult | null>(
+      { type: 'scan', controls: plainControls, scope: plainScope },
+      true,
+      onProgress,
+    )
   }
 
   /** Tears down the worker and drops every pending request. */

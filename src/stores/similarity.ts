@@ -96,13 +96,28 @@ export const useSimilarityStore = defineStore('similarity', () => {
     return map
   }
 
-  /** Builds the index if it is missing or stale. A ready index is left alone. */
+  /**
+   * Builds the index if it is missing or stale. A ready index is left alone.
+   *
+   * Returns without building when the library is empty. The playlist store hydrates
+   * asynchronously through liveQuery and seeds its ref with [], so an empty list at mount is
+   * indistinguishable from an empty library. Building anyway would mark a zero-track index
+   * "ready" and every later scan would report that nothing overlaps. Staying idle instead lets
+   * the caller notice and re-run once the data arrives.
+   */
   async function ensureIndex(): Promise<void> {
     if (indexStatus.value === 'ready' || indexStatus.value === 'building') return
+
+    const input = toIndexInput()
+    if (input.length === 0) {
+      indexStatus.value = 'idle'
+      return
+    }
+
     indexStatus.value = 'building'
     error.value = null
     try {
-      indexStats.value = await client.build(toIndexInput())
+      indexStats.value = await client.build(input)
       indexStatus.value = 'ready'
     } catch (caught) {
       indexStatus.value = 'error'

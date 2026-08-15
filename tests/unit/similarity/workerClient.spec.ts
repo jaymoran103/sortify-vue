@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { reactive, ref } from 'vue'
 import { SimilarityWorkerClient } from '@/similarity/workerClient'
 import type { CursorScope, OverlapControls, ScanRequest, ScanResponse } from '@/similarity/types'
 
@@ -80,6 +81,33 @@ describe('SimilarityWorkerClient', () => {
     const promise = client.scan(CONTROLS, SCOPE)
     worker.emit({ id: worker.sent[0]!.id, type: 'error', message: 'boom' })
     await expect(promise).rejects.toThrow('boom')
+  })
+
+  // Regression: Vue reactive state cannot be structured-cloned, so passing a ref's value or a
+  // computed's value straight through made postMessage throw "could not be cloned" and the scan
+  // silently never ran. Only a real worker enforces this, so assert it explicitly here.
+  it('posts plain values that survive structuredClone', async () => {
+    const { client, worker } = makeClient()
+    const reactiveControls = ref<OverlapControls>({ ...CONTROLS })
+    const reactiveScope = reactive<CursorScope>({ subject: 'playlist', ids: ['1', '2'] })
+
+    void client.scan(reactiveControls.value, reactiveScope)
+
+    const sent = worker.sent[0]!
+    expect(() => structuredClone(sent)).not.toThrow()
+    expect(sent).toEqual({
+      id: 1,
+      type: 'scan',
+      controls: CONTROLS,
+      scope: { subject: 'playlist', ids: ['1', '2'] },
+    })
+  })
+
+  it('posts a build payload that survives structuredClone', () => {
+    const { client, worker } = makeClient()
+    const reactivePlaylists = reactive([{ id: 1, name: 'One', trackIDs: ['a', 'b'] }])
+    void client.build(reactivePlaylists)
+    expect(() => structuredClone(worker.sent[0]!)).not.toThrow()
   })
 
   it('terminates the underlying worker', () => {

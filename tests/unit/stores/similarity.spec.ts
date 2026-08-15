@@ -133,6 +133,29 @@ describe('useSimilarityStore', () => {
     expect(store.activePresetKey).toBe('overlap-any')
   })
 
+  // Regression: the playlist store hydrates asynchronously and seeds its ref with [], so a cold
+  // load could build a zero-track index, mark it ready, and report that nothing overlaps forever.
+  it('stays idle rather than building an index from an unhydrated library', async () => {
+    playlistState.playlists = []
+    const store = useSimilarityStore()
+    await store.ensureIndex()
+    expect(buildMock).not.toHaveBeenCalled()
+    expect(store.indexStatus).toBe('idle')
+  })
+
+  it('builds once the library hydrates', async () => {
+    playlistState.playlists = []
+    const store = useSimilarityStore()
+    await store.run()
+    expect(store.indexStatus).toBe('idle')
+
+    seedPlaylists()
+    await nextTick()
+    await store.run()
+    expect(buildMock).toHaveBeenCalledTimes(1)
+    expect(store.indexStatus).toBe('ready')
+  })
+
   it('records an error message when a scan rejects', async () => {
     const store = useSimilarityStore()
     scanMock.mockRejectedValueOnce(new Error('boom'))
