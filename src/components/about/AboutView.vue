@@ -12,7 +12,7 @@ const workspaceTabs = [
 ]
 const simTabs = [
   { label: 'Overlap scan', sub: 'Search for playlists that overlap with eachother or a given set of tracks.' },
-  { label: 'Equivalents', sub: 'Review alternate versions of the same song, and consolidate across your playlists.' },
+  { label: 'Doubles', sub: 'Review alternate versions of the same song, and consolidate across your playlists.' },
   { label: 'Similarity Display', sub: 'Visualize playlist relationships, and decide which to tackle next.' },
 ]
 const featureCards = [
@@ -39,7 +39,7 @@ const featureCards = [
   {
     icon: '◈',
     title: 'Similarity',
-    description: "Scan your library for duplicates, equivalents, and overlaps. Then sort them out.",
+    description: "Scan your library for doubles, duplicates, and overlaps. Then sort them out.",
     badge: 'Coming soon!',
 
     // description: "Hunt down duplicates, equivalents, and overlaps across your library. Then clean up the mess.",

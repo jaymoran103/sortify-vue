@@ -12,10 +12,10 @@ const overlapRows = [
 
 const equivPlaylists = ["R&B Classics", "Soul and Funk", "Horn Section", "90's Hip-Hop"]
 const equivVersions = [
-  { title: 'Respect',                    artist: 'Aretha Franklin',        album: 'I Never Loved a Man the Way I Love You',  preferred: true,  certainty: 'source',   cols: [true,  false, true,  false] },
-  { title: 'Respect - Live',             artist: 'Aretha Franklin',        album: 'Aretha in Paris',                         preferred: false, certainty: 'high',     cols: [false, true,  false, false] },
-  { title: 'Respect',                    artist: 'Otis Redding',           album: 'The Very Best of Otis Redding',           preferred: false, certainty: 'moderate', cols: [false, true,  true,  false] },
-  { title: 'Respect - 2005 Remaster',   artist: 'The Notorious B.I.G.',   album: 'Ready to Die (The Remaster)',             preferred: false, certainty: 'low',      cols: [false, false, false, true ] },
+  { title: 'Respect',                    artist: 'Aretha Franklin',        album: 'I Never Loved a Man the Way I Love You',  keep: true,  certainty: 'source',   cols: [true,  false, true,  false] },
+  { title: 'Respect - Live',             artist: 'Aretha Franklin',        album: 'Aretha in Paris',                         keep: false, certainty: 'high',     cols: [false, true,  false, false] },
+  { title: 'Respect',                    artist: 'Otis Redding',           album: 'The Very Best of Otis Redding',           keep: false, certainty: 'moderate', cols: [false, true,  true,  false] },
+  { title: 'Respect - 2005 Remaster',   artist: 'The Notorious B.I.G.',   album: 'Ready to Die (The Remaster)',             keep: false, certainty: 'low',      cols: [false, false, false, true ] },
 ]
 </script>
 
@@ -65,10 +65,10 @@ const equivVersions = [
     </div>
   </div>
 
-  <!-- Tab 1: Equivalents -->
+  <!-- Tab 1: Doubles -->
   <div v-else-if="activeTab === 1" class="sim-panel">
     <div class="sim-panel-header">
-      <span class="ws-title">Equivalent group: <strong>Respect</strong></span>
+      <span class="ws-title">Doubles: <strong>Respect</strong></span>
       <span class="ws-meta">4 versions · 4 playlists</span>
       <button class="ws-btn ws-btn-ghost">Mark Resolved</button>
       <button class="ws-btn ws-btn-ghost">Next Set »</button>
@@ -86,7 +86,7 @@ const equivVersions = [
         v-for="(ver, vi) in equivVersions"
         :key="ver.artist + vi"
         class="sim-equiv-row"
-        :class="{ 'sim-preferred': ver.preferred }"
+        :class="{ 'sim-keep': ver.keep }"
       >
         <div class="sim-equiv-cell sim-equiv-idx">{{ vi + 1 }}</div>
         <div class="sim-equiv-cell sim-equiv-track">
@@ -105,7 +105,7 @@ const equivVersions = [
           </span>
         </div>
         <div class="sim-equiv-cell sim-equiv-action">
-          <span v-if="ver.preferred" class="sim-preferred-badge">Preferred</span>
+          <span v-if="ver.keep" class="sim-keep-badge">Keep</span>
           <button v-else class="ws-btn ws-btn-ghost sim-prefer-btn">Prefer</button>
         </div>
       </div>
@@ -205,7 +205,7 @@ const equivVersions = [
 .sim-pct-high { color: var(--color-accent-hover); font-weight: var(--font-weight-semibold); }
 .sim-row-selected { background: color-mix(in srgb, var(--color-accent) 6%, transparent); }
 
-/* Equivalents */
+/* Doubles */
 .sim-equiv-table { display: flex; flex-direction: column; overflow-y: auto; flex: 1; }
 .sim-equiv-row {
   display: grid;
@@ -237,8 +237,8 @@ const equivVersions = [
 .sim-cert-high     { color: var(--color-accent-hover); border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
 .sim-cert-moderate { color: #c99227; border-color: #b07a18; background: color-mix(in srgb, #c09030 12%, transparent); }
 .sim-cert-low      { color: #e67272; border-color: #e67272; background: color-mix(in srgb, #e67272 12%, transparent); }
-.sim-preferred { background: color-mix(in srgb, var(--color-accent) 6%, transparent); }
-.sim-preferred-badge {
+.sim-keep { background: color-mix(in srgb, var(--color-accent) 6%, transparent); }
+.sim-keep-badge {
   font-size: 11px;
   padding: 1px var(--space-2);
   border-radius: var(--radius-full);
