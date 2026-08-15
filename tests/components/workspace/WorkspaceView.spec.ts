@@ -1038,6 +1038,37 @@ describe('WorkspaceView', () => {
       const labels = wrapper.findAll('select.dropdown option').map((o) => o.text())
       expect(labels).toContain('Playlist: Second')
     })
+
+    // Regression guard on the position memo: it must read pl.trackIDs reactively. Snapshotting
+    // positions when the comparator is built would leave the order describing stale membership.
+    it('reorders when membership in the sorted playlist changes', async () => {
+      const pl = makePlaylist(1, 'PL', ['t3'])
+      mockWorkspaceStore.playlists = [pl]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'One', 'Artist'),
+        makeTrack('t2', 'Two', 'Artist'),
+        makeTrack('t3', 'Three', 'Artist'),
+      ]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper)
+      expect(wrapper.findAll('.track-row__title').map((n) => n.text())).toEqual([
+        'Three',
+        'One',
+        'Two',
+      ])
+
+      // t1 joins the playlist ahead of t3. Written through the store so the reactive proxy,
+      // not the raw literal, is the object that changes.
+      const live = mockWorkspaceStore.playlists[0]!
+      live.trackIDs = ['t1', 't3']
+      live.trackIdSet = new Set(['t1', 't3'])
+      await nextTick()
+      expect(wrapper.findAll('.track-row__title').map((n) => n.text())).toEqual([
+        'One',
+        'Three',
+        'Two',
+      ])
+    })
   })
 
   // ─── Spotify actions (W1-E) ────────────────────────────────────────────────
