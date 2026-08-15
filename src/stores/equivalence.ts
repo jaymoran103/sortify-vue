@@ -5,6 +5,23 @@ import { useLiveQuery } from '@/composables/useLiveQuery'
 import type { EquivalenceGroup, MatchTier } from '@/types/models'
 
 /**
+ * Builds the canonical map from a plain list of groups.
+ *
+ * Exported as a free function so a caller holding a fresh database read can derive the map without
+ * waiting on liveQuery. The store's reactive canonicalMap is this same function over its own list.
+ */
+export function canonicalMapFrom(groups: EquivalenceGroup[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const group of groups) {
+    if (group.status !== 'confirmed') continue
+    const canonical = group.preferredTrackId ?? group.trackIds[0]
+    if (!canonical) continue
+    for (const trackId of group.trackIds) map.set(trackId, canonical)
+  }
+  return map
+}
+
+/**
  * Equivalence Store: persistence and review lifecycle for doubles groups.
  *
  * Groups are shown as "doubles" in the UI; the stored concept is equivalence between distinct
@@ -33,20 +50,22 @@ export const useEquivalenceStore = defineStore('equivalence', () => {
    * track in the group. Overlap folds variants together through this map, which is what makes two
    * playlists holding different releases of one recording count as sharing it.
    */
-  const canonicalMap = computed(() => {
-    const map = new Map<string, string>()
-    for (const group of confirmedGroups.value) {
-      const canonical = group.preferredTrackId ?? group.trackIds[0]
-      if (!canonical) continue
-      for (const trackId of group.trackIds) map.set(trackId, canonical)
-    }
-    return map
-  })
+  const canonicalMap = computed(() => canonicalMapFrom(all.value))
 
   /** Every group as the scan needs it, so a rescan can skip decided tracks. */
   const knownGroups = computed(() =>
     all.value.map((group) => ({ trackIds: group.trackIds, status: group.status })),
   )
+
+  /**
+   * Reads every group straight from the database, bypassing liveQuery.
+   *
+   * Needed immediately after a write, where the reactive list has not necessarily caught up yet:
+   * liveQuery fires from an IDB event handler, so awaiting a tick is not a guarantee.
+   */
+  async function listAll(): Promise<EquivalenceGroup[]> {
+    return db.equivalenceGroups.toArray()
+  }
 
   /** Looks up the stored group containing a track, or undefined. */
   function groupForTrack(trackId: string): EquivalenceGroup | undefined {
@@ -122,6 +141,7 @@ export const useEquivalenceStore = defineStore('equivalence', () => {
     canonicalMap,
     knownGroups,
     groupForTrack,
+    listAll,
     saveDetected,
     confirm,
     reject,

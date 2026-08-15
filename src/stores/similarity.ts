@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useTrackStore } from '@/stores/tracks'
 import { useCursorStore } from '@/stores/cursor'
-import { useEquivalenceStore } from '@/stores/equivalence'
+import { canonicalMapFrom, useEquivalenceStore } from '@/stores/equivalence'
 import { createWorkerClient } from '@/similarity/workerClient'
 import { hydrateTrackLabels } from '@/similarity/overlap'
 import {
@@ -162,7 +162,12 @@ export const useSimilarityStore = defineStore('similarity', () => {
     indexStatus.value = 'building'
     error.value = null
     try {
-      const canonical = equivalenceEnabled.value ? equivalence.canonicalMap : undefined
+      // Read groups from the database rather than the reactive list. On a cold load the
+      // equivalence liveQuery may not have emitted yet, and an index built without the fold
+      // would silently report that nothing overlaps for a library full of confirmed doubles.
+      const canonical = equivalenceEnabled.value
+        ? canonicalMapFrom(await equivalence.listAll())
+        : undefined
       indexStats.value = await client.build(input, canonical)
       indexedWithEquivalence.value = equivalenceEnabled.value
       indexStatus.value = 'ready'
@@ -182,12 +187,24 @@ export const useSimilarityStore = defineStore('similarity', () => {
     }))
   }
 
+  /** The stored groups, in the shape the worker wants them. */
+  function storedGroups() {
+    return equivalence.all.map((group) => ({
+      id: group.id,
+      trackIds: group.trackIds,
+      matchTier: group.matchTier,
+      status: group.status,
+      preferredTrackId: group.preferredTrackId,
+    }))
+  }
+
   /**
    * Runs a doubles scan and persists anything newly detected.
    *
-   * Detected groups are saved as unconfirmed before the rows render, so the list the user reviews
-   * and the rows on screen describe the same records. Groups already decided are skipped by the
-   * scan itself, so this never duplicates a row.
+   * When detection finds something new it is saved and the scan runs again, because a freshly
+   * detected group has no database id yet and a row without one cannot be opened for review. The
+   * second pass sees the saved groups, detects nothing further, and returns rows keyed by real
+   * ids. It only happens on the first scan after new tracks appear.
    */
   async function runDoubles(): Promise<void> {
     await ensureIndex()
@@ -199,13 +216,7 @@ export const useSimilarityStore = defineStore('similarity', () => {
       const scanned = await client.scanDoubles(
         toMatchInput(),
         equivalence.knownGroups,
-        equivalence.all.map((group) => ({
-          id: group.id,
-          trackIds: group.trackIds,
-          matchTier: group.matchTier,
-          status: group.status,
-          preferredTrackId: group.preferredTrackId,
-        })),
+        storedGroups(),
         doublesControls.value,
         cursor.scope,
       )
@@ -213,7 +224,30 @@ export const useSimilarityStore = defineStore('similarity', () => {
 
       if (scanned.groups.length > 0) {
         await equivalence.saveDetected(scanned.groups)
+
+        // Read straight from the database rather than the reactive list: liveQuery fires from an
+        // IDB event handler, so the groups just written may not have reached it yet.
+        const fresh = await equivalence.listAll()
+        const rescanned = await client.scanDoubles(
+          toMatchInput(),
+          fresh.map((group) => ({ trackIds: group.trackIds, status: group.status })),
+          fresh.map((group) => ({
+            id: group.id,
+            trackIds: group.trackIds,
+            matchTier: group.matchTier,
+            status: group.status,
+            preferredTrackId: group.preferredTrackId,
+          })),
+          doublesControls.value,
+          cursor.scope,
+        )
+        if (rescanned) {
+          rows.value = rescanned.result.rows
+          notes.value = rescanned.result.notes
+          return
+        }
       }
+
       rows.value = scanned.result.rows
       notes.value = scanned.result.notes
     } catch (caught) {
@@ -319,11 +353,15 @@ export const useSimilarityStore = defineStore('similarity', () => {
       }
     }
 
-    if (equivalence.unconfirmedCount > 0) {
+    // Counted from a fresh read, for the same reason the index is built from one.
+    const unreviewed = (await equivalence.listAll()).filter(
+      (group) => group.status === 'unconfirmed',
+    ).length
+    if (unreviewed > 0) {
       findings.push({
         presetKey: 'doubles-unreviewed',
         label: 'Doubled tracks unreviewed',
-        count: equivalence.unconfirmedCount,
+        count: unreviewed,
       })
     }
 

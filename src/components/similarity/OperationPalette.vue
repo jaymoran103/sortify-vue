@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import SearchBar from '@/components/common/SearchBar.vue'
-import { findPresets } from '@/similarity/presets'
+import { findAllPresets, isDoublesPreset } from '@/similarity/presets'
 
 defineProps<{ activeKey: string }>()
 defineEmits<{ select: [key: string] }>()
 
 const query = ref('')
-const visiblePresets = computed(() => findPresets(query.value))
+
+// Both operations' presets, in one list. The palette lists questions, not operations, so which
+// computation answers a question is not something the user needs to see.
+const visiblePresets = computed(() => findAllPresets(query.value))
 </script>
 
 <template>
@@ -23,7 +26,10 @@ const visiblePresets = computed(() => findPresets(query.value))
         v-for="preset in visiblePresets"
         :key="preset.key"
         class="operation-palette__item"
-        :class="{ 'operation-palette__item--active': preset.key === activeKey }"
+        :class="{
+          'operation-palette__item--active': preset.key === activeKey,
+          'operation-palette__item--doubles': isDoublesPreset(preset.key),
+        }"
         @click="$emit('select', preset.key)"
       >
         {{ preset.label }}

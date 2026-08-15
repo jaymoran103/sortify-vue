@@ -25,8 +25,27 @@ const equivalenceState = reactive({
   canonicalMap: new Map<string, string>(),
   unconfirmedCount: 0,
   saveDetected: saveDetectedMock,
+  listAll: vi.fn().mockResolvedValue([]),
 })
-vi.mock('@/stores/equivalence', () => ({ useEquivalenceStore: () => equivalenceState }))
+
+/** Drives the fresh-read path the store uses instead of liveQuery. */
+function setStoredGroups(groups: unknown[]): void {
+  equivalenceState.all = groups
+  equivalenceState.listAll = vi.fn().mockResolvedValue(groups)
+}
+vi.mock('@/stores/equivalence', () => ({
+  useEquivalenceStore: () => equivalenceState,
+  // The store imports this free function too; a mock missing it makes ensureIndex throw silently.
+  canonicalMapFrom: (groups: { status: string; trackIds: string[]; preferredTrackId?: string }[]) => {
+    const map = new Map<string, string>()
+    for (const group of groups) {
+      if (group.status !== 'confirmed') continue
+      const canonical = group.preferredTrackId ?? group.trackIds[0]
+      if (canonical) for (const id of group.trackIds) map.set(id, canonical)
+    }
+    return map
+  },
+}))
 
 // A real Pinia store unwraps its refs on property access, so the mock must too. A plain object of
 // refs would make store.playlists a Ref rather than an array, and every read would break.
@@ -60,8 +79,7 @@ describe('useSimilarityStore', () => {
     saveDetectedMock.mockClear()
     equivalenceState.all = []
     equivalenceState.knownGroups = []
-    equivalenceState.canonicalMap = new Map()
-    equivalenceState.unconfirmedCount = 0
+    setStoredGroups([])
     seedPlaylists()
   })
 
@@ -196,8 +214,7 @@ describe('useSimilarityStore doubles mode', () => {
     scanDoublesMock.mockResolvedValue({ groups: [], result: { rows: [], notes: [] } })
     equivalenceState.all = []
     equivalenceState.knownGroups = []
-    equivalenceState.canonicalMap = new Map()
-    equivalenceState.unconfirmedCount = 0
+    setStoredGroups([])
     seedPlaylists()
   })
 
@@ -265,7 +282,9 @@ describe('useSimilarityStore equivalence toggle', () => {
     scanMock.mockReset()
     buildMock.mockResolvedValue({ playlistCount: 2, uniqueTrackCount: 3, builtAt: 1 })
     scanMock.mockResolvedValue({ rows: [], notes: [] })
-    equivalenceState.canonicalMap = new Map([['b', 'a']])
+    setStoredGroups([
+      { id: 1, trackIds: ['a', 'b'], status: 'confirmed', matchTier: 'high', detectedAt: 1 },
+    ])
     seedPlaylists()
   })
 
@@ -299,8 +318,7 @@ describe('useSimilarityStore rail', () => {
     buildMock.mockReset()
     scanMock.mockReset()
     buildMock.mockResolvedValue({ playlistCount: 2, uniqueTrackCount: 3, builtAt: 1 })
-    equivalenceState.canonicalMap = new Map()
-    equivalenceState.unconfirmedCount = 0
+    setStoredGroups([])
     seedPlaylists()
   })
 
@@ -329,7 +347,9 @@ describe('useSimilarityStore rail', () => {
 
   it('includes unreviewed doubles between the two overlap findings', async () => {
     scanMock.mockResolvedValue({ rows: [{}], notes: [] })
-    equivalenceState.unconfirmedCount = 6
+    setStoredGroups([
+      { id: 1, trackIds: ['a', 'b'], status: 'unconfirmed', matchTier: 'high', detectedAt: 1 },
+    ])
     const store = useSimilarityStore()
     await store.refreshRail()
     expect(store.railFindings.map((f) => f.presetKey)).toEqual([

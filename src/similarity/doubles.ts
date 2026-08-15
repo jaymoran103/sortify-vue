@@ -104,8 +104,10 @@ class UnionFind {
  * Output: newly detected groups, each carrying its weakest member tier.
  * Side effects: none beyond the notes array it appends to.
  *
- * Tracks already inside a confirmed or rejected group are skipped entirely, so a rescan never
- * re-proposes a decision the user has already made.
+ * Tracks already inside ANY stored group are skipped, whatever its review state. A confirmed or
+ * rejected group must never be re-proposed, and an unconfirmed one is already stored and already
+ * rendered from that record -- re-detecting it would duplicate both the row and the row's database
+ * entry on every scan.
  */
 export function detectGroups(
   tracks: TrackMatchInput[],
@@ -114,9 +116,7 @@ export function detectGroups(
 ): DetectedGroup[] {
   const decided = new Set<string>()
   for (const group of known) {
-    if (group.status === 'confirmed' || group.status === 'rejected') {
-      for (const id of group.trackIds) decided.add(id)
-    }
+    for (const id of group.trackIds) decided.add(id)
   }
 
   const candidates: Candidate[] = []

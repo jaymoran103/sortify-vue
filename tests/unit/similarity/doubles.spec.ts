@@ -161,7 +161,7 @@ describe('detectGroups', () => {
     expect(groups).toHaveLength(0)
   })
 
-  it('still considers tracks in an unconfirmed group', () => {
+  it('skips tracks in an unconfirmed group too, so a rescan never duplicates it', () => {
     const notes: ScanNote[] = []
     const known: KnownGroup[] = [{ trackIds: ['a', 'b'], status: 'unconfirmed' }]
     const groups = detectGroups(
@@ -169,7 +169,22 @@ describe('detectGroups', () => {
       known,
       notes,
     )
-    expect(groups).toHaveLength(1)
+    expect(groups).toHaveLength(0)
+  })
+
+  it('detects a group only once across repeated scans', () => {
+    const tracks = [
+      track('a', 'Respect', 'Aretha Franklin'),
+      track('b', 'Respect - Live', 'Aretha Franklin'),
+    ]
+    const first = detectGroups(tracks, [], [])
+    expect(first).toHaveLength(1)
+
+    const known: KnownGroup[] = first.map((group) => ({
+      trackIds: group.trackIds,
+      status: 'unconfirmed' as const,
+    }))
+    expect(detectGroups(tracks, known, [])).toHaveLength(0)
   })
 
   it('excludes placeholder metadata and reports it', () => {

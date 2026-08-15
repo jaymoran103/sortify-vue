@@ -301,8 +301,12 @@ watch(
 // stays stale until they ask for a rebuild, so editing a playlist never triggers surprise work.
 watch(
   () => store.libraryRevision,
-  () => {
-    if (store.indexStatus === 'idle') void store.run()
+  async () => {
+    if (store.indexStatus !== 'idle') return
+    await store.run()
+    // The rail is computed from a ready index, so it has to be recomputed here too. Refreshing it
+    // only at mount left it permanently empty on any cold load.
+    await store.refreshRail()
   },
 )
 
