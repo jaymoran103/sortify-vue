@@ -1012,6 +1012,52 @@ describe('Workspace Store', () => {
     expect(store.unassignedTrackIds).toEqual([])
   })
 
+  // ─── Session record membership ────────────────────────────────────────────
+  // removePlaylist and save() both rewrite session.playlistIds. They must agree on which
+  // playlists belong there, or one silently undoes the other's work.
+
+  it('keeps a saved workspace-created playlist in the session when another is removed', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    // Create a playlist in the workspace and persist it, so it gains a numeric id while
+    // keeping origin 'workspace-created'.
+    const created = store.createEmptyPlaylist('New Mix')
+    store.toggleTrack(created.id, 'track-1')
+    expect(await store.save()).toBe(true)
+
+    const newId = store.playlists.find((p) => p.name === 'New Mix')?.id as number
+    const afterSave = await db.workspaceSessions.get(sessionId)
+    expect([...afterSave!.playlistIds]).toEqual([pl1Id, pl2Id, newId])
+
+    // Removing an unrelated library playlist must not evict the saved one.
+    store.removePlaylist(pl2Id)
+    await new Promise((r) => setTimeout(r, 30))
+
+    const afterRemove = await db.workspaceSessions.get(sessionId)
+    expect([...afterRemove!.playlistIds]).toEqual([pl1Id, newId])
+  })
+
+  // ─── Save failure ─────────────────────────────────────────────────────────
+  // save() reports failure by returning false and publishing the reason, matching
+  // loadSession. It must not clear the buffer, or the retry would have nothing to write.
+
+  it('reports a failed save without discarding the buffered work', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+    store.renamePlaylist(store.playlists[0]!.id, 'Renamed')
+
+    const playlistStore = usePlaylistStore()
+    vi.spyOn(playlistStore, 'batchUpdatePlaylists').mockRejectedValueOnce(new Error('IDB is full'))
+
+    expect(await store.save()).toBe(false)
+    expect(store.error).toContain('IDB is full')
+    expect(store.hasUnsavedChanges).toBe(true)
+    expect(store.issues.some((i) => i.code === 'unsaved-changes')).toBe(true)
+  })
+
   // ─── Column order persistence ─────────────────────────────────────────────
   // Order lives in the session record's playlistIds. save() returns early when nothing is
   // dirty, so a reorder that marked nothing modified never reached IDB at all.

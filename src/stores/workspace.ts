@@ -195,23 +195,34 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   /**
+   * Playlist ids that exist in IDB, in current column order — exactly what the session
+   * record stores. No side effects.
+   *
+   * Persistence is decided by the id type, not by origin: a workspace-created playlist
+   * becomes persisted the moment save() resolves its pending id, and keeps origin
+   * 'workspace-created' forever after. removePlaylist and save() must agree here, and when
+   * they did not, removing any playlist rewrote the session with library playlists only,
+   * silently dropping saved workspace-created ones from it.
+   */
+  function persistedPlaylistIds(): number[] {
+    return playlists.value.filter((p) => typeof p.id === 'number').map((p) => p.id as number)
+  }
+
+  /**
    * Remove a playlist from the current workspace session.
    * Works for both library (numeric ID) and workspace-created (pending string ID) playlists.
-   * Only library playlists require an IDB session record update (fire-and-forget).
+   * Only persisted playlists require an IDB session record update (fire-and-forget).
    */
   function removePlaylist(playlistId: PlaylistId): void {
     playlists.value = playlists.value.filter((p) => p.id !== playlistId)
     modifiedIds.value.delete(playlistId)
 
-    // Only library playlists have numeric IDs tracked in the IDB session record.
-    // Pending playlists were never persisted to IDB so no update is needed.
+    // A pending playlist was never in the session record, so removing one changes nothing
+    // there. Anything already persisted still has to be rewritten without it.
     if (sessionId.value !== null && typeof playlistId === 'number') {
       const sessionStore = useSessionStore()
       const currentSessionId = sessionId.value
-      const libraryIds = playlists.value
-        .filter((p) => p.origin === 'library')
-        .map((p) => p.id as number)
-      void sessionStore.updateSession(currentSessionId, { playlistIds: libraryIds })
+      void sessionStore.updateSession(currentSessionId, { playlistIds: persistedPlaylistIds() })
     }
   }
 
@@ -476,55 +487,62 @@ export const useWorkspaceStore = defineStore('workspace', () => {
    * 3. Update session record to reflect current playlist IDs (all numeric, corresponding to IDB)
    * 4. modifiedIds is cleared.
    */
-  async function save(): Promise<void> {
-    // Exit early if no changes to save
-    if (!hasUnsavedChanges.value) return
+  async function save(): Promise<boolean> {
+    // Exit early if no changes to save. Nothing to persist counts as saved.
+    if (!hasUnsavedChanges.value) return true
 
     const playlistStore = usePlaylistStore()
     const sessionStore = useSessionStore()
 
-    // Step 1: resolve pending playlists (write to IDB, patch IDs)
-    for (const pl of playlists.value) {
-      if (typeof pl.id === 'string') {
+    try {
+      // Step 1: resolve pending playlists (write to IDB, patch IDs)
+      for (const pl of playlists.value) {
+        if (typeof pl.id === 'string') {
 
-        // Strip workspace-only fields and the temp id before writing to IDB
-        const { trackIdSet: _set, origin: _origin, id: _tempId, ...rest } = pl
+          // Strip workspace-only fields and the temp id before writing to IDB
+          const { trackIdSet: _set, origin: _origin, id: _tempId, ...rest } = pl
 
-        // Clone the trackIDs array to ensure the Proxy is unwrapped before IDB write
-        const forDb: Omit<WorkspacePlaylist, 'id' | 'trackIdSet' | 'origin'> = {
-          ...rest,
-          trackIDs: [...pl.trackIDs],
+          // Clone the trackIDs array to ensure the Proxy is unwrapped before IDB write
+          const forDb: Omit<WorkspacePlaylist, 'id' | 'trackIdSet' | 'origin'> = {
+            ...rest,
+            trackIDs: [...pl.trackIDs],
+          }
+          const realId = await playlistStore.addPlaylist(forDb)
+
+          // Patch the in-memory object with the real persistent ID
+          const oldId = pl.id
+          pl.id = realId
+          modifiedIds.value.delete(oldId)
+          // freshly written, no need to add to modifiedIds
         }
-        const realId = await playlistStore.addPlaylist(forDb)
-
-        // Patch the in-memory object with the real persistent ID
-        const oldId = pl.id
-        pl.id = realId
-        modifiedIds.value.delete(oldId)
-        // freshly written, no need to add to modifiedIds
       }
-    }
 
-    // Step 2: update modified library playlists in a single batched transaction.
-    const batchUpdates: Array<{ id: number; changes: { name: string; trackIDs: string[] } }> = []
-    for (const modId of modifiedIds.value) {
-      // After pending resolution above, only numeric IDs remain in modifiedIds
-      const pl = playlists.value.find((p) => p.id === modId)
-      if (!pl) continue
-      batchUpdates.push({ id: pl.id as number, changes: { name: pl.name, trackIDs: [...pl.trackIDs] } })
-    }
-    await playlistStore.batchUpdatePlaylists(batchUpdates)
+      // Step 2: update modified library playlists in a single batched transaction.
+      const batchUpdates: Array<{ id: number; changes: { name: string; trackIDs: string[] } }> = []
+      for (const modId of modifiedIds.value) {
+        // After pending resolution above, only numeric IDs remain in modifiedIds
+        const pl = playlists.value.find((p) => p.id === modId)
+        if (!pl) continue
+        batchUpdates.push({ id: pl.id as number, changes: { name: pl.name, trackIDs: [...pl.trackIDs] } })
+      }
+      await playlistStore.batchUpdatePlaylists(batchUpdates)
 
-    // Step 3: update session record with current (now all-numeric) playlist IDs
-    if (sessionId.value !== null) {
-      await sessionStore.updateSession(sessionId.value, {
-        playlistIds: playlists.value
-          .filter((p) => typeof p.id === 'number')
-          .map((p) => p.id as number),
-      })
-    }
+      // Step 3: update session record with current (now all-numeric) playlist IDs
+      if (sessionId.value !== null) {
+        await sessionStore.updateSession(sessionId.value, { playlistIds: persistedPlaylistIds() })
+      }
 
-    modifiedIds.value.clear()
+      modifiedIds.value.clear()
+      error.value = null
+      return true
+    } catch (err) {
+      // Match loadSession: catch, publish to `error` for the view's banner, never throw.
+      // modifiedIds is deliberately left intact — the buffer still holds the unsaved work, so
+      // the leave guard keeps warning and the user can retry rather than losing it silently.
+      error.value =
+        err instanceof Error ? `Could not save changes: ${err.message}` : 'Could not save changes.'
+      return false
+    }
   }
 
   /**
