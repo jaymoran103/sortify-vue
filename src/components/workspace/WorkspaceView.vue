@@ -20,8 +20,9 @@ import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import TrackRow from './TrackRow.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
 import AddContentModal from './AddContentModal.vue'
+import LeaveWorkspaceModal from './LeaveWorkspaceModal.vue'
 import type { Track, PlaylistId } from '@/types/models'
-import type { SortOption, MenuEntry, AddContentChoice } from '@/types/ui'
+import type { SortOption, MenuEntry, AddContentChoice, LeaveChoice } from '@/types/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -157,89 +158,70 @@ const virtualizer = useVirtualizer(
 )
 // On component mount, load the session based on the 'session' query parameter.
 onMounted(async () => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
   await workspaceStore.loadSession(Number(route.query.session))
 })
 
 // Reset store before unmounting to clear session data and avoid flash of stale content if user quickly opens another session.
 onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
   workspaceStore.$reset()
 })
 
+// Conditions that make leaving cost something. The rules live in utils/workspaceIssues.ts;
+// this view only decides what each severity does — loss blocks, quality is a footnote.
+const lossIssues = computed(() => workspaceStore.issues.filter((i) => i.severity === 'loss'))
+const qualityIssues = computed(() => workspaceStore.issues.filter((i) => i.severity === 'quality'))
+
 /**
- * Assemble the leave-guard warning for the current session state.
+ * Warn before navigating away, but only when leaving actually costs something.
  *
- * Returns a single merged message, or null when nothing is at risk — one modal, never two.
- * No side effects.
+ * Quality issues never gate the exit: an empty playlist is marked in its column header for
+ * the whole session, and nothing in this dialog could fix one. They ride along as a footnote
+ * when a loss issue has already opened it, and are silent otherwise.
  *
- * Empty-playlist mentions are restricted to playlists in modifiedIds, i.e. ones this session
- * actually touched. A pre-existing empty playlist the user never edited is not their problem
- * on the way out, so it stays quiet.
- *
- * Known edge, accepted: modifiedIds marks a playlist modified for any reason, so renaming or
- * reordering an already-empty playlist will surface it here.
+ * Side effects: may open a modal, may save, resets the store on the way out.
  */
-function buildLeaveWarning(): string | null {
-  const clauses: string[] = []
-
-  if (workspaceStore.hasUnsavedChanges) {
-    clauses.push('You have unsaved changes.')
-  }
-
-  const touchedEmpty = workspaceStore.playlists.filter(
-    (p) => p.trackIDs.length === 0 && workspaceStore.modifiedIds.has(p.id),
-  )
-  if (touchedEmpty.length > 0) {
-    const names = touchedEmpty.map((p) => `"${p.name}"`).join(', ')
-    clauses.push(
-      touchedEmpty.length === 1
-        ? `${names} has no tracks.`
-        : `${touchedEmpty.length} playlists have no tracks: ${names}.`,
-    )
-  }
-
-  // Tracks added but never assigned live only in the in-memory buffer and vanish on reload.
-  // Adding them marks no playlist modified, so without this clause hasUnsavedChanges stays
-  // false and the guard would not fire at all for an add-then-abandon flow (D6).
-  const unassigned = workspaceStore.unassignedTrackIds.length
-  if (unassigned > 0) {
-    clauses.push(
-      unassigned === 1
-        ? '1 track is not in any playlist and will be discarded.'
-        : `${unassigned} tracks are not in any playlist and will be discarded.`,
-    )
-  }
-
-  if (clauses.length === 0) return null
-  return `${clauses.join(' ')} Leave without saving?`
-}
-
-// Before navigating away from the workspace, warn only if something is actually at stake.
-// FUTURE: Give option to save changes here as well.
 onBeforeRouteLeave(async (_to, _from, next) => {
-  const warning = buildLeaveWarning()
-
   // Nothing at risk — reset the store and navigate away without interrupting.
-  if (warning === null) {
+  if (lossIssues.value.length === 0) {
     workspaceStore.$reset()
     next()
     return
   }
 
-  const confirmed = await modal.open<true>(ConfirmModal, {
-    title: 'Leave Workspace',
-    message: warning,
-    confirmLabel: 'Leave',
-    cancelLabel: 'Stay',
+  const choice = await modal.open<LeaveChoice>(LeaveWorkspaceModal, {
+    lossMessages: lossIssues.value.map((i) => i.message),
+    qualityMessages: qualityIssues.value.map((i) => i.message),
+    // Saving resolves unsaved changes and nothing else; unassigned tracks are discarded
+    // either way, so the action is offered only when there is something to save.
+    canSave: lossIssues.value.some((i) => i.code === 'unsaved-changes'),
   })
 
-  // If confirmed, reset the store and navigate away. Otherwise stay on page.
-  if (confirmed) {
-    workspaceStore.$reset()
-    next()
-  } else {
+  if (choice === null) {
     next(false)
+    return
   }
+
+  if (choice === 'save') {
+    await handleSave()
+  }
+
+  workspaceStore.$reset()
+  next()
 })
+
+/**
+ * Ask the browser to confirm a refresh or tab close while work is at risk.
+ *
+ * The route guard cannot see either. Browsers show their own generic prompt — the message
+ * is not ours to write — so this only decides whether to prompt at all.
+ */
+function handleBeforeUnload(event: BeforeUnloadEvent): void {
+  if (lossIssues.value.length > 0) {
+    event.preventDefault()
+  }
+}
 
 // Navigate back to the main app view. Currently specifying as dashboard, since the root page is currently the about view.
 function goBack(): void {
