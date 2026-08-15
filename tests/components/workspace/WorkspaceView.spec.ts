@@ -1043,26 +1043,44 @@ describe('WorkspaceView', () => {
     })
 
     // Regression: save() rewrites a workspace-created playlist's `pending-N` id to its real
-    // auto-increment number, mutating the same object. A sort key carrying that id dangled the
-    // moment it changed, and useListSort's fallback silently reordered the whole view.
+    // auto-increment number, mutating the same object. Anything holding that id across a save
+    // goes stale, the dynamic option disappears, and useListSort's fallback silently reorders
+    // the whole view back to Order Added.
+    //
+    // hasUnsavedChanges must be true or the Save button renders disabled, the click does
+    // nothing, and this test passes without ever exercising a save. The saveCalls assertion
+    // below is there to keep that from happening again quietly.
     it('keeps the sort active when save repoints a workspace-created playlist id', async () => {
       mockWorkspaceStore.playlists = [makePlaylist('pending-1', 'Fresh Mix', ['t2'])]
       mockWorkspaceStore.trackList = [makeTrack('t1', 'One', 'Artist'), makeTrack('t2', 'Two', 'Artist')]
+      mockWorkspaceStore.hasUnsavedChanges = true
       const wrapper = mountWorkspace()
       await activatePlaylistSort(wrapper)
       expect(wrapper.findAll('.track-row__title').map((n) => n.text())).toEqual(['Two', 'One'])
 
+      // beforeEach re-stubs save's resolved value but does not mockReset it, so its call count
+      // carries across the file. Cleared here so the assertion below counts this click only.
+      mockWorkspaceStore.save.mockClear()
+
       // Exactly what stores/workspace.ts save() does: patch pl.id in place, clear dirty state.
+      // Returns true because save() reports success as a boolean — a bare `async () => {}`
+      // resolves undefined, which reads as a failed save.
       mockWorkspaceStore.save.mockImplementationOnce(async () => {
         for (const pl of mockWorkspaceStore.playlists) {
           if (typeof pl.id === 'string') pl.id = 5
         }
         mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists]
         mockWorkspaceStore.hasUnsavedChanges = false
+        return true
       })
       await wrapper.find('.workspace__header-actions .btn--primary').trigger('click')
       await nextTick()
       await nextTick()
+
+      // The save actually happened and actually repointed the id — without these two, the
+      // assertions below hold trivially.
+      expect(mockWorkspaceStore.save).toHaveBeenCalledTimes(1)
+      expect(mockWorkspaceStore.playlists[0]!.id).toBe(5)
 
       expect(wrapper.find<HTMLSelectElement>('select.dropdown').element.value).toBe(
         'playlist:active',

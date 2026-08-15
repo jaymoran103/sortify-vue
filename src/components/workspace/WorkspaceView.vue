@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -20,7 +20,7 @@ import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import TrackRow from './TrackRow.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
 import AddContentModal from './AddContentModal.vue'
-import type { Track, PlaylistId } from '@/types/models'
+import type { Track, PlaylistId, WorkspacePlaylist } from '@/types/models'
 import type { SortOption, MenuEntry, AddContentChoice } from '@/types/ui'
 
 const route = useRoute()
@@ -57,14 +57,27 @@ const staticSortOptions: SortOption<Track>[] = [
   },
 ]
 
-// Playlist whose order is currently driving the sort, or null when that sort is inactive.
-const playlistSortId = ref<PlaylistId | null>(null)
+// The playlist whose order is currently driving the sort, or null when that sort is inactive.
+//
+// Held by object reference, not by id, because a playlist id is not stable for the lifetime of
+// the sort: save() resolves a workspace-created playlist by writing it to IDB and patching
+// `pl.id` from `pending-N` to the real auto-increment number — mutating the same object. An id
+// captured here went stale at exactly that moment, the lookup below failed, the dynamic option
+// vanished, and useListSort's fallback silently reordered the view to Order Added mid-session.
+// The object survives the event that invalidates the id, so it is the stabler handle.
+//
+// shallowRef because this is an identity handle: the playlist's own reactivity comes from the
+// store, and deep-tracking a copy of it here would be redundant.
+const playlistSortTarget = shallowRef<WorkspacePlaylist | null>(null)
 
-// The dynamic option's key is fixed rather than derived from the playlist id, because a
-// playlist id is not stable for the lifetime of the sort: save() rewrites a workspace-created
-// playlist's `pending-N` id to its real auto-increment number in place. A key carrying the old
-// id dangled the moment that happened, and useListSort's fallback then dropped the view back to
-// Order Added mid-session. Only playlistSortId names the target; nothing parses this string.
+// Resolve the target to the live store entry, or null once it has left the workspace. Identity
+// comparison rather than id, for the reason above.
+const activeSortPlaylist = computed<WorkspacePlaylist | null>(
+  () => workspaceStore.playlists.find((p) => p === playlistSortTarget.value) ?? null,
+)
+
+// The option's key is likewise id-free: nothing parses this string, and its only consumer is the
+// equality check in the watcher below.
 const PLAYLIST_SORT_KEY = 'playlist:active'
 
 // trackID → position within the sort-driving playlist, or null when that sort is inactive.
@@ -73,8 +86,7 @@ const PLAYLIST_SORT_KEY = 'playlist:active'
 // workspace against a 1500-track playlist. Reads pl.trackIDs, so it invalidates when
 // membership changes and the order stays consistent with what the column shows.
 const playlistSortPositions = computed<Map<string, number> | null>(() => {
-  if (playlistSortId.value === null) return null
-  const pl = workspaceStore.playlists.find((p) => p.id === playlistSortId.value)
+  const pl = activeSortPlaylist.value
   if (!pl) return null
   return new Map(pl.trackIDs.map((id, index) => [id, index]))
 })
@@ -97,8 +109,7 @@ function comparePlaylistOrder(a: Track, b: Track): number {
 // When the sorted playlist leaves the workspace the entry disappears and useListSort's
 // unknown-key fallback drops the view back to the first static option.
 const sortOptions = computed<SortOption<Track>[]>(() => {
-  if (playlistSortId.value === null) return staticSortOptions
-  const pl = workspaceStore.playlists.find((p) => p.id === playlistSortId.value)
+  const pl = activeSortPlaylist.value
   if (!pl) return staticSortOptions
   return [
     ...staticSortOptions,
@@ -127,17 +138,20 @@ const { currentSort, sorted: displayTracks } = useListSort<Track>(filtered, sort
 // Retire the dynamic playlist option as soon as the user picks a static sort, so a stale
 // "Playlist: X" entry does not linger in the dropdown.
 watch(currentSort, (key) => {
-  if (playlistSortId.value !== null && key !== PLAYLIST_SORT_KEY) {
-    playlistSortId.value = null
+  if (playlistSortTarget.value !== null && key !== PLAYLIST_SORT_KEY) {
+    playlistSortTarget.value = null
   }
 })
 
 /**
  * Activate the playlist-order sort for one column, adding its dynamic option and selecting it.
- * Side effect: sets playlistSortId and currentSort.
+ * Resolves the id to the live playlist object once, here, and holds that. No-op if the
+ * playlist is not in the workspace. Side effect: sets playlistSortTarget and currentSort.
  */
 function handleSortByPlaylist(playlistId: PlaylistId): void {
-  playlistSortId.value = playlistId
+  const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
+  if (!pl) return
+  playlistSortTarget.value = pl
   currentSort.value = PLAYLIST_SORT_KEY
 }
 
