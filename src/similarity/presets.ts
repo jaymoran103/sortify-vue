@@ -108,7 +108,9 @@ export const DOUBLES_PRESETS: DoublesPreset[] = [
     key: 'doubles-unreviewed',
     label: 'Doubled tracks I have not reviewed',
     aliases: ['duplicates', 'dupes', 'copies', 'versions', 'doubles', 'unreviewed'],
-    controls: { reviewFilter: 'unconfirmed', minTier: 'low', sortKey: 'variants', sortDir: 'desc' },
+    // Defaults to moderate: cross-artist title collisions land at low, and leading with hundreds
+    // of them would bury the groups actually worth reviewing.
+    controls: { reviewFilter: 'unconfirmed', minTier: 'moderate', sortKey: 'variants', sortDir: 'desc' },
   },
   {
     key: 'doubles-confident',

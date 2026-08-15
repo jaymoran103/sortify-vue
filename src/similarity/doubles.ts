@@ -3,6 +3,7 @@ import {
   LOW_OVERLAP_THRESHOLD,
   MAX_BLOCK_SIZE,
   MAX_RESULT_ROWS,
+  MIN_CROSS_ARTIST_TITLE_TOKENS,
   MODERATE_OVERLAP_THRESHOLD,
 } from './constants'
 import { isUnmatchable, normalizeArtist, normalizeTitle, parseDuration, tokenSetOverlap } from './normalize'
@@ -48,17 +49,24 @@ interface Candidate {
  *
  * Returns null when the pair is not a match at all. Duration agreement promotes the result by
  * exactly one tier, never to 'source' and never downward.
+ *
+ * A shared title across different artists is deliberately weak evidence. Measured against the real
+ * export, "Words" by three artists and "Morning" by two are different songs, not variants of one
+ * recording. So a cross-artist match needs a title of at least MIN_CROSS_ARTIST_TITLE_TOKENS words
+ * to count at all, and lands at 'low' rather than 'moderate' unless the durations agree.
  */
 export function scorePair(a: Candidate, b: Candidate): MatchTier | null {
   const sameArtist = a.artistKey === b.artistKey
   const sameTitle = a.titleKey === b.titleKey
   const overlap = sameTitle ? 1 : tokenSetOverlap(a.titleKey, b.titleKey)
+  const titleTokens = a.titleKey.split(' ').filter(Boolean).length
+  const crossArtistAllowed = titleTokens >= MIN_CROSS_ARTIST_TITLE_TOKENS
 
   let tier: MatchTier | null = null
   if (sameTitle && sameArtist) tier = 'high'
-  else if (sameTitle && !sameArtist) tier = 'moderate'
+  else if (sameTitle && !sameArtist) tier = crossArtistAllowed ? 'low' : null
   else if (overlap >= MODERATE_OVERLAP_THRESHOLD && sameArtist) tier = 'moderate'
-  else if (overlap >= LOW_OVERLAP_THRESHOLD) tier = 'low'
+  else if (overlap >= LOW_OVERLAP_THRESHOLD && crossArtistAllowed) tier = 'low'
 
   if (tier === null) return null
 

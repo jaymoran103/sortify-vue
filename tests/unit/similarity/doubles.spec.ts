@@ -38,14 +38,36 @@ describe('detectGroups', () => {
     expect(groups[0]!.matchTier).toBe('high')
   })
 
-  it('rates a cover by a different artist as moderate', () => {
+  it('rates a cover by a different artist as low, not moderate', () => {
     const notes: ScanNote[] = []
     const groups = detectGroups(
-      [track('a', 'Respect', 'Aretha Franklin'), track('b', 'Respect', 'Otis Redding')],
+      [track('a', 'Break My Heart', 'Dua Lipa'), track('b', 'Break My Heart', 'Someone Else')],
       [],
       notes,
     )
-    expect(groups[0]!.matchTier).toBe('moderate')
+    expect(groups[0]!.matchTier).toBe('low')
+  })
+
+  // Measured against the real export: "Words", "Morning" and "Boyfriend" each appear under
+  // several unrelated artists, and matching them produced hundreds of false groups.
+  it('refuses a one-word title shared by different artists', () => {
+    const notes: ScanNote[] = []
+    const groups = detectGroups(
+      [track('a', 'Words', 'Low'), track('b', 'Words', 'Passenger')],
+      [],
+      notes,
+    )
+    expect(groups).toHaveLength(0)
+  })
+
+  it('still groups a one-word title when the artist matches', () => {
+    const notes: ScanNote[] = []
+    const groups = detectGroups(
+      [track('a', 'Words', 'Low'), track('b', 'Words - Live', 'Low')],
+      [],
+      notes,
+    )
+    expect(groups[0]!.matchTier).toBe('high')
   })
 
   it('never groups two genuinely different songs', () => {
@@ -66,47 +88,47 @@ describe('detectGroups', () => {
   it('promotes one tier when durations agree', () => {
     const notes: ScanNote[] = []
     const withoutDuration = detectGroups(
-      [track('a', 'Respect', 'Aretha Franklin'), track('b', 'Respect', 'Otis Redding')],
+      [track('a', 'Break My Heart', 'Dua Lipa'), track('b', 'Break My Heart', 'Someone Else')],
       [],
       notes,
     )
-    expect(withoutDuration[0]!.matchTier).toBe('moderate')
+    expect(withoutDuration[0]!.matchTier).toBe('low')
 
     const withDuration = detectGroups(
       [
-        track('a', 'Respect', 'Aretha Franklin', 145000),
-        track('b', 'Respect', 'Otis Redding', 145500),
+        track('a', 'Break My Heart', 'Dua Lipa', 145000),
+        track('b', 'Break My Heart', 'Someone Else', 145500),
       ],
       [],
       notes,
     )
-    expect(withDuration[0]!.matchTier).toBe('high')
+    expect(withDuration[0]!.matchTier).toBe('moderate')
   })
 
   it('does not promote when durations disagree', () => {
     const notes: ScanNote[] = []
     const groups = detectGroups(
       [
-        track('a', 'Respect', 'Aretha Franklin', 145000),
-        track('b', 'Respect', 'Otis Redding', 220000),
+        track('a', 'Break My Heart', 'Dua Lipa', 145000),
+        track('b', 'Break My Heart', 'Someone Else', 220000),
       ],
       [],
       notes,
     )
-    expect(groups[0]!.matchTier).toBe('moderate')
+    expect(groups[0]!.matchTier).toBe('low')
   })
 
   it('accepts a duration stored as a string, as real exports do', () => {
     const notes: ScanNote[] = []
     const groups = detectGroups(
       [
-        track('a', 'Respect', 'Aretha Franklin', '145000'),
-        track('b', 'Respect', 'Otis Redding', '145500'),
+        track('a', 'Break My Heart', 'Dua Lipa', '145000'),
+        track('b', 'Break My Heart', 'Someone Else', '145500'),
       ],
       [],
       notes,
     )
-    expect(groups[0]!.matchTier).toBe('high')
+    expect(groups[0]!.matchTier).toBe('moderate')
   })
 
   it('merges transitively: A matches B and B matches C gives one group of three', () => {
@@ -128,15 +150,15 @@ describe('detectGroups', () => {
     const notes: ScanNote[] = []
     const groups = detectGroups(
       [
-        track('a', 'Respect', 'Aretha Franklin'),
-        track('b', 'Respect - Live', 'Aretha Franklin'),
-        track('c', 'Respect', 'Otis Redding'),
+        track('a', 'Break My Heart', 'Dua Lipa'),
+        track('b', 'Break My Heart - Live', 'Dua Lipa'),
+        track('c', 'Break My Heart', 'Someone Else'),
       ],
       [],
       notes,
     )
     expect(groups).toHaveLength(1)
-    expect(groups[0]!.matchTier).toBe('moderate')
+    expect(groups[0]!.matchTier).toBe('low')
   })
 
   it('skips tracks already inside a confirmed group', () => {

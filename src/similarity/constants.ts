@@ -56,3 +56,12 @@ export const MODERATE_OVERLAP_THRESHOLD = 0.8
 
 /** Token-set overlap at or above this, with a differing artist, reads as a low match. */
 export const LOW_OVERLAP_THRESHOLD = 0.6
+
+/**
+ * Minimum title tokens for a cross-artist match to count at all.
+ *
+ * Measured against the real 406-playlist export: a one-word title shared by different artists is
+ * almost always a different song ("Words" by three artists, "Morning" by two, "Boyfriend" by
+ * three), while a multi-word title shared across artists is usually a genuine cover or re-release.
+ */
+export const MIN_CROSS_ARTIST_TITLE_TOKENS = 2
