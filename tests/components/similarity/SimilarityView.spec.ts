@@ -1,0 +1,141 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { reactive } from 'vue'
+import type { ResultRow } from '@/similarity/types'
+import type { Playlist } from '@/types/models'
+
+const runMock = vi.fn()
+const applyPresetMock = vi.fn()
+const setControlsMock = vi.fn()
+
+const SEED_ROW: ResultRow = {
+  key: '1:2',
+  subject: 'playlist',
+  primaryLabel: 'Alpha <-> Beta',
+  measures: [{ key: 'shared', label: 'Shared', value: 2, display: '2' }],
+  denominator: '2 of 4',
+  memberIds: ['1', '2'],
+}
+
+// reactive(), not refs: a real Pinia store unwraps on property access and the component reads
+// store.rows, store.controls and so on directly.
+const storeState = reactive({
+  indexStatus: 'ready' as 'idle' | 'building' | 'ready' | 'stale' | 'error',
+  indexStats: { playlistCount: 2, uniqueTrackCount: 3, builtAt: 1 },
+  rows: [SEED_ROW] as ResultRow[],
+  notes: [{ kind: 'pre-threshold-count' as const, message: '3 pairs', count: 3 }],
+  controls: {
+    axis: 'playlist' as const,
+    measure: 'jaccard' as const,
+    threshold: 0.1,
+    sortKey: 'shared',
+    sortDir: 'desc' as const,
+  },
+  activePresetKey: 'overlap-any',
+  isScanning: false,
+  scanProgress: null,
+  error: null as string | null,
+  run: runMock,
+  applyPreset: applyPresetMock,
+  setControls: setControlsMock,
+  ensureIndex: vi.fn(),
+  dispose: vi.fn(),
+})
+
+const playlistState = reactive({
+  playlists: [
+    { id: 1, name: 'Alpha', trackIDs: ['a', 'b'] },
+    { id: 2, name: 'Beta', trackIDs: ['b', 'c'] },
+  ] as Playlist[],
+  addPlaylist: vi.fn().mockResolvedValue(9),
+})
+
+vi.mock('@/stores/similarity', () => ({ useSimilarityStore: () => storeState }))
+vi.mock('@/stores/playlists', () => ({ usePlaylistStore: () => playlistState }))
+
+const pushMock = vi.fn()
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: pushMock }) }))
+
+const createSessionMock = vi.fn().mockResolvedValue(7)
+vi.mock('@/stores/sessions', () => ({
+  useSessionStore: () => ({ createSession: createSessionMock }),
+}))
+
+const ScrollableListStub = {
+  props: ['items'],
+  template: `
+    <div>
+      <template v-for="(item, index) in items" :key="index">
+        <slot name="item" :item="item" :index="index" />
+      </template>
+      <slot v-if="items.length === 0" name="empty" />
+    </div>
+  `,
+}
+
+const SimilarityView = (await import('@/components/similarity/SimilarityView.vue')).default
+
+function factory() {
+  return mount(SimilarityView, { global: { stubs: { ScrollableList: ScrollableListStub } } })
+}
+
+describe('SimilarityView', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    runMock.mockClear()
+    pushMock.mockClear()
+    createSessionMock.mockClear()
+    storeState.rows = [SEED_ROW]
+  })
+
+  it('runs the default scan on mount', () => {
+    factory()
+    expect(runMock).toHaveBeenCalled()
+  })
+
+  it('renders the palette, the control bar, the table and the verb strip', () => {
+    const wrapper = factory()
+    expect(wrapper.findComponent({ name: 'OperationPalette' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ResultControlBar' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ResultTable' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ResultVerbStrip' }).exists()).toBe(true)
+  })
+
+  it('applies a preset when the palette emits select', async () => {
+    const wrapper = factory()
+    await wrapper
+      .findComponent({ name: 'OperationPalette' })
+      .vm.$emit('select', 'overlap-contained')
+    expect(applyPresetMock).toHaveBeenCalledWith('overlap-contained')
+  })
+
+  it('forwards a control patch to the store', async () => {
+    const wrapper = factory()
+    await wrapper.findComponent({ name: 'ResultControlBar' }).vm.$emit('update', { threshold: 0.7 })
+    expect(setControlsMock).toHaveBeenCalledWith({ threshold: 0.7 })
+  })
+
+  it('renders every scan note so no exclusion is silent', () => {
+    const wrapper = factory()
+    expect(wrapper.find('.similarity-view__notes').text()).toContain('3 pairs')
+  })
+
+  it('creates a session and navigates on openInWorkspace', async () => {
+    const wrapper = factory()
+    await wrapper
+      .findComponent({ name: 'ResultTable' })
+      .vm.$emit('rowClick', '1:2', new MouseEvent('click'))
+    await wrapper.findComponent({ name: 'ResultVerbStrip' }).vm.$emit('openInWorkspace')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(createSessionMock).toHaveBeenCalledWith([1, 2])
+    expect(pushMock).toHaveBeenCalledWith({ path: '/workspace', query: { session: '7' } })
+  })
+
+  it('tells the user the threshold is the problem when everything is filtered out', () => {
+    storeState.rows = []
+    const wrapper = factory()
+    expect(wrapper.text()).toContain('3')
+    expect(wrapper.text().toLowerCase()).toContain('threshold')
+  })
+})
