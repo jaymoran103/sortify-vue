@@ -37,7 +37,8 @@ const router = createRouter({
       name: 'library',
       component: () => import('@/components/library/LibraryView.vue'),
     },
-    // Similarity View: not yet implemented.
+    // Similarity View: Overlap analysis over the library. Reads the app-wide cursor store, so an
+    // empty cursor scans everything and a filled one scopes the scan without a separate route.
     {
       path: '/similarity',
       name: 'similarity',

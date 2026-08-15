@@ -17,12 +17,29 @@ Curated docs (`ARCHITECTURE.md`, `ROADMAP.md`, `BACKLOG.md`, `LEARNINGS.md`, spe
 ```
 pnpm run ci      # lint -> typecheck -> test -> build. Run before every commit.
 pnpm test <path> # single spec file
+pnpm test:e2e    # Playwright, Chromium, against the production build
 ```
 
 **Always `pnpm run ci`, never `pnpm ci`.** pnpm 10.33 has a built-in `ci` command that shadows the
 package script and fails outright with `ERR_PNPM_CI_NOT_IMPLEMENTED`.
 
-`pnpm test` is `vitest run` only — the Playwright suite (`pnpm test:e2e`) is not wired into CI.
+`pnpm test` is `vitest run` only — the Playwright suite is not wired into CI.
+
+**`pnpm run ci` is currently red for a reason unrelated to any code you write**: `eslint.config.ts`
+fails `vue-tsc` because of an upstream type bug in `@vue/eslint-config-typescript@14.7.0`. See
+`BACKLOG.md` for the diagnosis and the two rejected workarounds. Until it is fixed, verify with the
+equivalent scoped loop, which still covers everything you touch:
+
+```
+pnpm lint
+pnpm exec vue-tsc --build tsconfig.app.json      # all of src/
+pnpm exec vue-tsc --build tsconfig.vitest.json   # all of tests/
+pnpm test
+pnpm build-only                                  # not `pnpm build`, which re-runs type-check
+```
+
+Do not "fix" `eslint.config.ts` casually — two plausible annotations were tried and both failed,
+and the union's member types are not exported.
 
 ---
 
@@ -99,6 +116,16 @@ convention below and an adjacent file disagree, follow the adjacent file and say
   `LEARNINGS.md` 2026-04-13-02.
 - Render helpers must be pure. Never mutate reactive state from a function called during template
   rendering. See `LEARNINGS.md` 2026-04-19.
+- **Anything crossing a serialization boundary must be rebuilt as plain data first** — Web Workers,
+  `postMessage`, `structuredClone`, `IndexedDB`. Vue reactive proxies cannot be cloned, and a
+  mocked worker will not catch it. Spreading a reactive object yields a plain object; passing
+  `.value` does not. Assert it with `structuredClone`, not with a mock. See `LEARNINGS.md`
+  2026-08-15-01.
+- **A `useLiveQuery` store has three states but its ref shows two.** It seeds with `[]`, so "not
+  yet loaded" is indistinguishable from "empty". Any consumer that behaves differently on empty
+  must treat the empty case as "wait and retry". See `LEARNINGS.md` 2026-08-15-02.
+- **Dexie multiplies its declared version by ten.** `db.version(5)` is IndexedDB version 50. Open
+  without a version number when attaching to a Dexie-owned database directly.
 
 ### Components
 
@@ -117,8 +144,17 @@ convention below and an adjacent file disagree, follow the adjacent file and say
 
 - Unit tests for every store action, composable, adapter and util.
 - Component tests for non-trivial rendering logic.
-- Tests mirror `src/` under `tests/unit/` and `tests/components/`.
+- Tests mirror `src/` under `tests/unit/` and `tests/components/`; `tests/e2e/` is Playwright.
 - Keep algorithms in pure modules so tests never need a worker, a DOM, or a live database.
+- **Stub `ScrollableList` in component tests.** It virtualises against a real layout, which jsdom
+  does not provide, so it renders zero rows unstubbed and every row assertion passes vacuously.
+  `tests/components/dashboard/LibraryCard.spec.ts` has the canonical stub.
+- **Mock a Pinia store with `reactive()`, not a bag of refs.** A real store unwraps refs on property
+  access; `{ playlists: ref([]) }` makes `store.playlists` a `Ref` and every read in the code under
+  test breaks.
+- Reach for an e2e test when the behaviour only exists in a browser — worker boundaries, IndexedDB
+  hydration, routing. Two shipped bugs in the similarity module were invisible to 678 unit tests
+  and caught immediately by eight e2e tests.
 
 ### Commits
 
