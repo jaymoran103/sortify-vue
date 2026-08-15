@@ -187,7 +187,46 @@ describe('TrackSelectModal', () => {
 
     it('shows the empty slot when every track is excluded', () => {
       const wrapper = mountModal({ excludeIds: ['t1', 't2', 't3'] })
-      expect(wrapper.text()).toContain('No matching tracks')
+      expect(wrapper.find('.track-select__empty').exists()).toBe(true)
+    })
+  })
+
+  // W1-H specified a "No New Tracks" pre-check before opening the picker. D3 replaced it with
+  // excludeIds, which left the all-excluded case falling through to the search-flavoured copy —
+  // telling the user their search found nothing when they had not searched.
+  describe('empty-state wording', () => {
+    const allExcluded = ['t1', 't2', 't3']
+
+    it('blames the exclusion, not a search, when nothing was typed', () => {
+      const wrapper = mountModal({
+        excludeIds: allExcluded,
+        excludedEmptyLabel: 'All library tracks are already in this workspace.',
+      })
+      expect(wrapper.find('.track-select__empty').text()).toBe(
+        'All library tracks are already in this workspace.',
+      )
+      expect(wrapper.text()).not.toContain('No matching tracks')
+    })
+
+    it('carries a neutral default when the caller supplies no label', () => {
+      const wrapper = mountModal({ excludeIds: allExcluded })
+      expect(wrapper.find('.track-select__empty').text()).toBe('No tracks available to select.')
+    })
+
+    it('blames the search once the user has actually typed', async () => {
+      const wrapper = mountModal({
+        excludeIds: allExcluded,
+        excludedEmptyLabel: 'All library tracks are already in this workspace.',
+      })
+      await wrapper.find('.search-bar__input').setValue('zzz')
+      expect(wrapper.find('.track-select__empty').text()).toBe('No matching tracks')
+    })
+
+    it('still blames the search when nothing was excluded', async () => {
+      const wrapper = mountModal()
+      await wrapper.find('.search-bar__input').setValue('zzz')
+      await new Promise((r) => setTimeout(r, 250))
+      expect(wrapper.find('.track-select__empty').text()).toBe('No matching tracks')
     })
   })
 })

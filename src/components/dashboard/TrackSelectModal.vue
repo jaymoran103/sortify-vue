@@ -20,11 +20,17 @@ const props = withDefaults(
     excludeIds?: string[]
     confirmLabel?: string
     confirmVariant?: 'primary' | 'danger'
+    /**
+     * Shown when the list is empty because everything was excluded rather than filtered out.
+     * The caller owns this string: only it knows why it excluded what it did.
+     */
+    excludedEmptyLabel?: string
   }>(),
   {
     excludeIds: () => [],
     confirmLabel: 'Confirm',
     confirmVariant: 'primary',
+    excludedEmptyLabel: 'No tracks available to select.',
   },
 )
 
@@ -55,6 +61,15 @@ const { query, filtered } = useListFilter<Track>(
   (item, q) => item.title.toLowerCase().includes(q.toLowerCase()) || item.artist.toLowerCase().includes(q.toLowerCase()),
 )
 const { currentSort, sorted } = useListSort<Track>(filtered, sortOptions)
+
+// "No matching tracks" blames a search the user may not have run. When the list is empty
+// with no query active and candidates were excluded, the cause is the exclusion, so say so —
+// this is where W1-H's "No New Tracks" pre-check ended up after D3 replaced it with excludeIds.
+const emptyLabel = computed(() =>
+  query.value.trim() === '' && excludeSet.value.size > 0
+    ? props.excludedEmptyLabel
+    : 'No matching tracks',
+)
 
 // Determine selection state: orthogonal to the display pipeline.
 const selection = useListSelection<Track>(
@@ -124,7 +139,7 @@ function confirmSelection(): void {
           />
         </template>
         <template #empty>
-          <p class="text-muted">No matching tracks</p>
+          <p class="text-muted track-select__empty">{{ emptyLabel }}</p>
         </template>
       </ScrollableList>
     </div>
