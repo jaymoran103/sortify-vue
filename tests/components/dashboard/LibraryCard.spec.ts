@@ -4,11 +4,15 @@ import { createPinia } from 'pinia'
 import { vi } from 'vitest'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import LibraryCard from '@/components/dashboard/LibraryCard.vue'
+import { useCursorStore } from '@/stores/cursor'
 import type { Playlist } from '@/types/models'
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes: [{ path: '/', component: { template: '<div />' } }],
+  routes: [
+    { path: '/', component: { template: '<div />' } },
+    { path: '/similarity', name: 'similarity', component: { template: '<div />' } },
+  ],
 })
 
 let mockTracks: unknown[] = []
@@ -336,5 +340,66 @@ describe('LibraryCard', () => {
     const [, props] = mockModalOpen.mock.calls[0] as [unknown, { title: string }]
     expect(props.title).toBe('No Unreferenced Tracks')
     expect(mockDeleteTracks).not.toHaveBeenCalled()
+  })
+})
+
+describe('LibraryCard playlist selection', () => {
+  const PLAYLISTS: Playlist[] = [
+    { id: 1, name: 'Alpha', trackIDs: ['a'] },
+    { id: 2, name: 'Beta', trackIDs: ['b'] },
+  ]
+
+  beforeEach(() => {
+    mockTracks = []
+    mockPlaylists = PLAYLISTS
+    mockContextMenuShow.mockClear()
+    mockModalOpen.mockClear()
+  })
+
+  it('mirrors row selection into the cursor store', async () => {
+    const wrapper = mountCard()
+    await wrapper.findAll('.library-card__row')[0]!.trigger('click')
+    const cursor = useCursorStore()
+    expect(cursor.subject).toBe('playlist')
+    expect(cursor.count).toBe(1)
+  })
+
+  it('marks selected rows', async () => {
+    const wrapper = mountCard()
+    await wrapper.findAll('.library-card__row')[0]!.trigger('click')
+    expect(wrapper.find('.library-card__row--selected').exists()).toBe(true)
+  })
+
+  it('keeps the selection when the search query filters it out of view', async () => {
+    const wrapper = mountCard()
+    await wrapper.findAll('.library-card__row')[0]!.trigger('click')
+    await wrapper.find('.search-bar__input').setValue('zzzz')
+    await flushPromises()
+    expect(useCursorStore().count).toBe(1)
+  })
+
+  it('disables Analyze until something is selected', async () => {
+    const wrapper = mountCard()
+    expect(wrapper.find('.library-card__analyze-btn').attributes('disabled')).toBeDefined()
+    await wrapper.findAll('.library-card__row')[0]!.trigger('click')
+    expect(wrapper.find('.library-card__analyze-btn').attributes('disabled')).toBeUndefined()
+  })
+
+  it('routes to similarity when Analyze is pressed', async () => {
+    const pushSpy = vi.spyOn(router, 'push')
+    const wrapper = mountCard()
+    await wrapper.findAll('.library-card__row')[0]!.trigger('click')
+    await wrapper.find('.library-card__analyze-btn').trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith({ name: 'similarity' })
+    pushSpy.mockRestore()
+  })
+
+  it('drops the selection when switching to the tracks view', async () => {
+    const wrapper = mountCard()
+    await wrapper.findAll('.library-card__row')[0]!.trigger('click')
+    expect(useCursorStore().count).toBe(1)
+    await wrapper.find('[toggle-mode="tracks-view"]').trigger('click')
+    await flushPromises()
+    expect(useCursorStore().isEmpty).toBe(true)
   })
 })

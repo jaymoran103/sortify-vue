@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTrackStore } from '@/stores/tracks'
 import { usePlaylistStore } from '@/stores/playlists'
+import { useCursorStore } from '@/stores/cursor'
 import { useModal } from '@/composables/useModal'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useDebounce } from '@/composables/useDebounce'
 import { useListSort } from '@/composables/useListSort'
+import { useListSelection } from '@/composables/useListSelection'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
@@ -46,6 +49,39 @@ const filteredPlaylists = computed(() => {
   if (!q) return sortedPlaylists.value
   return sortedPlaylists.value.filter((p) => p.name.toLowerCase().includes(q))
 })
+
+// ── Playlist selection -> app-wide cursor ─────────────────────────────────────
+const router = useRouter()
+const cursor = useCursorStore()
+
+// The fourth argument prunes against the full playlist list rather than the filtered one, so
+// typing in the search box never silently deselects a playlist the user picked.
+const {
+  selectedIds,
+  toggle: togglePlaylist,
+  clear: clearPlaylistSelection,
+} = useListSelection(
+  filteredPlaylists,
+  (playlist) => String(playlist.id),
+  { selectMultiple: true },
+  computed((): Playlist[] => playlistStore.playlists ?? []),
+)
+
+// Mirror the selection into the cursor so other modules read it without knowing about this card.
+watch(selectedIds, (ids) => {
+  cursor.set('playlist', [...ids])
+})
+
+// Selection is a playlist-view concept; switching to tracks drops it rather than leaving a
+// stale cursor pointing at rows the user can no longer see.
+watch(activeView, (view) => {
+  if (view !== 'playlists') clearPlaylistSelection()
+})
+
+// Navigates to the similarity module. The cursor is already filled by the watcher above.
+function openAnalyze(): void {
+  router.push({ name: 'similarity' })
+}
 
 // ── Track sort + filter ───────────────────────────────────────────────────────
 const trackSortOptions: SortOption<Track>[] = [
@@ -212,6 +248,19 @@ function showManagementMenu(event: MouseEvent): void {
 
       <template #actions>
         <button
+          v-if="activeView === 'playlists'"
+          class="btn btn--secondary library-card__analyze-btn"
+          :disabled="selectedIds.size === 0"
+          :title="
+            selectedIds.size === 0
+              ? 'Select playlists to analyze'
+              : 'Analyze the selected playlists'
+          "
+          @click="openAnalyze"
+        >
+          Analyze
+        </button>
+        <button
           class="btn btn--secondary library-card__menu-btn"
           toggle-mode="management-menu"
           title="Manage library"
@@ -232,7 +281,13 @@ function showManagementMenu(event: MouseEvent): void {
         :estimate-size="48"
       >
         <template #item="{ item }">
-          <div class="library-card__row">
+          <div
+            class="library-card__row"
+            :class="{
+              'library-card__row--selected': selectedIds.has(String((item as Playlist).id)),
+            }"
+            @click="togglePlaylist(String((item as Playlist).id), $event)"
+          >
             <span class="library-card__name">{{ (item as Playlist).name }}</span>
             <span class="library-card__row-end">
               <span class="library-card__meta text-muted text-sm">
@@ -393,6 +448,10 @@ function showManagementMenu(event: MouseEvent): void {
 
 .library-card__row:hover {
   background: var(--color-row-hover);
+}
+
+.library-card__row--selected {
+  background: var(--color-accent-subtle);
 }
 .library-card__row:hover .library-card__rename-btn {
   opacity: 1;
