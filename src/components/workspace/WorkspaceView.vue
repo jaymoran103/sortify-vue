@@ -60,6 +60,13 @@ const staticSortOptions: SortOption<Track>[] = [
 // Playlist whose order is currently driving the sort, or null when that sort is inactive.
 const playlistSortId = ref<PlaylistId | null>(null)
 
+// The dynamic option's key is fixed rather than derived from the playlist id, because a
+// playlist id is not stable for the lifetime of the sort: save() rewrites a workspace-created
+// playlist's `pending-N` id to its real auto-increment number in place. A key carrying the old
+// id dangled the moment that happened, and useListSort's fallback then dropped the view back to
+// Order Added mid-session. Only playlistSortId names the target; nothing parses this string.
+const PLAYLIST_SORT_KEY = 'playlist:active'
+
 // trackID → position within the sort-driving playlist, or null when that sort is inactive.
 // Memoized for the same reason as playlistCountMap (D7): the comparator ran indexOf over
 // trackIDs for both operands on every comparison, measured at ~35ms to sort a 3000-track
@@ -96,7 +103,7 @@ const sortOptions = computed<SortOption<Track>[]>(() => {
   return [
     ...staticSortOptions,
     {
-      key: `playlist:${String(playlistSortId.value)}`,
+      key: PLAYLIST_SORT_KEY,
       label: `Playlist: ${pl.name}`,
       compareFn: comparePlaylistOrder,
     },
@@ -120,7 +127,7 @@ const { currentSort, sorted: displayTracks } = useListSort<Track>(filtered, sort
 // Retire the dynamic playlist option as soon as the user picks a static sort, so a stale
 // "Playlist: X" entry does not linger in the dropdown.
 watch(currentSort, (key) => {
-  if (playlistSortId.value !== null && !key.startsWith('playlist:')) {
+  if (playlistSortId.value !== null && key !== PLAYLIST_SORT_KEY) {
     playlistSortId.value = null
   }
 })
@@ -131,7 +138,7 @@ watch(currentSort, (key) => {
  */
 function handleSortByPlaylist(playlistId: PlaylistId): void {
   playlistSortId.value = playlistId
-  currentSort.value = `playlist:${String(playlistId)}`
+  currentSort.value = PLAYLIST_SORT_KEY
 }
 
 // Row selection: single-click selects, shift extends, cmd togglesss.

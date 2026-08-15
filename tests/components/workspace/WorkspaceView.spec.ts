@@ -964,7 +964,10 @@ describe('WorkspaceView', () => {
       await activatePlaylistSort(wrapper)
       const labels = wrapper.findAll('select.dropdown option').map((o) => o.text())
       expect(labels).toContain('Playlist: Morning Mix')
-      expect(wrapper.find<HTMLSelectElement>('select.dropdown').element.value).toBe('playlist:1')
+      // The key is deliberately id-free — see PLAYLIST_SORT_KEY in WorkspaceView.
+      expect(wrapper.find<HTMLSelectElement>('select.dropdown').element.value).toBe(
+        'playlist:active',
+      )
     })
 
     it('orders playlist members first in playlist order, then everything else', async () => {
@@ -1003,7 +1006,7 @@ describe('WorkspaceView', () => {
     })
 
     // The option disappearing is only half the fix: the <select> stayed bound to the departed
-    // "playlist:1" key, matched no <option>, and rendered blank.
+    // playlist key, matched no <option>, and rendered blank.
     it('falls back to Order Added when the sorted playlist leaves the workspace', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
       mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist')]
@@ -1037,6 +1040,37 @@ describe('WorkspaceView', () => {
       await activatePlaylistSort(wrapper, 1)
       const labels = wrapper.findAll('select.dropdown option').map((o) => o.text())
       expect(labels).toContain('Playlist: Second')
+    })
+
+    // Regression: save() rewrites a workspace-created playlist's `pending-N` id to its real
+    // auto-increment number, mutating the same object. A sort key carrying that id dangled the
+    // moment it changed, and useListSort's fallback silently reordered the whole view.
+    it('keeps the sort active when save repoints a workspace-created playlist id', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist('pending-1', 'Fresh Mix', ['t2'])]
+      mockWorkspaceStore.trackList = [makeTrack('t1', 'One', 'Artist'), makeTrack('t2', 'Two', 'Artist')]
+      const wrapper = mountWorkspace()
+      await activatePlaylistSort(wrapper)
+      expect(wrapper.findAll('.track-row__title').map((n) => n.text())).toEqual(['Two', 'One'])
+
+      // Exactly what stores/workspace.ts save() does: patch pl.id in place, clear dirty state.
+      mockWorkspaceStore.save.mockImplementationOnce(async () => {
+        for (const pl of mockWorkspaceStore.playlists) {
+          if (typeof pl.id === 'string') pl.id = 5
+        }
+        mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists]
+        mockWorkspaceStore.hasUnsavedChanges = false
+      })
+      await wrapper.find('.workspace__header-actions .btn--primary').trigger('click')
+      await nextTick()
+      await nextTick()
+
+      expect(wrapper.find<HTMLSelectElement>('select.dropdown').element.value).toBe(
+        'playlist:active',
+      )
+      expect(wrapper.findAll('select.dropdown option').map((o) => o.text())).toContain(
+        'Playlist: Fresh Mix',
+      )
+      expect(wrapper.findAll('.track-row__title').map((n) => n.text())).toEqual(['Two', 'One'])
     })
 
     // Regression guard on the position memo: it must read pl.trackIDs reactively. Snapshotting
