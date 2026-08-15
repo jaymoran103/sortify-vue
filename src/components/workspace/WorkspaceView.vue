@@ -263,7 +263,27 @@ async function handleRename(playlistId: PlaylistId): Promise<void> {
   }
 }
 
-function handleRemove(playlistId: PlaylistId): void {
+/**
+ * Remove a playlist from the workspace, confirming first when that discards buffered edits.
+ *
+ * removePlaylist drops the playlist from modifiedIds, so any unsaved rename or membership
+ * change to it goes with it. That is the right semantics — "remove" should not apply edits
+ * on the way out — but it was silent, and no leave warning could cover it afterwards.
+ */
+async function handleRemove(playlistId: PlaylistId): Promise<void> {
+  const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
+  if (!pl) return
+
+  if (workspaceStore.modifiedIds.has(playlistId)) {
+    const confirmed = await modal.open<true>(ConfirmModal, {
+      title: 'Remove Playlist',
+      message: `"${pl.name}" has unsaved changes. Remove it from the workspace and discard them?`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+    })
+    if (!confirmed) return
+  }
+
   workspaceStore.removePlaylist(playlistId)
 }
 
@@ -331,7 +351,7 @@ function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
   }
 
   items.push({ divider: true })
-  items.push({ label: 'Remove from Workspace', action: () => handleRemove(playlistId) })
+  items.push({ label: 'Remove from Workspace', action: () => void handleRemove(playlistId) })
 
   // Spotify entries only for playlists that came from Spotify and carry a URI.
   const playlistURI = workspaceStore.playlists[index]?.playlistURI

@@ -860,6 +860,43 @@ describe('WorkspaceView', () => {
       expect(mockWorkspaceStore.removePlaylist).toHaveBeenCalledWith(7)
     })
 
+    // removePlaylist drops the playlist from modifiedIds, so its buffered edits go with it.
+    // Correct semantics, but it used to happen silently and no later warning could cover it.
+    it('confirms before removing a playlist with unsaved edits', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(7, 'Edited', [])]
+      mockWorkspaceStore.modifiedIds = new Set([7])
+      mockModalOpen.mockResolvedValueOnce(true)
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Remove from Workspace')?.()
+      await flushPromises()
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+      expect(props.message).toContain('"Edited"')
+      expect(mockWorkspaceStore.removePlaylist).toHaveBeenCalledWith(7)
+    })
+
+    it('keeps the playlist when the discard confirmation is declined', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(7, 'Edited', [])]
+      mockWorkspaceStore.modifiedIds = new Set([7])
+      mockModalOpen.mockResolvedValueOnce(null)
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Remove from Workspace')?.()
+      await flushPromises()
+      expect(mockWorkspaceStore.removePlaylist).not.toHaveBeenCalled()
+    })
+
+    it('does not confirm when the playlist has no unsaved edits', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(7, 'Clean', [])]
+      mockWorkspaceStore.modifiedIds = new Set()
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Remove from Workspace')?.()
+      await flushPromises()
+      expect(mockModalOpen).not.toHaveBeenCalled()
+      expect(mockWorkspaceStore.removePlaylist).toHaveBeenCalledWith(7)
+    })
+
     it('Move Right calls movePlaylist with direction 1', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
       const wrapper = mountWorkspace()
