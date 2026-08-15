@@ -1011,6 +1011,107 @@ describe('Workspace Store', () => {
 
     expect(store.unassignedTrackIds).toEqual([])
   })
+
+  // ─── Column order persistence ─────────────────────────────────────────────
+  // Order lives in the session record's playlistIds. save() returns early when nothing is
+  // dirty, so a reorder that marked nothing modified never reached IDB at all.
+
+  it('movePlaylist marks both swapped playlists modified', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.movePlaylist(pl1Id, 1)
+
+    expect(store.modifiedIds.has(pl1Id)).toBe(true)
+    expect(store.modifiedIds.has(pl2Id)).toBe(true)
+    expect(store.hasUnsavedChanges).toBe(true)
+  })
+
+  it('movePlaylist leaves nothing modified when the move is a no-op at the boundary', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.movePlaylist(pl1Id, -1)
+
+    expect(store.hasUnsavedChanges).toBe(false)
+  })
+
+  it('save persists the new column order to the session record', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.movePlaylist(pl1Id, 1)
+    await store.save()
+
+    const sessionStore = useSessionStore()
+    const session = await sessionStore.getSession(sessionId)
+    expect(session?.playlistIds).toEqual([pl2Id, pl1Id])
+  })
+
+  it('a reordered session reloads in the saved order', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.movePlaylist(pl1Id, 1)
+    await store.save()
+    await store.loadSession(sessionId)
+
+    expect(store.playlists.map((p) => p.name)).toEqual(['Playlist B', 'Playlist A'])
+  })
+
+  // ─── issues ───────────────────────────────────────────────────────────────
+  // Rule behaviour is covered in tests/unit/utils/workspaceIssues.spec.ts. These check the
+  // store feeds it the right snapshot.
+
+  it('issues is empty for a freshly loaded session', async () => {
+    const { sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    expect(store.issues).toEqual([])
+  })
+
+  it('issues reports unsaved changes after an edit', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.renamePlaylist(pl1Id, 'Renamed')
+
+    expect(store.issues.map((i) => i.code)).toContain('unsaved-changes')
+  })
+
+  it('issues names an unassigned track', async () => {
+    const { sessionId } = await setupSingleListSession()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    await store.addTracksToWorkspace(['track-3'])
+
+    const issue = store.issues.find((i) => i.code === 'unassigned-tracks')
+    expect(issue?.message).toContain('"Song C"')
+    expect(issue?.severity).toBe('loss')
+  })
+
+  // The masking bug: the empty-playlist check used to be gated on modifiedIds, which save()
+  // clears — so saving an emptied playlist silenced the warning about it.
+  it('issues still reports an emptied playlist after it has been saved', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.setTracksInPlaylist(pl1Id, ['track-1', 'track-2'], false)
+    await store.save()
+
+    expect(store.hasUnsavedChanges).toBe(false)
+    const issue = store.issues.find((i) => i.code === 'empty-playlist')
+    expect(issue?.message).toContain('"Playlist A"')
+    expect(issue?.severity).toBe('quality')
+  })
 })
 
 

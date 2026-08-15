@@ -3,7 +3,9 @@ import { defineStore } from 'pinia'
 import { useSessionStore } from '@/stores/sessions'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useTrackStore } from '@/stores/tracks'
+import { collectWorkspaceIssues } from '@/utils/workspaceIssues'
 import type { Track, WorkspacePlaylist, PlaylistId } from '@/types/models'
+import type { WorkspaceIssue } from '@/types/ui'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const sessionId = ref<number | null>(null)
@@ -45,6 +47,19 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // would not survive a reload. The leave guard warns about them for exactly that reason (D6).
   const unassignedTrackIds = computed<string[]>(() =>
     stableOrder.value.filter((id) => !playlists.value.some((p) => p.trackIdSet.has(id))),
+  )
+
+  // Every condition of the workspace worth reporting, in one list. The rules live in
+  // utils/workspaceIssues.ts as pure functions over a plain snapshot, so adding a check is a
+  // single-file edit and needs no store to test. Consumers filter by severity — the leave
+  // guard blocks on 'loss', the column header renders its own marker for empties.
+  const issues = computed<WorkspaceIssue[]>(() =>
+    collectWorkspaceIssues({
+      playlists: playlists.value,
+      modifiedIds: modifiedIds.value,
+      stableOrder: stableOrder.value,
+      tracks: tracks.value,
+    }),
   )
 
   /**
@@ -242,6 +257,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   /**
    * Swap a playlist one position left (-1) or right (+1) in the current column order.
    * No-op if already at the boundary or the playlist is not found.
+   *
+   * Marks both swapped playlists modified. Column order is persisted through the session
+   * record's playlistIds, which save() writes in Step 3 — but save() returns early when
+   * nothing is dirty, so without this a reorder never reached IDB, the Save button stayed
+   * disabled, and the leave guard had nothing to warn about. The two playlist records are
+   * rewritten with identical content as a result; harmless, and cheaper than a second
+   * dirty flag to maintain.
    */
   function movePlaylist(playlistId: PlaylistId, direction: -1 | 1): void {
     const idx = playlists.value.findIndex((p) => p.id === playlistId)
@@ -259,6 +281,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     arr[idx] = arr[newIdx]!
     arr[newIdx] = temp
     playlists.value = arr
+
+    modifiedIds.value.add(arr[idx]!.id)
+    modifiedIds.value.add(arr[newIdx]!.id)
   }
 
   /**
@@ -530,6 +555,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     trackList,
     hasUnsavedChanges,
     unassignedTrackIds,
+    issues,
     loadSession,
     addPlaylist,
     removePlaylist,
