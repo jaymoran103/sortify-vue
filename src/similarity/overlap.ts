@@ -1,4 +1,5 @@
 import {
+  MAX_RESULT_ROWS,
   TRACK_AXIS_MAX_DEGREE_RAISES,
   TRACK_AXIS_MAX_PAIRS,
   TRACK_AXIS_MAX_SIZE,
@@ -78,6 +79,22 @@ function applySort(rows: ResultRow[], controls: OverlapControls): ResultRow[] {
     const bv = b.measures.find((m) => m.key === key)?.value ?? 0
     return (av - bv) * direction
   })
+}
+
+/**
+ * Truncates a sorted row list to the emit ceiling, appending a note when it cuts anything.
+ *
+ * Runs after sorting so the rows that survive are the most relevant ones. Every scan routes its
+ * output through here, so a scan can never hand back an unbounded result set.
+ */
+function capRows(rows: ResultRow[], notes: ScanNote[]): ResultRow[] {
+  if (rows.length <= MAX_RESULT_ROWS) return rows
+  notes.push({
+    kind: 'truncated-rows',
+    message: `Showing the top ${MAX_RESULT_ROWS} of ${rows.length} results. Raise the threshold to narrow the list.`,
+    count: rows.length,
+  })
+  return rows.slice(0, MAX_RESULT_ROWS)
 }
 
 /**
@@ -206,8 +223,10 @@ export function scanPlaylistOverlap(
     })
   }
 
-  normaliseBars(rows, 'shared')
-  return { rows: applySort(rows, controls), notes }
+  const sorted = applySort(rows, controls)
+  const capped = capRows(sorted, notes)
+  normaliseBars(capped, 'shared')
+  return { rows: capped, notes }
 }
 
 /** One pass of track-pair accumulation, plus whether it hit the pair-map ceiling. */
@@ -363,8 +382,10 @@ export function scanTrackOverlap(
     })
   }
 
-  normaliseBars(rows, 'together')
-  return { rows: applySort(rows, controls), notes }
+  const sorted = applySort(rows, controls)
+  const capped = capRows(sorted, notes)
+  normaliseBars(capped, 'together')
+  return { rows: capped, notes }
 }
 
 /**

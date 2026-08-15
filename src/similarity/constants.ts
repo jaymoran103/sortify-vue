@@ -20,6 +20,16 @@ export const TRACK_AXIS_MAX_PAIRS = 2_000_000
 /** How many times the degree floor may raise before the scan accepts the result as is. */
 export const TRACK_AXIS_MAX_DEGREE_RAISES = 4
 
+/**
+ * Maximum rows any scan emits, applied after sorting so the most relevant survive.
+ *
+ * The pair ceilings above bound what a scan computes; this bounds what it hands back. A worst-case
+ * track-axis scan can produce a few hundred thousand qualifying pairs, and every row is
+ * structured-cloned across the worker boundary and held in memory by the view. Truncation is
+ * always reported in a scan note, and no user can act on the two-hundred-thousandth row anyway.
+ */
+export const MAX_RESULT_ROWS = 5000
+
 /** Cold-load threshold: low enough that the page opens with rows rather than an empty state. */
 export const DEFAULT_JACCARD_THRESHOLD = 0.1
 

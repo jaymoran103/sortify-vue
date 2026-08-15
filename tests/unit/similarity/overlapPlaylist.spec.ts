@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildIndex } from '@/similarity/invertedIndex'
 import { scanPlaylistOverlap } from '@/similarity/overlap'
+import { MAX_RESULT_ROWS } from '@/similarity/constants'
 import type { CursorScope, IndexInput, OverlapControls, ResultRow } from '@/similarity/types'
 
 const PLAYLISTS: IndexInput[] = [
@@ -128,5 +129,28 @@ describe('scanPlaylistOverlap', () => {
     ])
     const { rows } = scanPlaylistOverlap(withDupes, controls(), EMPTY_SCOPE)
     expect(rows[0]!.sizeTitle).toBe('Dupey: 2 unique of 3 entries')
+  })
+})
+
+describe('result row cap', () => {
+  it('caps emitted rows and reports the truncation', () => {
+    // 200 playlists all sharing one track produces C(200,2) = 19900 pairs, well past the cap.
+    const many = buildIndex(
+      Array.from({ length: 200 }, (_, i) => ({
+        id: i + 1,
+        name: `P${i + 1}`,
+        trackIDs: ['shared', `own-${i}`],
+      })),
+    )
+    const { rows, notes } = scanPlaylistOverlap(many, controls(), EMPTY_SCOPE)
+    expect(rows).toHaveLength(MAX_RESULT_ROWS)
+    const note = notes.find((n) => n.kind === 'truncated-rows')
+    expect(note).toBeDefined()
+    expect(note!.count).toBe(19900)
+  })
+
+  it('adds no truncation note when everything fits', () => {
+    const { notes } = scanPlaylistOverlap(INDEX, controls(), EMPTY_SCOPE)
+    expect(notes.find((n) => n.kind === 'truncated-rows')).toBeUndefined()
   })
 })

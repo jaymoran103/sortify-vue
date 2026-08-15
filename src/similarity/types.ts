@@ -95,7 +95,11 @@ export interface ResultRow {
 }
 
 /** Categories of scan disclosure. Every exclusion a scan makes gets one of these. */
-export type ScanNoteKind = 'pre-threshold-count' | 'excluded-playlists' | 'raised-degree'
+export type ScanNoteKind =
+  | 'pre-threshold-count'
+  | 'excluded-playlists'
+  | 'raised-degree'
+  | 'truncated-rows'
 
 /** A statement about what a scan did or declined to do, rendered above the result. */
 export interface ScanNote {
