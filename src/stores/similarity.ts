@@ -3,17 +3,35 @@ import { defineStore } from 'pinia'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useTrackStore } from '@/stores/tracks'
 import { useCursorStore } from '@/stores/cursor'
+import { useEquivalenceStore } from '@/stores/equivalence'
 import { createWorkerClient } from '@/similarity/workerClient'
 import { hydrateTrackLabels } from '@/similarity/overlap'
-import { DEFAULT_PRESET_KEY, getPreset } from '@/similarity/presets'
+import {
+  DEFAULT_PRESET_KEY,
+  getDoublesPreset,
+  getPreset,
+  isDoublesPreset,
+} from '@/similarity/presets'
 import type {
+  DoublesControls,
   IndexInput,
   IndexStats,
   OverlapControls,
   ResultRow,
   ScanNote,
   TrackLabelInput,
+  TrackMatchInput,
 } from '@/similarity/types'
+
+/** Which operation the active preset selects. */
+export type SimilarityMode = 'overlap' | 'doubles'
+
+/** One entry in the Noticed rail: a preset that currently has something to show. */
+export interface RailFinding {
+  presetKey: string
+  label: string
+  count: number
+}
 
 /** Lifecycle of the inverted index, as surfaced in the cursor bar. */
 export type IndexStatus = 'idle' | 'building' | 'ready' | 'stale' | 'error'
@@ -38,6 +56,7 @@ export const useSimilarityStore = defineStore('similarity', () => {
   const playlistStore = usePlaylistStore()
   const trackStore = useTrackStore()
   const cursor = useCursorStore()
+  const equivalence = useEquivalenceStore()
   const client = createWorkerClient()
 
   const indexStatus = ref<IndexStatus>('idle')
@@ -49,6 +68,30 @@ export const useSimilarityStore = defineStore('similarity', () => {
   const error = ref<string | null>(null)
 
   const activePresetKey = ref(DEFAULT_PRESET_KEY)
+  const mode = computed<SimilarityMode>(() =>
+    isDoublesPreset(activePresetKey.value) ? 'doubles' : 'overlap',
+  )
+
+  const doublesControls = ref<DoublesControls>({
+    reviewFilter: 'unconfirmed',
+    minTier: 'low',
+    sortKey: 'variants',
+    sortDir: 'desc',
+  })
+
+  /**
+   * Whether confirmed doubles are folded together when Overlap counts shared tracks.
+   *
+   * On by default: confirming a group is the user saying these are the same recording, so the
+   * numbers should say so too. The toggle changes what the index contains, not just what a scan
+   * reads, so flipping it rebuilds. That costs milliseconds and keeps one source of truth.
+   */
+  const equivalenceEnabled = ref(true)
+
+  /** The canonical map actually baked into the current index, so a change can invalidate it. */
+  const indexedWithEquivalence = ref(false)
+
+  const railFindings = ref<RailFinding[]>([])
   const controls = ref<OverlapControls>({
     ...(getPreset(DEFAULT_PRESET_KEY)?.controls ?? FALLBACK_CONTROLS),
   })
@@ -106,7 +149,9 @@ export const useSimilarityStore = defineStore('similarity', () => {
    * the caller notice and re-run once the data arrives.
    */
   async function ensureIndex(): Promise<void> {
-    if (indexStatus.value === 'ready' || indexStatus.value === 'building') return
+    const equivalenceMatches = indexedWithEquivalence.value === equivalenceEnabled.value
+    if (indexStatus.value === 'building') return
+    if (indexStatus.value === 'ready' && equivalenceMatches) return
 
     const input = toIndexInput()
     if (input.length === 0) {
@@ -117,11 +162,65 @@ export const useSimilarityStore = defineStore('similarity', () => {
     indexStatus.value = 'building'
     error.value = null
     try {
-      indexStats.value = await client.build(input)
+      const canonical = equivalenceEnabled.value ? equivalence.canonicalMap : undefined
+      indexStats.value = await client.build(input, canonical)
+      indexedWithEquivalence.value = equivalenceEnabled.value
       indexStatus.value = 'ready'
     } catch (caught) {
       indexStatus.value = 'error'
       error.value = caught instanceof Error ? caught.message : 'Index build failed.'
+    }
+  }
+
+  /** Reduces library tracks to the fields double matching needs. */
+  function toMatchInput(): TrackMatchInput[] {
+    return (trackStore.tracks ?? []).map((track) => ({
+      trackID: track.trackID,
+      title: track.title,
+      artist: track.artist,
+      duration: track.duration,
+    }))
+  }
+
+  /**
+   * Runs a doubles scan and persists anything newly detected.
+   *
+   * Detected groups are saved as unconfirmed before the rows render, so the list the user reviews
+   * and the rows on screen describe the same records. Groups already decided are skipped by the
+   * scan itself, so this never duplicates a row.
+   */
+  async function runDoubles(): Promise<void> {
+    await ensureIndex()
+    if (indexStatus.value !== 'ready') return
+
+    isScanning.value = true
+    error.value = null
+    try {
+      const scanned = await client.scanDoubles(
+        toMatchInput(),
+        equivalence.knownGroups,
+        equivalence.all.map((group) => ({
+          id: group.id,
+          trackIds: group.trackIds,
+          matchTier: group.matchTier,
+          status: group.status,
+          preferredTrackId: group.preferredTrackId,
+        })),
+        doublesControls.value,
+        cursor.scope,
+      )
+      if (!scanned) return
+
+      if (scanned.groups.length > 0) {
+        await equivalence.saveDetected(scanned.groups)
+      }
+      rows.value = scanned.result.rows
+      notes.value = scanned.result.notes
+    } catch (caught) {
+      error.value = caught instanceof Error ? caught.message : 'Doubles scan failed.'
+    } finally {
+      isScanning.value = false
+      scanProgress.value = null
     }
   }
 
@@ -130,6 +229,11 @@ export const useSimilarityStore = defineStore('similarity', () => {
    * A superseded scan resolves null, in which case the previous rows are left in place.
    */
   async function run(): Promise<void> {
+    if (mode.value === 'doubles') {
+      await runDoubles()
+      return
+    }
+
     await ensureIndex()
     if (indexStatus.value !== 'ready') return
 
@@ -153,11 +257,89 @@ export const useSimilarityStore = defineStore('similarity', () => {
 
   /** Replaces the controls wholesale with a preset's values and re-runs. */
   async function applyPreset(key: string): Promise<void> {
+    const doubles = getDoublesPreset(key)
+    if (doubles) {
+      activePresetKey.value = key
+      doublesControls.value = { ...doubles.controls }
+      await run()
+      return
+    }
+
     const preset = getPreset(key)
     if (!preset) return
     activePresetKey.value = key
     controls.value = { ...preset.controls }
     await run()
+  }
+
+  /** Merges a doubles control change and re-runs. */
+  async function setDoublesControls(patch: Partial<DoublesControls>): Promise<void> {
+    doublesControls.value = { ...doublesControls.value, ...patch }
+    await run()
+  }
+
+  /**
+   * Turns the equivalence fold on or off.
+   *
+   * Marks the index stale rather than rebuilding directly, so the rebuild happens inside run()
+   * where progress and errors are already handled.
+   */
+  async function setEquivalenceEnabled(next: boolean): Promise<void> {
+    if (equivalenceEnabled.value === next) return
+    equivalenceEnabled.value = next
+    if (indexStatus.value === 'ready') indexStatus.value = 'stale'
+    await run()
+  }
+
+  /**
+   * Recomputes the Noticed rail.
+   *
+   * Ranked by actionability rather than count: two fully-contained playlists are worth more than
+   * four hundred weak overlaps, because containment names an unambiguous action. Runs the two
+   * cheap overlap presets and reads the doubles count straight from the store.
+   */
+  async function refreshRail(): Promise<void> {
+    await ensureIndex()
+    if (indexStatus.value !== 'ready') {
+      railFindings.value = []
+      return
+    }
+
+    const findings: RailFinding[] = []
+
+    const contained = getPreset('overlap-contained')
+    if (contained) {
+      const result = await client.scan(contained.controls, { subject: null, ids: [] })
+      if (result && result.rows.length > 0) {
+        findings.push({
+          presetKey: contained.key,
+          label: 'Playlists fully inside another',
+          count: result.rows.length,
+        })
+      }
+    }
+
+    if (equivalence.unconfirmedCount > 0) {
+      findings.push({
+        presetKey: 'doubles-unreviewed',
+        label: 'Doubled tracks unreviewed',
+        count: equivalence.unconfirmedCount,
+      })
+    }
+
+    const identical = getPreset('overlap-near-identical')
+    if (identical) {
+      const result = await client.scan(identical.controls, { subject: null, ids: [] })
+      if (result && result.rows.length > 0) {
+        findings.push({
+          presetKey: identical.key,
+          label: 'Playlists nearly identical',
+          count: result.rows.length,
+        })
+      }
+    }
+
+    railFindings.value = findings.slice(0, 4)
   }
 
   /** Merges a control change and re-runs. The active preset key is unaffected. */
@@ -179,6 +361,10 @@ export const useSimilarityStore = defineStore('similarity', () => {
     rows,
     notes,
     controls,
+    doublesControls,
+    equivalenceEnabled,
+    mode,
+    railFindings,
     activePresetKey,
     isScanning,
     scanProgress,
@@ -186,8 +372,12 @@ export const useSimilarityStore = defineStore('similarity', () => {
     libraryRevision,
     ensureIndex,
     run,
+    runDoubles,
     applyPreset,
     setControls,
+    setDoublesControls,
+    setEquivalenceEnabled,
+    refreshRail,
     dispose,
   }
 })
