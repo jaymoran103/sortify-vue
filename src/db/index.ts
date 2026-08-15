@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import { ref } from 'vue'
-import type { Track, Playlist, WorkspaceSession } from '@/types/models'
+import type { Track, Playlist, WorkspaceSession, EquivalenceGroup } from '@/types/models'
 
 /**
  * SortifyDB is a Dexie database that manages two tables: 'tracks' and 'playlists'.
@@ -20,6 +20,12 @@ import type { Track, Playlist, WorkspaceSession } from '@/types/models'
  * - Primary key: id (number, auto-incrementing)
  * - Indexed fields: 'lastOpened'.
  * 
+ * equivalenceGroups:
+ * - Represents sets of track IDs believed to be the same recording, shown in the UI as "doubles".
+ * - Primary key: id (number, auto-incrementing)
+ * - Indexed fields: 'status' for the review filter, and '*trackIds' as a multiEntry index so the
+ *   group containing a given track is a direct lookup rather than a table scan.
+ * 
  * An instance of SortifyDB is created and exported as 'db' for use throughout the application.
  * 
  */
@@ -31,11 +37,12 @@ export class SortifyDB extends Dexie {
   tracks!: Table<Track, string>
   playlists!: Table<Playlist, number>
   workspaceSessions!: Table<WorkspaceSession, number>
+  equivalenceGroups!: Table<EquivalenceGroup, number>
 
 
   // NOTE: Bump this number for every schema change, even non-breaking ones, to trigger the versionchange flow in older tabs. 
   // New versions should always be strictly greater than any previously deployed version, ensuring safe writes.
-  public static readonly CURRENT_VERSION = 5
+  public static readonly CURRENT_VERSION = 6
 
   constructor() {
     super('SortifyDB')
@@ -44,6 +51,7 @@ export class SortifyDB extends Dexie {
       tracks: 'trackID, source',
       playlists: '++id, name',
       workspaceSessions: '++id, lastOpened',
+      equivalenceGroups: '++id, status, *trackIds',
     })
 
     // Close this connection immediately when another tab requests a newer version.

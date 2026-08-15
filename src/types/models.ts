@@ -45,3 +45,30 @@ export interface WorkspaceSession {
   createdAt: number          // Date.now() at creation
   lastOpened: number         // Date.now(), updated on each load
 }
+
+/** Review state of a detected doubles group. Rejections persist so a rescan skips them. */
+export type EquivalenceStatus = 'unconfirmed' | 'confirmed' | 'rejected'
+
+/** Confidence that the tracks in a group are the same recording. */
+export type MatchTier = 'source' | 'high' | 'moderate' | 'low'
+
+/**
+ * A set of track IDs believed to be the same recording.
+ *
+ * Called a "doubles group" in the UI. The data-model name stays EquivalenceGroup because the
+ * concept it encodes -- equivalence between distinct track IDs -- outlives whatever the feature
+ * is called, and renaming a table later costs a migration.
+ *
+ * trackIds carries a multiEntry index, so finding the group containing a track is a direct lookup
+ * rather than a scan. Equivalence resolves at read time: confirming a group IS the application,
+ * and unconfirming reverses it. Nothing is rewritten on disk unless the user runs Consolidate.
+ */
+export interface EquivalenceGroup {
+  id?: number
+  trackIds: string[]
+  preferredTrackId?: string
+  status: EquivalenceStatus
+  matchTier: MatchTier
+  detectedAt: number
+  reviewedAt?: number
+}
