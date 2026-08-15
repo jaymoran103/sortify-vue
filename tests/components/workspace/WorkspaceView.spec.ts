@@ -189,7 +189,8 @@ describe('WorkspaceView', () => {
     // Reset before re-arming: mockResolvedValue alone leaves call history from prior tests,
     // which made "did not save" assertions pass or fail on test order.
     mockWorkspaceStore.save.mockReset()
-    mockWorkspaceStore.save.mockResolvedValue(undefined)
+    // save() resolves true on success, false on a handled failure — never throws.
+    mockWorkspaceStore.save.mockResolvedValue(true)
     mockWorkspaceStore.renamePlaylist.mockReset()
     mockWorkspaceStore.removePlaylist.mockReset()
     mockWorkspaceStore.duplicatePlaylist.mockReset()
@@ -627,6 +628,19 @@ describe('WorkspaceView', () => {
       mockModalOpen.mockResolvedValueOnce(null)
       await mountViaRouter()
       await router.push('/dashboard')
+      expect(router.currentRoute.value.path).toBe('/workspace')
+      expect(mockWorkspaceStore.$reset).not.toHaveBeenCalled()
+    })
+
+    // A failed save must not be followed by navigation: leaving would discard the very work
+    // the user chose to keep. The store reports the reason through its error banner.
+    it('stays on the page when Save & leave fails to save', async () => {
+      mockWorkspaceStore.issues = [lossIssue('unsaved-changes', 'You have unsaved changes.')]
+      mockModalOpen.mockResolvedValueOnce('save')
+      mockWorkspaceStore.save.mockResolvedValueOnce(false)
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(mockWorkspaceStore.save).toHaveBeenCalled()
       expect(router.currentRoute.value.path).toBe('/workspace')
       expect(mockWorkspaceStore.$reset).not.toHaveBeenCalled()
     })

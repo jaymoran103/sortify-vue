@@ -203,8 +203,11 @@ onBeforeRouteLeave(async (_to, _from, next) => {
     return
   }
 
-  if (choice === 'save') {
-    await handleSave()
+  // Leaving after a failed save would discard the very work the user chose to keep, so stay
+  // put and let the error banner explain why. The buffer is untouched, so they can retry.
+  if (choice === 'save' && !(await handleSave())) {
+    next(false)
+    return
   }
 
   workspaceStore.$reset()
@@ -234,10 +237,13 @@ function goBack(): void {
 const lastSavedTime = ref<string | null>(null)
 
 // Handle save action: call the store's save method, which persists the session to IndexedDB.
-// Stamps lastSavedTime only after the write resolves, so the label never claims a save that failed.
-async function handleSave(): Promise<void> {
-  await workspaceStore.save()
-  lastSavedTime.value = new Date().toLocaleTimeString()
+// Stamps lastSavedTime only on success, so the label never claims a save that failed — the
+// store reports failure by returning false and publishing the reason to workspaceStore.error.
+// Returns whether the save succeeded, which the leave guard uses to decide about navigating.
+async function handleSave(): Promise<boolean> {
+  const saved = await workspaceStore.save()
+  if (saved) lastSavedTime.value = new Date().toLocaleTimeString()
+  return saved
 }
 
 // Helper to get track at a given virtualizer row index from the filtered+sorted displayTracks list.
