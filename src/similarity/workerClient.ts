@@ -1,12 +1,23 @@
 import type {
   CursorScope,
+  DetectedGroup,
+  DoublesControls,
   IndexInput,
   IndexStats,
+  KnownGroup,
   OverlapControls,
   ScanRequest,
   ScanResponse,
   ScanResult,
+  StoredGroupInput,
+  TrackMatchInput,
 } from './types'
+
+/** What a doubles scan resolves to: newly detected groups plus the rows to render. */
+export interface DoublesScanResult {
+  groups: DetectedGroup[]
+  result: ScanResult
+}
 
 type ProgressCallback = (done: number, total: number) => void
 
@@ -85,6 +96,14 @@ export class SimilarityWorkerClient {
       return
     }
 
+    if (response.type === 'detected') {
+      const stale = entry.isScan && response.id !== this.latestScanId
+      ;(entry.resolve as (value: DoublesScanResult | null) => void)(
+        stale ? null : { groups: response.groups, result: response.result },
+      )
+      return
+    }
+
     const stale = entry.isScan && response.id !== this.latestScanId
     ;(entry.resolve as (value: ScanResult | null) => void)(stale ? null : response.result)
   }
@@ -115,13 +134,60 @@ export class SimilarityWorkerClient {
    * Builds the inverted index inside the worker and resolves its summary stats.
    * Rebuilds each playlist as a plain object; see the note on scan() below.
    */
-  async build(playlists: IndexInput[]): Promise<IndexStats> {
+  async build(playlists: IndexInput[], canonical?: Map<string, string>): Promise<IndexStats> {
     const plain = playlists.map((playlist) => ({
       id: playlist.id,
       name: playlist.name,
       trackIDs: [...playlist.trackIDs],
     }))
-    return this.send<IndexStats>({ type: 'build', playlists: plain }, false)
+    // Sent as entry pairs rather than a Map: both clone, but pairs make the payload trivially
+    // plain, which is the invariant this whole class exists to guarantee.
+    return this.send<IndexStats>(
+      { type: 'build', playlists: plain, canonical: canonical ? [...canonical] : undefined },
+      false,
+    )
+  }
+
+  /**
+   * Runs a doubles scan. Resolves null when superseded, like any other scan.
+   *
+   * Every argument is rebuilt as plain data first, for the same reason scan() does it: Vue
+   * reactive proxies cannot be structured-cloned.
+   */
+  async scanDoubles(
+    tracks: TrackMatchInput[],
+    known: KnownGroup[],
+    stored: StoredGroupInput[],
+    controls: DoublesControls,
+    scope: CursorScope,
+  ): Promise<DoublesScanResult | null> {
+    return this.send<DoublesScanResult | null>(
+      {
+        type: 'doubles',
+        tracks: tracks.map((track) => ({
+          trackID: track.trackID,
+          title: track.title,
+          artist: track.artist,
+          duration: track.duration,
+        })),
+        known: known.map((group) => ({ trackIds: [...group.trackIds], status: group.status })),
+        stored: stored.map((group) => ({
+          id: group.id,
+          trackIds: [...group.trackIds],
+          matchTier: group.matchTier,
+          status: group.status,
+          preferredTrackId: group.preferredTrackId,
+        })),
+        controls: {
+          reviewFilter: controls.reviewFilter,
+          minTier: controls.minTier,
+          sortKey: controls.sortKey,
+          sortDir: controls.sortDir,
+        },
+        scope: { subject: scope.subject, ids: [...scope.ids] },
+      },
+      true,
+    )
   }
 
   /**

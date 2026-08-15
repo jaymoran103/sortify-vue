@@ -45,3 +45,36 @@ describe('buildIndex', () => {
     expect(index.playlistSets.size).toBe(0)
   })
 })
+
+describe('buildIndex with a canonical map', () => {
+  it('folds equivalent variants onto one ID so two playlists count as sharing the recording', () => {
+    const playlists: IndexInput[] = [
+      { id: 1, name: 'One', trackIDs: ['respect-studio'] },
+      { id: 2, name: 'Two', trackIDs: ['respect-live'] },
+    ]
+    const plain = buildIndex(playlists)
+    expect(plain.trackToPlaylists.get('respect-studio')).toEqual([1])
+    expect(plain.trackToPlaylists.get('respect-live')).toEqual([2])
+
+    const canonical = new Map([
+      ['respect-studio', 'respect-studio'],
+      ['respect-live', 'respect-studio'],
+    ])
+    const folded = buildIndex(playlists, canonical)
+    expect(folded.trackToPlaylists.get('respect-studio')).toEqual([1, 2])
+    expect(folded.trackToPlaylists.has('respect-live')).toBe(false)
+  })
+
+  it('still reports the original entry count so the dedupe disclosure stays honest', () => {
+    const canonical = new Map([['b', 'a']])
+    const index = buildIndex([{ id: 1, name: 'One', trackIDs: ['a', 'b'] }], canonical)
+    expect(index.playlistSizes.get(1)).toBe(1)
+    expect(index.rawSizes.get(1)).toBe(2)
+  })
+
+  it('leaves tracks absent from the map untouched', () => {
+    const canonical = new Map([['b', 'a']])
+    const index = buildIndex([{ id: 1, name: 'One', trackIDs: ['c'] }], canonical)
+    expect(index.trackToPlaylists.get('c')).toEqual([1])
+  })
+})

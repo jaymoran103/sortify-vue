@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { OVERLAP_PRESETS, DEFAULT_PRESET_KEY, getPreset, findPresets } from '@/similarity/presets'
+import {
+  OVERLAP_PRESETS,
+  DOUBLES_PRESETS,
+  DEFAULT_PRESET_KEY,
+  getPreset,
+  findPresets,
+  getDoublesPreset,
+  isDoublesPreset,
+  findAllPresets,
+} from '@/similarity/presets'
 
 describe('presets', () => {
   it('exposes a default preset that exists', () => {
@@ -43,5 +52,39 @@ describe('presets', () => {
 
   it('returns nothing for a query that matches nothing', () => {
     expect(findPresets('zzzz')).toEqual([])
+  })
+})
+
+describe('doubles presets', () => {
+  it('expresses every doubles preset purely as control values', () => {
+    for (const preset of DOUBLES_PRESETS) {
+      expect(Object.keys(preset).sort()).toEqual(['aliases', 'controls', 'key', 'label'])
+    }
+  })
+
+  it('gives every preset across both operations a unique key', () => {
+    const keys = findAllPresets('').map((p) => p.key)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('finds doubles presets by the common word for the concept', () => {
+    for (const word of ['duplicates', 'dupes', 'versions']) {
+      expect(findAllPresets(word).some((p) => isDoublesPreset(p.key))).toBe(true)
+    }
+  })
+
+  it('distinguishes doubles presets from overlap presets', () => {
+    expect(isDoublesPreset('doubles-unreviewed')).toBe(true)
+    expect(isDoublesPreset('overlap-any')).toBe(false)
+  })
+
+  it('looks up a doubles preset by key', () => {
+    expect(getDoublesPreset('doubles-confirmed')?.controls.reviewFilter).toBe('confirmed')
+    expect(getDoublesPreset('nope')).toBeUndefined()
+  })
+
+  it('searches across both operations at once', () => {
+    const all = findAllPresets('')
+    expect(all.length).toBe(OVERLAP_PRESETS.length + DOUBLES_PRESETS.length)
   })
 })

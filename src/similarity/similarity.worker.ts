@@ -1,6 +1,7 @@
 import { buildIndex } from './invertedIndex'
+import { buildDoublesRows, detectGroups, type ScannableGroup } from './doubles'
 import { scanPlaylistOverlap, scanTrackOverlap } from './overlap'
-import type { InvertedIndex, ScanRequest, ScanResponse } from './types'
+import type { InvertedIndex, ScanNote, ScanRequest, ScanResponse } from './types'
 
 /**
  * Similarity scan worker.
@@ -30,7 +31,10 @@ ctx.addEventListener('message', (event: MessageEvent<ScanRequest>) => {
 
   try {
     if (request.type === 'build') {
-      index = buildIndex(request.playlists)
+      // The canonical map arrives as entry pairs because a Map survives structured clone but
+      // pairs keep the payload shape obvious and cheap to assert on.
+      const canonical = request.canonical ? new Map(request.canonical) : undefined
+      index = buildIndex(request.playlists, canonical)
       post({
         id: request.id,
         type: 'built',
@@ -45,6 +49,34 @@ ctx.addEventListener('message', (event: MessageEvent<ScanRequest>) => {
 
     if (!index) {
       post({ id: request.id, type: 'error', message: 'Index has not been built yet.' })
+      return
+    }
+
+    if (request.type === 'doubles') {
+      const notes: ScanNote[] = []
+      const groups = detectGroups(request.tracks, request.known, notes)
+
+      // Newly detected groups have no id yet; stored ones do. Both are rendered together so the
+      // user sees one list rather than a split between "new" and "known".
+      const scannable: ScannableGroup[] = [
+        ...request.stored,
+        ...groups.map((group) => ({
+          trackIds: group.trackIds,
+          matchTier: group.matchTier,
+          status: 'unconfirmed' as const,
+        })),
+      ]
+
+      const lookup = new Map(request.tracks.map((track) => [track.trackID, track]))
+      const result = buildDoublesRows(
+        scannable,
+        lookup,
+        index,
+        request.controls,
+        request.scope,
+        notes,
+      )
+      post({ id: request.id, type: 'detected', groups, result })
       return
     }
 

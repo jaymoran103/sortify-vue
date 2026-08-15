@@ -117,3 +117,82 @@ describe('SimilarityWorkerClient', () => {
     expect(worker.terminated).toBe(true)
   })
 })
+
+describe('SimilarityWorkerClient doubles', () => {
+  it('resolves a doubles scan with detected groups and rows', async () => {
+    const { client, worker } = makeClient()
+    const promise = client.scanDoubles(
+      [{ trackID: 'a', title: 'Respect', artist: 'Aretha Franklin' }],
+      [],
+      [],
+      { reviewFilter: 'all', minTier: 'low', sortKey: 'variants', sortDir: 'desc' },
+      SCOPE,
+    )
+    const id = worker.sent[0]!.id
+    worker.emit({
+      id,
+      type: 'detected',
+      groups: [{ trackIds: ['a', 'b'], matchTier: 'high' }],
+      result: { rows: [], notes: [] },
+    })
+    const resolved = await promise
+    expect(resolved?.groups).toHaveLength(1)
+  })
+
+  it('posts a doubles payload that survives structuredClone', () => {
+    const { client, worker } = makeClient()
+    const reactiveTracks = reactive([
+      { trackID: 'a', title: 'Respect', artist: 'Aretha Franklin', duration: '145000' },
+    ])
+    const reactiveScope = reactive<CursorScope>({ subject: 'track', ids: ['a'] })
+    void client.scanDoubles(
+      reactiveTracks,
+      reactive([{ trackIds: ['a'], status: 'confirmed' as const }]),
+      reactive([
+        { id: 1, trackIds: ['a'], matchTier: 'high' as const, status: 'confirmed' as const },
+      ]),
+      reactive({
+        reviewFilter: 'all' as const,
+        minTier: 'low' as const,
+        sortKey: 'variants',
+        sortDir: 'desc' as const,
+      }),
+      reactiveScope,
+    )
+    expect(() => structuredClone(worker.sent[0]!)).not.toThrow()
+  })
+
+  it('posts a canonical map as plain entry pairs', () => {
+    const { client, worker } = makeClient()
+    void client.build([{ id: 1, name: 'One', trackIDs: ['a'] }], new Map([['b', 'a']]))
+    const sent = worker.sent[0]!
+    expect(() => structuredClone(sent)).not.toThrow()
+    expect(sent).toMatchObject({ type: 'build', canonical: [['b', 'a']] })
+  })
+
+  it('resolves null for a doubles scan superseded by a newer one', async () => {
+    const { client, worker } = makeClient()
+    const controls = {
+      reviewFilter: 'all' as const,
+      minTier: 'low' as const,
+      sortKey: 'variants',
+      sortDir: 'desc' as const,
+    }
+    const first = client.scanDoubles([], [], [], controls, SCOPE)
+    const second = client.scanDoubles([], [], [], controls, SCOPE)
+    worker.emit({
+      id: worker.sent[1]!.id,
+      type: 'detected',
+      groups: [],
+      result: { rows: [], notes: [] },
+    })
+    worker.emit({
+      id: worker.sent[0]!.id,
+      type: 'detected',
+      groups: [],
+      result: { rows: [], notes: [] },
+    })
+    await expect(first).resolves.toBeNull()
+    await expect(second).resolves.not.toBeNull()
+  })
+})

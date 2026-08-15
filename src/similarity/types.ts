@@ -172,12 +172,31 @@ export interface TrackLabelInput {
 
 /** Main thread to worker. The id correlates a request with its response. */
 export type ScanRequest =
-  | { id: number; type: 'build'; playlists: IndexInput[] }
+  | { id: number; type: 'build'; playlists: IndexInput[]; canonical?: [string, string][] }
   | { id: number; type: 'scan'; controls: OverlapControls; scope: CursorScope }
+  | {
+      id: number
+      type: 'doubles'
+      tracks: TrackMatchInput[]
+      known: KnownGroup[]
+      stored: StoredGroupInput[]
+      controls: DoublesControls
+      scope: CursorScope
+    }
 
 /** Worker to main thread. Progress may arrive many times before a result or an error. */
+/** A stored group as the worker needs it, without the timestamps only the UI uses. */
+export interface StoredGroupInput {
+  id?: number
+  trackIds: string[]
+  matchTier: MatchTier
+  status: EquivalenceStatus
+  preferredTrackId?: string
+}
+
 export type ScanResponse =
   | { id: number; type: 'built'; stats: IndexStats }
+  | { id: number; type: 'detected'; groups: DetectedGroup[]; result: ScanResult }
   | { id: number; type: 'progress'; done: number; total: number; phase: string }
   | { id: number; type: 'result'; result: ScanResult }
   | { id: number; type: 'error'; message: string }
