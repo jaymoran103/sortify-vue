@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -21,7 +21,7 @@ import TrackRow from './TrackRow.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
 import AddContentModal from './AddContentModal.vue'
 import LeaveWorkspaceModal from './LeaveWorkspaceModal.vue'
-import type { Track, PlaylistId } from '@/types/models'
+import type { Track, PlaylistId, WorkspacePlaylist } from '@/types/models'
 import type { SortOption, MenuEntry, AddContentChoice, LeaveChoice } from '@/types/ui'
 
 const route = useRoute()
@@ -58,26 +58,51 @@ const staticSortOptions: SortOption<Track>[] = [
   },
 ]
 
-// Playlist whose order is currently driving the sort, or null when that sort is inactive.
-const playlistSortId = ref<PlaylistId | null>(null)
+// The playlist whose order is currently driving the sort, or null when that sort is inactive.
+//
+// Held by object reference, not by id, because a playlist id is not stable for the lifetime of
+// the sort: save() resolves a workspace-created playlist by writing it to IDB and patching
+// `pl.id` from `pending-N` to the real auto-increment number — mutating the same object. An id
+// captured here went stale at exactly that moment, the lookup below failed, the dynamic option
+// vanished, and useListSort's fallback silently reordered the view to Order Added mid-session.
+// The object survives the event that invalidates the id, so it is the stabler handle.
+//
+// shallowRef because this is an identity handle: the playlist's own reactivity comes from the
+// store, and deep-tracking a copy of it here would be redundant.
+const playlistSortTarget = shallowRef<WorkspacePlaylist | null>(null)
+
+// Resolve the target to the live store entry, or null once it has left the workspace. Identity
+// comparison rather than id, for the reason above.
+const activeSortPlaylist = computed<WorkspacePlaylist | null>(
+  () => workspaceStore.playlists.find((p) => p === playlistSortTarget.value) ?? null,
+)
+
+// The option's key is likewise id-free: nothing parses this string, and its only consumer is the
+// equality check in the watcher below.
+const PLAYLIST_SORT_KEY = 'playlist:active'
+
+// trackID → position within the sort-driving playlist, or null when that sort is inactive.
+// Memoized for the same reason as playlistCountMap (D7): the comparator ran indexOf over
+// trackIDs for both operands on every comparison, measured at ~35ms to sort a 3000-track
+// workspace against a 1500-track playlist. Reads pl.trackIDs, so it invalidates when
+// membership changes and the order stays consistent with what the column shows.
+const playlistSortPositions = computed<Map<string, number> | null>(() => {
+  const pl = activeSortPlaylist.value
+  if (!pl) return null
+  return new Map(pl.trackIDs.map((id, index) => [id, index]))
+})
 
 /**
- * Build a comparator ordering tracks by their position within one playlist.
+ * Order tracks by their position within the sort-driving playlist.
  * Members sort ahead of non-members, in playlist order; non-members keep their relative
- * order. Returns a no-op comparator if the playlist has left the workspace.
+ * order. A no-op while the playlist is absent from the workspace.
  */
-function buildPlaylistSortComparator(playlistId: PlaylistId): (a: Track, b: Track) => number {
-  return (a: Track, b: Track) => {
-    const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
-    if (!pl) return 0
-    const idxA = pl.trackIDs.indexOf(a.trackID)
-    const idxB = pl.trackIDs.indexOf(b.trackID)
-    // indexOf returns -1 for non-members, which would sort them first — map to Infinity
-    // so they fall to the bottom instead.
-    const posA = idxA === -1 ? Infinity : idxA
-    const posB = idxB === -1 ? Infinity : idxB
-    return posA - posB
-  }
+function comparePlaylistOrder(a: Track, b: Track): number {
+  const positions = playlistSortPositions.value
+  if (!positions) return 0
+  // A missing entry means a non-member, which would sort first at -1 — map to Infinity
+  // so non-members fall to the bottom instead.
+  return (positions.get(a.trackID) ?? Infinity) - (positions.get(b.trackID) ?? Infinity)
 }
 
 // Static options plus, when active, a dynamic entry for the chosen playlist. Passing this
@@ -85,15 +110,14 @@ function buildPlaylistSortComparator(playlistId: PlaylistId): (a: Track, b: Trac
 // When the sorted playlist leaves the workspace the entry disappears and useListSort's
 // unknown-key fallback drops the view back to the first static option.
 const sortOptions = computed<SortOption<Track>[]>(() => {
-  if (playlistSortId.value === null) return staticSortOptions
-  const pl = workspaceStore.playlists.find((p) => p.id === playlistSortId.value)
+  const pl = activeSortPlaylist.value
   if (!pl) return staticSortOptions
   return [
     ...staticSortOptions,
     {
-      key: `playlist:${String(playlistSortId.value)}`,
+      key: PLAYLIST_SORT_KEY,
       label: `Playlist: ${pl.name}`,
-      compareFn: buildPlaylistSortComparator(playlistSortId.value),
+      compareFn: comparePlaylistOrder,
     },
   ]
 })
@@ -115,18 +139,21 @@ const { currentSort, sorted: displayTracks } = useListSort<Track>(filtered, sort
 // Retire the dynamic playlist option as soon as the user picks a static sort, so a stale
 // "Playlist: X" entry does not linger in the dropdown.
 watch(currentSort, (key) => {
-  if (playlistSortId.value !== null && !key.startsWith('playlist:')) {
-    playlistSortId.value = null
+  if (playlistSortTarget.value !== null && key !== PLAYLIST_SORT_KEY) {
+    playlistSortTarget.value = null
   }
 })
 
 /**
  * Activate the playlist-order sort for one column, adding its dynamic option and selecting it.
- * Side effect: sets playlistSortId and currentSort.
+ * Resolves the id to the live playlist object once, here, and holds that. No-op if the
+ * playlist is not in the workspace. Side effect: sets playlistSortTarget and currentSort.
  */
 function handleSortByPlaylist(playlistId: PlaylistId): void {
-  playlistSortId.value = playlistId
-  currentSort.value = `playlist:${String(playlistId)}`
+  const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
+  if (!pl) return
+  playlistSortTarget.value = pl
+  currentSort.value = PLAYLIST_SORT_KEY
 }
 
 // Row selection: single-click selects, shift extends, cmd togglesss.
@@ -522,6 +549,7 @@ async function handleAddTracks(): Promise<void> {
     excludeIds: [...workspaceStore.tracks.keys()],
     confirmLabel: 'Add',
     confirmVariant: 'primary',
+    excludedEmptyLabel: 'All library tracks are already in this workspace.',
   })
   if (!selectedIds?.length) return
   await workspaceStore.addTracksToWorkspace(selectedIds)
