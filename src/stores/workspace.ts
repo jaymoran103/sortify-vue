@@ -3,7 +3,9 @@ import { defineStore } from 'pinia'
 import { useSessionStore } from '@/stores/sessions'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useTrackStore } from '@/stores/tracks'
+import { collectWorkspaceIssues } from '@/utils/workspaceIssues'
 import type { Track, WorkspacePlaylist, PlaylistId } from '@/types/models'
+import type { WorkspaceIssue } from '@/types/ui'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const sessionId = ref<number | null>(null)
@@ -45,6 +47,19 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // would not survive a reload. The leave guard warns about them for exactly that reason (D6).
   const unassignedTrackIds = computed<string[]>(() =>
     stableOrder.value.filter((id) => !playlists.value.some((p) => p.trackIdSet.has(id))),
+  )
+
+  // Every condition of the workspace worth reporting, in one list. The rules live in
+  // utils/workspaceIssues.ts as pure functions over a plain snapshot, so adding a check is a
+  // single-file edit and needs no store to test. Consumers filter by severity — the leave
+  // guard blocks on 'loss', the column header renders its own marker for empties.
+  const issues = computed<WorkspaceIssue[]>(() =>
+    collectWorkspaceIssues({
+      playlists: playlists.value,
+      modifiedIds: modifiedIds.value,
+      stableOrder: stableOrder.value,
+      tracks: tracks.value,
+    }),
   )
 
   /**
@@ -180,23 +195,34 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   /**
+   * Playlist ids that exist in IDB, in current column order — exactly what the session
+   * record stores. No side effects.
+   *
+   * Persistence is decided by the id type, not by origin: a workspace-created playlist
+   * becomes persisted the moment save() resolves its pending id, and keeps origin
+   * 'workspace-created' forever after. removePlaylist and save() must agree here, and when
+   * they did not, removing any playlist rewrote the session with library playlists only,
+   * silently dropping saved workspace-created ones from it.
+   */
+  function persistedPlaylistIds(): number[] {
+    return playlists.value.filter((p) => typeof p.id === 'number').map((p) => p.id as number)
+  }
+
+  /**
    * Remove a playlist from the current workspace session.
    * Works for both library (numeric ID) and workspace-created (pending string ID) playlists.
-   * Only library playlists require an IDB session record update (fire-and-forget).
+   * Only persisted playlists require an IDB session record update (fire-and-forget).
    */
   function removePlaylist(playlistId: PlaylistId): void {
     playlists.value = playlists.value.filter((p) => p.id !== playlistId)
     modifiedIds.value.delete(playlistId)
 
-    // Only library playlists have numeric IDs tracked in the IDB session record.
-    // Pending playlists were never persisted to IDB so no update is needed.
+    // A pending playlist was never in the session record, so removing one changes nothing
+    // there. Anything already persisted still has to be rewritten without it.
     if (sessionId.value !== null && typeof playlistId === 'number') {
       const sessionStore = useSessionStore()
       const currentSessionId = sessionId.value
-      const libraryIds = playlists.value
-        .filter((p) => p.origin === 'library')
-        .map((p) => p.id as number)
-      void sessionStore.updateSession(currentSessionId, { playlistIds: libraryIds })
+      void sessionStore.updateSession(currentSessionId, { playlistIds: persistedPlaylistIds() })
     }
   }
 
@@ -242,6 +268,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   /**
    * Swap a playlist one position left (-1) or right (+1) in the current column order.
    * No-op if already at the boundary or the playlist is not found.
+   *
+   * Marks both swapped playlists modified. Column order is persisted through the session
+   * record's playlistIds, which save() writes in Step 3 — but save() returns early when
+   * nothing is dirty, so without this a reorder never reached IDB, the Save button stayed
+   * disabled, and the leave guard had nothing to warn about. The two playlist records are
+   * rewritten with identical content as a result; harmless, and cheaper than a second
+   * dirty flag to maintain.
    */
   function movePlaylist(playlistId: PlaylistId, direction: -1 | 1): void {
     const idx = playlists.value.findIndex((p) => p.id === playlistId)
@@ -259,6 +292,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     arr[idx] = arr[newIdx]!
     arr[newIdx] = temp
     playlists.value = arr
+
+    modifiedIds.value.add(arr[idx]!.id)
+    modifiedIds.value.add(arr[newIdx]!.id)
   }
 
   /**
@@ -451,55 +487,62 @@ export const useWorkspaceStore = defineStore('workspace', () => {
    * 3. Update session record to reflect current playlist IDs (all numeric, corresponding to IDB)
    * 4. modifiedIds is cleared.
    */
-  async function save(): Promise<void> {
-    // Exit early if no changes to save
-    if (!hasUnsavedChanges.value) return
+  async function save(): Promise<boolean> {
+    // Exit early if no changes to save. Nothing to persist counts as saved.
+    if (!hasUnsavedChanges.value) return true
 
     const playlistStore = usePlaylistStore()
     const sessionStore = useSessionStore()
 
-    // Step 1: resolve pending playlists (write to IDB, patch IDs)
-    for (const pl of playlists.value) {
-      if (typeof pl.id === 'string') {
+    try {
+      // Step 1: resolve pending playlists (write to IDB, patch IDs)
+      for (const pl of playlists.value) {
+        if (typeof pl.id === 'string') {
 
-        // Strip workspace-only fields and the temp id before writing to IDB
-        const { trackIdSet: _set, origin: _origin, id: _tempId, ...rest } = pl
+          // Strip workspace-only fields and the temp id before writing to IDB
+          const { trackIdSet: _set, origin: _origin, id: _tempId, ...rest } = pl
 
-        // Clone the trackIDs array to ensure the Proxy is unwrapped before IDB write
-        const forDb: Omit<WorkspacePlaylist, 'id' | 'trackIdSet' | 'origin'> = {
-          ...rest,
-          trackIDs: [...pl.trackIDs],
+          // Clone the trackIDs array to ensure the Proxy is unwrapped before IDB write
+          const forDb: Omit<WorkspacePlaylist, 'id' | 'trackIdSet' | 'origin'> = {
+            ...rest,
+            trackIDs: [...pl.trackIDs],
+          }
+          const realId = await playlistStore.addPlaylist(forDb)
+
+          // Patch the in-memory object with the real persistent ID
+          const oldId = pl.id
+          pl.id = realId
+          modifiedIds.value.delete(oldId)
+          // freshly written, no need to add to modifiedIds
         }
-        const realId = await playlistStore.addPlaylist(forDb)
-
-        // Patch the in-memory object with the real persistent ID
-        const oldId = pl.id
-        pl.id = realId
-        modifiedIds.value.delete(oldId)
-        // freshly written, no need to add to modifiedIds
       }
-    }
 
-    // Step 2: update modified library playlists in a single batched transaction.
-    const batchUpdates: Array<{ id: number; changes: { name: string; trackIDs: string[] } }> = []
-    for (const modId of modifiedIds.value) {
-      // After pending resolution above, only numeric IDs remain in modifiedIds
-      const pl = playlists.value.find((p) => p.id === modId)
-      if (!pl) continue
-      batchUpdates.push({ id: pl.id as number, changes: { name: pl.name, trackIDs: [...pl.trackIDs] } })
-    }
-    await playlistStore.batchUpdatePlaylists(batchUpdates)
+      // Step 2: update modified library playlists in a single batched transaction.
+      const batchUpdates: Array<{ id: number; changes: { name: string; trackIDs: string[] } }> = []
+      for (const modId of modifiedIds.value) {
+        // After pending resolution above, only numeric IDs remain in modifiedIds
+        const pl = playlists.value.find((p) => p.id === modId)
+        if (!pl) continue
+        batchUpdates.push({ id: pl.id as number, changes: { name: pl.name, trackIDs: [...pl.trackIDs] } })
+      }
+      await playlistStore.batchUpdatePlaylists(batchUpdates)
 
-    // Step 3: update session record with current (now all-numeric) playlist IDs
-    if (sessionId.value !== null) {
-      await sessionStore.updateSession(sessionId.value, {
-        playlistIds: playlists.value
-          .filter((p) => typeof p.id === 'number')
-          .map((p) => p.id as number),
-      })
-    }
+      // Step 3: update session record with current (now all-numeric) playlist IDs
+      if (sessionId.value !== null) {
+        await sessionStore.updateSession(sessionId.value, { playlistIds: persistedPlaylistIds() })
+      }
 
-    modifiedIds.value.clear()
+      modifiedIds.value.clear()
+      error.value = null
+      return true
+    } catch (err) {
+      // Match loadSession: catch, publish to `error` for the view's banner, never throw.
+      // modifiedIds is deliberately left intact — the buffer still holds the unsaved work, so
+      // the leave guard keeps warning and the user can retry rather than losing it silently.
+      error.value =
+        err instanceof Error ? `Could not save changes: ${err.message}` : 'Could not save changes.'
+      return false
+    }
   }
 
   /**
@@ -530,6 +573,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     trackList,
     hasUnsavedChanges,
     unassignedTrackIds,
+    issues,
     loadSession,
     addPlaylist,
     removePlaylist,

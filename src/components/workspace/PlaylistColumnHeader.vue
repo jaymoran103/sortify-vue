@@ -31,7 +31,15 @@ function onMenu(event: MouseEvent): void {
       <span class="playlist-col-header__name" :title="playlist.name">
         {{ playlist.name }}
       </span>
-      <span class="playlist-col-header__count">
+      <!-- An empty column is marked here, continuously, rather than sprung at exit. The
+           leave dialog only repeats it as a footnote, and only if it opened anyway. -->
+      <span
+        class="playlist-col-header__count"
+        :class="{ 'playlist-col-header__count--empty': playlist.trackIDs.length === 0 }"
+      >
+        <!-- Not aria-hidden: the glyph is what carries the warning to a screen reader,
+             since colour alone does not. -->
+        <span v-if="playlist.trackIDs.length === 0">⚠</span>
         {{ playlist.trackIDs.length }} track{{ playlist.trackIDs.length === 1 ? '' : 's' }}
       </span>
     </div>
@@ -87,6 +95,10 @@ function onMenu(event: MouseEvent): void {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   white-space: nowrap;
+}
+
+.playlist-col-header__count--empty {
+  color: var(--color-warning);
 }
 
 /* Ellipsis button: hidden until the column header is hovered. */
