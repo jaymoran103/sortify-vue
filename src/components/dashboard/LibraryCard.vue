@@ -99,7 +99,12 @@ async function openDeletePlaylists(): Promise<void> {
 }
 
 async function openDeleteTracks(): Promise<void> {
-  const ids = await modal.open<string[]>(TrackSelectModal, {})
+  // TrackSelectModal defaults to a neutral Confirm button — this flow is destructive,
+  // so it opts into the danger styling explicitly.
+  const ids = await modal.open<string[]>(TrackSelectModal, {
+    confirmLabel: 'Delete',
+    confirmVariant: 'danger',
+  })
   if (!ids?.length) return
   await trackStore.deleteTracks(ids)
 }

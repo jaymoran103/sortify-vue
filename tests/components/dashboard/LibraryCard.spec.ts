@@ -287,6 +287,18 @@ describe('LibraryCard', () => {
     expect(mockDeleteTracks).toHaveBeenCalledWith(['t1', 't2'])
   })
 
+  it('Delete Tracks passes explicit destructive props to TrackSelectModal', async () => {
+    mockModalOpen.mockResolvedValueOnce(['t1'])
+    const wrapper = mountCard()
+    await wrapper.find('[toggle-mode="management-menu"]').trigger('click')
+    const [, entries] = mockContextMenuShow.mock.calls[0] as [unknown, Array<{ label?: string; action?: () => void }>]
+    entries.find((e) => e.label === 'Delete Tracks…')?.action?.()
+    await flushPromises()
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { confirmLabel: string; confirmVariant: string }]
+    expect(props.confirmLabel).toBe('Delete')
+    expect(props.confirmVariant).toBe('danger')
+  })
+
   it('Delete Tracks action does nothing when modal is cancelled', async () => {
     mockModalOpen.mockResolvedValueOnce(null)
     const wrapper = mountCard()

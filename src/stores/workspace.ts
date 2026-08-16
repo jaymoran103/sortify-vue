@@ -39,6 +39,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const hasUnsavedChanges = computed(() => modifiedIds.value.size > 0)
 
+  // Tracks sitting in the workspace but in no playlist — stableOrder entries found in no
+  // playlist's trackIdSet. These exist only in the in-memory buffer: WorkspaceSession persists
+  // only playlistIds, so loadSession rebuilds the track set from playlist contents and these
+  // would not survive a reload. The leave guard warns about them for exactly that reason (D6).
+  const unassignedTrackIds = computed<string[]>(() =>
+    stableOrder.value.filter((id) => !playlists.value.some((p) => p.trackIdSet.has(id))),
+  )
+
   /**
    * Load a workspace session by ID. Clears any currently loaded session first.
    * Validates the ID, fetches session + playlists + tracks from IDB, and touches lastOpened.
@@ -340,7 +348,78 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   /**
-   * Toggle a track's membership in a playlist. 
+   * Set membership of many tracks in a single playlist to a desired state.
+   *
+   * Inputs: the target playlist, the track IDs to act on, and `member` — true adds any that
+   * are absent, false removes any that are present.
+   *
+   * Side effects: mutates the playlist's trackIDs and trackIdSet together, and adds the
+   * playlist to modifiedIds — but only when something actually changed, so a no-op call does
+   * not dirty the session. Does NOT touch stableOrder, so rows never move or disappear.
+   *
+   * No-op if the playlist is not in the workspace.
+   */
+  function setTracksInPlaylist(playlistId: PlaylistId, trackIds: string[], member: boolean): void {
+    const pl = playlists.value.find((p) => p.id === playlistId)
+    if (!pl) return
+
+    let changed = false
+
+    if (member) {
+      for (const tid of trackIds) {
+        if (!pl.trackIdSet.has(tid)) {
+          pl.trackIDs.push(tid)
+          pl.trackIdSet.add(tid)
+          changed = true
+        }
+      }
+    } else {
+      // Collect first, then filter once. Filtering per-id would be O(n·m) on large workspaces.
+      const removing = new Set(trackIds.filter((tid) => pl.trackIdSet.has(tid)))
+      if (removing.size > 0) {
+        pl.trackIDs = pl.trackIDs.filter((id) => !removing.has(id))
+        for (const tid of removing) pl.trackIdSet.delete(tid)
+        changed = true
+      }
+    }
+
+    if (changed) modifiedIds.value.add(playlistId)
+  }
+
+  /**
+   * Add tracks to the workspace buffer without assigning them to any playlist.
+   *
+   * Input: library track IDs. Records are fetched from IDB via getTracksByIds, mirroring how
+   * addPlaylist resolves novel tracks — the track store's reactive list is a liveQuery that
+   * starts empty, so it cannot be read synchronously here without dropping tracks.
+   *
+   * Side effects: extends the tracks Map and appends to stableOrder, so new rows render at the
+   * bottom. IDs already in the workspace, and IDs with no library record, are skipped.
+   *
+   * Deliberately does NOT touch modifiedIds: adding a track dirties no playlist. The leave
+   * guard covers the resulting data-loss window via unassignedTrackIds (design decision D6).
+   */
+  async function addTracksToWorkspace(trackIds: string[]): Promise<void> {
+    const novelIds = trackIds.filter((tid) => !tracks.value.has(tid))
+    if (novelIds.length === 0) return
+
+    const trackStore = useTrackStore()
+    const fetched = await trackStore.getTracksByIds(novelIds)
+    if (fetched.length === 0) return
+
+    const nextTracks = new Map(tracks.value)
+    for (const track of fetched) {
+      nextTracks.set(track.trackID, track)
+    }
+
+    tracks.value = nextTracks
+    // Extend from the fetched records, not the requested IDs, so an ID with no library
+    // record never lands in the display order without a matching entry in the tracks Map.
+    stableOrder.value = [...stableOrder.value, ...fetched.map((t) => t.trackID)]
+  }
+
+  /**
+   * Toggle a track's membership in a playlist.
    * 
    * Keeps trackIDs in sync within playlist lookup set and ordered array.
    * Marks the playlist as modified for dirty tracking.
@@ -450,6 +529,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     error,
     trackList,
     hasUnsavedChanges,
+    unassignedTrackIds,
     loadSession,
     addPlaylist,
     removePlaylist,
@@ -463,6 +543,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     bulkAddToAll,
     bulkRemoveFromAll,
     bulkRemoveFromWorkspace,
+    setTracksInPlaylist,
+    addTracksToWorkspace,
     toggleTrack,
     save,
     $reset,

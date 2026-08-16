@@ -30,6 +30,9 @@ export interface ModalConfig {
   className?: string
 }
 
+/** What AddContentModal resolves with — the card the user picked, not the work itself */
+export type AddContentChoice = 'tracks' | 'playlist' | 'new'
+
 /** Notification/toast for non-blocking feedback */
 export interface ToastConfig {
   message: string
