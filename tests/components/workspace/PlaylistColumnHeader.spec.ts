@@ -52,9 +52,10 @@ describe('PlaylistColumnHeader', () => {
       expect(wrapper.find('.playlist-col-header__count').text()).toBe('1 track')
     })
 
-    it('renders zero tracks as a plural', () => {
+    // Zero pluralises like any other count, and carries the empty marker alongside it.
+    it('renders zero tracks as a plural, with the empty marker', () => {
       const wrapper = mountHeader(makePlaylist(1, 'PL'))
-      expect(wrapper.find('.playlist-col-header__count').text()).toBe('0 tracks')
+      expect(wrapper.find('.playlist-col-header__count').text()).toBe('⚠ 0 tracks')
     })
 
     it('updates reactively when the playlist track list changes', async () => {
@@ -93,6 +94,31 @@ describe('PlaylistColumnHeader', () => {
     it('does not emit until a trigger fires', () => {
       const wrapper = mountHeader(makePlaylist(7, 'PL'))
       expect(wrapper.emitted('requestMenu')).toBeUndefined()
+    })
+  })
+
+  // ─── Empty marker ──────────────────────────────────────────────────────────
+  // An empty column is flagged here for the whole session, so the leave dialog is a
+  // summary of something already on screen rather than a surprise on the way out.
+
+  describe('empty playlist marker', () => {
+    it('marks a column with no tracks', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Morning Mix', []))
+      expect(wrapper.find('.playlist-col-header__count').classes()).toContain(
+        'playlist-col-header__count--empty',
+      )
+    })
+
+    it('leaves a populated column unmarked', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Morning Mix', ['t1']))
+      expect(wrapper.find('.playlist-col-header__count').classes()).not.toContain(
+        'playlist-col-header__count--empty',
+      )
+    })
+
+    it('still reports the count itself', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Morning Mix', []))
+      expect(wrapper.find('.playlist-col-header__count').text()).toContain('0 tracks')
     })
   })
 })

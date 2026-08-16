@@ -18,6 +18,7 @@
   --red-400: rgb(255, 113, 113);
   --blue-500: rgb(56, 120, 137);
   --blue-400: rgb(56, 207, 214);
+  --amber-400: rgb(217, 164, 65);
   /* ── Semantic Colors ── */
   --color-bg: var(--gray-900);
   --color-surface: var(--gray-850);
@@ -35,6 +36,8 @@
   --color-danger: var(--red-500);
   --color-danger-hover: var(--red-400);
   --color-info: var(--blue-500);
+  /* Advisory, not an error: a state the user probably did not mean, but nothing is broken. */
+  --color-warning: var(--amber-400);
 
   /* ── Interactive States ── */
   --color-row-hover: var(--gray-600);

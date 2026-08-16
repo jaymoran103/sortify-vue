@@ -5,9 +5,10 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { reactive, nextTick } from 'vue'
 import WorkspaceView from '@/components/workspace/WorkspaceView.vue'
 import AddContentModal from '@/components/workspace/AddContentModal.vue'
+import LeaveWorkspaceModal from '@/components/workspace/LeaveWorkspaceModal.vue'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 import type { Track } from '@/types/models'
-import type { MenuEntry, MenuItem, AddContentChoice } from '@/types/ui'
+import type { MenuEntry, MenuItem, AddContentChoice, WorkspaceIssue } from '@/types/ui'
 
 // ─── Mock workspace store ────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ const mockWorkspaceStore = reactive({
   setTracksInPlaylist: vi.fn(),
   addTracksToWorkspace: vi.fn().mockResolvedValue(undefined),
   unassignedTrackIds: [] as string[],
+  issues: [] as WorkspaceIssue[],
   $reset: vi.fn(),
 })
 
@@ -180,10 +182,15 @@ describe('WorkspaceView', () => {
       hasUnsavedChanges: false,
       tracks: new Map(),
       unassignedTrackIds: [],
+      issues: [],
     })
     mockWorkspaceStore.loadSession.mockResolvedValue(undefined)
     mockWorkspaceStore.toggleTrack.mockReset()
-    mockWorkspaceStore.save.mockResolvedValue(undefined)
+    // Reset before re-arming: mockResolvedValue alone leaves call history from prior tests,
+    // which made "did not save" assertions pass or fail on test order.
+    mockWorkspaceStore.save.mockReset()
+    // save() resolves true on success, false on a handled failure — never throws.
+    mockWorkspaceStore.save.mockResolvedValue(true)
     mockWorkspaceStore.renamePlaylist.mockReset()
     mockWorkspaceStore.removePlaylist.mockReset()
     mockWorkspaceStore.duplicatePlaylist.mockReset()
@@ -511,126 +518,187 @@ describe('WorkspaceView', () => {
   })
 
   // ─── Leave guard (W1-G / design decision D5) ───────────────────────────────
-  // One merged modal, fired only when something is actually at risk. Empty-playlist
-  // mentions are scoped to modifiedIds — playlists this session actually touched.
+  // Which conditions exist is decided by utils/workspaceIssues.ts and covered in its own
+  // spec. What this view owns is policy: loss blocks, quality never does, and the dialog
+  // offers only the actions that can answer what it reports.
 
   describe('leave guard', () => {
-    it('leaves silently when a pre-existing empty playlist was never touched', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist(1, 'Empty', [])]
-      mockWorkspaceStore.modifiedIds = new Set()
-      mockWorkspaceStore.hasUnsavedChanges = false
+    function lossIssue(code: WorkspaceIssue['code'], message: string): WorkspaceIssue {
+      return { code, severity: 'loss', message, ids: [] }
+    }
+
+    function qualityIssue(message: string): WorkspaceIssue {
+      return { code: 'empty-playlist', severity: 'quality', message, ids: [] }
+    }
+
+    type LeaveProps = { lossMessages: string[]; qualityMessages: string[]; canSave: boolean }
+
+    function leaveModalProps(): LeaveProps {
+      const [component, props] = mockModalOpen.mock.calls[0] as [unknown, LeaveProps]
+      expect(component).toBe(LeaveWorkspaceModal)
+      return props
+    }
+
+    it('leaves silently when nothing is at risk', async () => {
+      mockWorkspaceStore.issues = []
       await mountViaRouter()
       await router.push('/dashboard')
       expect(mockModalOpen).not.toHaveBeenCalled()
       expect(router.currentRoute.value.path).toBe('/dashboard')
     })
 
-    it('warns about unsaved changes only, when no touched playlist is empty', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist(1, 'Has tracks', ['t1'])]
-      mockWorkspaceStore.modifiedIds = new Set([1])
-      mockWorkspaceStore.hasUnsavedChanges = true
-      mockModalOpen.mockResolvedValueOnce(true)
+    // Quality issues are marked in the column header all session and cannot be fixed from
+    // this dialog, so they never gate the exit on their own.
+    it('does not open the dialog for quality issues alone', async () => {
+      mockWorkspaceStore.issues = [qualityIssue('"Morning Mix" has no tracks.')]
       await mountViaRouter()
       await router.push('/dashboard')
-      expect(mockModalOpen).toHaveBeenCalledOnce()
-      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
-      expect(props.message).toContain('unsaved changes')
-      expect(props.message).not.toContain('no tracks')
+      expect(mockModalOpen).not.toHaveBeenCalled()
+      expect(router.currentRoute.value.path).toBe('/dashboard')
     })
 
-    it('names a playlist that this session created and left empty', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist('pending-1', 'New Mix', [])]
-      mockWorkspaceStore.modifiedIds = new Set(['pending-1'])
-      mockWorkspaceStore.hasUnsavedChanges = true
-      mockModalOpen.mockResolvedValueOnce(true)
-      await mountViaRouter()
-      await router.push('/dashboard')
-      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
-      expect(props.message).toContain('"New Mix"')
-      expect(props.message).toContain('has no tracks')
-    })
-
-    it('does not mention an untouched empty playlist alongside unrelated edits', async () => {
-      mockWorkspaceStore.playlists = [
-        makePlaylist(1, 'Untouched Empty', []),
-        makePlaylist(2, 'Edited', ['t1']),
+    it('opens one dialog listing every loss issue', async () => {
+      mockWorkspaceStore.issues = [
+        lossIssue('unsaved-changes', 'You have unsaved changes.'),
+        lossIssue('unassigned-tracks', '"Orphan" is in no playlist and will be discarded.'),
       ]
-      mockWorkspaceStore.modifiedIds = new Set([2])
-      mockWorkspaceStore.hasUnsavedChanges = true
-      mockModalOpen.mockResolvedValueOnce(true)
-      await mountViaRouter()
-      await router.push('/dashboard')
-      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
-      expect(props.message).not.toContain('Untouched Empty')
-    })
-
-    it('lists multiple emptied playlists with a count', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
-      mockWorkspaceStore.modifiedIds = new Set([1, 2])
-      mockWorkspaceStore.hasUnsavedChanges = true
-      mockModalOpen.mockResolvedValueOnce(true)
-      await mountViaRouter()
-      await router.push('/dashboard')
-      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
-      expect(props.message).toContain('2 playlists have no tracks')
-    })
-
-    it('shows exactly one modal when both conditions hold', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist('pending-1', 'New Mix', [])]
-      mockWorkspaceStore.modifiedIds = new Set(['pending-1'])
-      mockWorkspaceStore.hasUnsavedChanges = true
-      mockModalOpen.mockResolvedValueOnce(true)
+      mockModalOpen.mockResolvedValueOnce('leave')
       await mountViaRouter()
       await router.push('/dashboard')
       expect(mockModalOpen).toHaveBeenCalledOnce()
+      expect(leaveModalProps().lossMessages).toEqual([
+        'You have unsaved changes.',
+        '"Orphan" is in no playlist and will be discarded.',
+      ])
     })
 
-    it('stays on the page when the warning is dismissed', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist(1, 'Edited', ['t1'])]
-      mockWorkspaceStore.modifiedIds = new Set([1])
-      mockWorkspaceStore.hasUnsavedChanges = true
+    it('passes quality issues separately, as a footnote', async () => {
+      mockWorkspaceStore.issues = [
+        lossIssue('unsaved-changes', 'You have unsaved changes.'),
+        qualityIssue('"Morning Mix" has no tracks.'),
+      ]
+      mockModalOpen.mockResolvedValueOnce('leave')
+      await mountViaRouter()
+      await router.push('/dashboard')
+      const props = leaveModalProps()
+      expect(props.lossMessages).toEqual(['You have unsaved changes.'])
+      expect(props.qualityMessages).toEqual(['"Morning Mix" has no tracks.'])
+    })
+
+    it('offers saving when there are unsaved changes', async () => {
+      mockWorkspaceStore.issues = [lossIssue('unsaved-changes', 'You have unsaved changes.')]
+      mockModalOpen.mockResolvedValueOnce('leave')
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(leaveModalProps().canSave).toBe(true)
+    })
+
+    // Saving cannot rescue unassigned tracks — they are discarded either way — so the action
+    // is withheld rather than promising something it does not do.
+    it('does not offer saving when the only loss is unassigned tracks', async () => {
+      mockWorkspaceStore.issues = [
+        lossIssue('unassigned-tracks', '"Orphan" is in no playlist and will be discarded.'),
+      ]
+      mockModalOpen.mockResolvedValueOnce('leave')
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(leaveModalProps().canSave).toBe(false)
+    })
+
+    it('saves before navigating when the user chooses save', async () => {
+      mockWorkspaceStore.issues = [lossIssue('unsaved-changes', 'You have unsaved changes.')]
+      mockModalOpen.mockResolvedValueOnce('save')
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(mockWorkspaceStore.save).toHaveBeenCalled()
+      expect(router.currentRoute.value.path).toBe('/dashboard')
+    })
+
+    it('navigates without saving when the user chooses leave', async () => {
+      mockWorkspaceStore.issues = [lossIssue('unsaved-changes', 'You have unsaved changes.')]
+      mockModalOpen.mockResolvedValueOnce('leave')
+      await mountViaRouter()
+      await router.push('/dashboard')
+      expect(mockWorkspaceStore.save).not.toHaveBeenCalled()
+      expect(router.currentRoute.value.path).toBe('/dashboard')
+    })
+
+    it('stays on the page when the dialog is dismissed', async () => {
+      mockWorkspaceStore.issues = [lossIssue('unsaved-changes', 'You have unsaved changes.')]
       mockModalOpen.mockResolvedValueOnce(null)
       await mountViaRouter()
       await router.push('/dashboard')
       expect(router.currentRoute.value.path).toBe('/workspace')
+      expect(mockWorkspaceStore.$reset).not.toHaveBeenCalled()
     })
 
-    // ─── Unassigned tracks (design decision D6) ──────────────────────────────
-    // Adding tracks dirties no playlist, so without this clause the guard would not
-    // fire at all for an add-then-abandon flow.
-
-    it('warns about tracks assigned to no playlist', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', ['t1'])]
-      mockWorkspaceStore.modifiedIds = new Set()
-      mockWorkspaceStore.hasUnsavedChanges = false
-      mockWorkspaceStore.unassignedTrackIds = ['t9', 't8']
-      mockModalOpen.mockResolvedValueOnce(true)
+    // A failed save must not be followed by navigation: leaving would discard the very work
+    // the user chose to keep. The store reports the reason through its error banner.
+    it('stays on the page when Save & leave fails to save', async () => {
+      mockWorkspaceStore.issues = [lossIssue('unsaved-changes', 'You have unsaved changes.')]
+      mockModalOpen.mockResolvedValueOnce('save')
+      mockWorkspaceStore.save.mockResolvedValueOnce(false)
       await mountViaRouter()
       await router.push('/dashboard')
-      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
-      expect(props.message).toContain('2 tracks are not in any playlist')
-    })
-
-    it('uses the singular form for one unassigned track', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL', ['t1'])]
-      mockWorkspaceStore.modifiedIds = new Set()
-      mockWorkspaceStore.hasUnsavedChanges = false
-      mockWorkspaceStore.unassignedTrackIds = ['t9']
-      mockModalOpen.mockResolvedValueOnce(true)
-      await mountViaRouter()
-      await router.push('/dashboard')
-      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
-      expect(props.message).toContain('1 track is not in any playlist')
+      expect(mockWorkspaceStore.save).toHaveBeenCalled()
+      expect(router.currentRoute.value.path).toBe('/workspace')
+      expect(mockWorkspaceStore.$reset).not.toHaveBeenCalled()
     })
 
     it('resets the store when leaving is confirmed', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist(1, 'Edited', ['t1'])]
-      mockWorkspaceStore.modifiedIds = new Set([1])
-      mockWorkspaceStore.hasUnsavedChanges = true
-      mockModalOpen.mockResolvedValueOnce(true)
+      mockWorkspaceStore.issues = [lossIssue('unsaved-changes', 'You have unsaved changes.')]
+      mockModalOpen.mockResolvedValueOnce('leave')
       await mountViaRouter()
       await router.push('/dashboard')
       expect(mockWorkspaceStore.$reset).toHaveBeenCalled()
+    })
+  })
+
+  // ─── Refresh / tab close ───────────────────────────────────────────────────
+  // The route guard cannot see either. Browsers supply their own prompt text, so all this
+  // decides is whether to prompt at all.
+
+  describe('beforeunload', () => {
+    function dispatchBeforeUnload(): Event {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event
+    }
+
+    it('prompts while a loss issue exists', () => {
+      mockWorkspaceStore.issues = [
+        { code: 'unsaved-changes', severity: 'loss', message: 'x', ids: [] },
+      ]
+      const wrapper = mountWorkspace()
+      expect(dispatchBeforeUnload().defaultPrevented).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('does not prompt for quality issues alone', () => {
+      mockWorkspaceStore.issues = [
+        { code: 'empty-playlist', severity: 'quality', message: 'x', ids: [] },
+      ]
+      const wrapper = mountWorkspace()
+      expect(dispatchBeforeUnload().defaultPrevented).toBe(false)
+      wrapper.unmount()
+    })
+
+    // Asserted through the listener contract rather than by dispatching: other tests in this
+    // file mount without unmounting, so their still-registered handlers read the same mock
+    // store and would answer for this one.
+    it('removes its listener on unmount', () => {
+      const add = vi.spyOn(window, 'addEventListener')
+      const remove = vi.spyOn(window, 'removeEventListener')
+
+      const wrapper = mountWorkspace()
+      const handler = add.mock.calls.find(([type]) => type === 'beforeunload')?.[1]
+      expect(handler).toBeDefined()
+
+      wrapper.unmount()
+      expect(remove).toHaveBeenCalledWith('beforeunload', handler)
+
+      add.mockRestore()
+      remove.mockRestore()
     })
   })
 
@@ -803,6 +871,43 @@ describe('WorkspaceView', () => {
       const wrapper = mountWorkspace()
       await openColumnMenu(wrapper)
       findMenuAction('Remove from Workspace')?.()
+      expect(mockWorkspaceStore.removePlaylist).toHaveBeenCalledWith(7)
+    })
+
+    // removePlaylist drops the playlist from modifiedIds, so its buffered edits go with it.
+    // Correct semantics, but it used to happen silently and no later warning could cover it.
+    it('confirms before removing a playlist with unsaved edits', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(7, 'Edited', [])]
+      mockWorkspaceStore.modifiedIds = new Set([7])
+      mockModalOpen.mockResolvedValueOnce(true)
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Remove from Workspace')?.()
+      await flushPromises()
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+      expect(props.message).toContain('"Edited"')
+      expect(mockWorkspaceStore.removePlaylist).toHaveBeenCalledWith(7)
+    })
+
+    it('keeps the playlist when the discard confirmation is declined', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(7, 'Edited', [])]
+      mockWorkspaceStore.modifiedIds = new Set([7])
+      mockModalOpen.mockResolvedValueOnce(null)
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Remove from Workspace')?.()
+      await flushPromises()
+      expect(mockWorkspaceStore.removePlaylist).not.toHaveBeenCalled()
+    })
+
+    it('does not confirm when the playlist has no unsaved edits', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(7, 'Clean', [])]
+      mockWorkspaceStore.modifiedIds = new Set()
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+      findMenuAction('Remove from Workspace')?.()
+      await flushPromises()
+      expect(mockModalOpen).not.toHaveBeenCalled()
       expect(mockWorkspaceStore.removePlaylist).toHaveBeenCalledWith(7)
     })
 

@@ -1,4 +1,5 @@
 import type { Component } from 'vue'
+import type { PlaylistId, Track, WorkspacePlaylist } from '@/types/models'
 
 /** Generic filter function — consumers define domain-specific matching logic */
 export type FilterFn<T> = (item: T, query: string) => boolean
@@ -32,6 +33,33 @@ export interface ModalConfig {
 
 /** What AddContentModal resolves with — the card the user picked, not the work itself */
 export type AddContentChoice = 'tracks' | 'playlist' | 'new'
+
+/** What LeaveWorkspaceModal resolves with; null (dismissed) means stay */
+export type LeaveChoice = 'save' | 'leave'
+
+/**
+ * How bad a workspace condition is, not where it is shown.
+ *   loss    - leaving destroys work. Blocks the exit.
+ *   quality - the state is probably not what the user meant. Never blocks.
+ */
+export type IssueSeverity = 'loss' | 'quality'
+
+/** One reported condition of the workspace. See utils/workspaceIssues.ts */
+export interface WorkspaceIssue {
+  code: 'unsaved-changes' | 'unassigned-tracks' | 'empty-playlist'
+  severity: IssueSeverity
+  message: string
+  /** Playlist or track ids the issue concerns, for consumers that highlight them */
+  ids: string[]
+}
+
+/** Plain state the issue rules read — no store, so the rules stay pure and testable */
+export interface WorkspaceSnapshot {
+  playlists: WorkspacePlaylist[]
+  modifiedIds: Set<PlaylistId>
+  stableOrder: string[]
+  tracks: Map<string, Track>
+}
 
 /** Notification/toast for non-blocking feedback */
 export interface ToastConfig {
