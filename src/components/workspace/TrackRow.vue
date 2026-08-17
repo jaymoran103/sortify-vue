@@ -17,9 +17,12 @@ defineEmits<{
 </script>
 
 <template>
+  <!-- Shift-click extends the document selection before any handler runs, and user-select
+       does not stop it — so a shift-click on a row is denied its default outright. -->
   <div
     class="track-row"
     :class="{ 'track-row--selected': selected }"
+    @mousedown.shift.prevent
     @click="$emit('select', track.trackID, $event)"
     @contextmenu.prevent="$emit('contextMenu', track.trackID, $event)"
   >
@@ -75,7 +78,7 @@ defineEmits<{
   height: 48px;
   border-bottom: 1px solid var(--color-border-subtle);
   cursor: default;
-  user-select: none;
+  /* Text selection is suppressed for the whole view by .no-text-select on the workspace root. */
 }
 
 .track-row:hover {

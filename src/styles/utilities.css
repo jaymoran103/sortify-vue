@@ -273,6 +273,11 @@
   gap: var(--space-3);
 }
 
+/* For a three-option picker; the modal it sits in widens to match. */
+.source-card-grid--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .source-card {
   display: flex;
   flex-direction: column;
@@ -320,6 +325,17 @@
   padding: 2px 8px;
   border-radius: var(--radius-full);
   line-height: 1.4;
+}
+
+/* ── Selection ── */
+
+/* For surfaces where clicking is selection of rows, not of text: the workspace table and
+   the selector dialogs. Drag-select and shift-click both leave stray highlights otherwise.
+   Note this alone does not stop shift-click extending an existing selection — the rows
+   that handle shift-click also guard mousedown. */
+.no-text-select {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ── Accessibility ── */
