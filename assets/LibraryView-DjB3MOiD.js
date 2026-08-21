@@ -1,0 +1,1 @@
+import{_ as r}from"./index-B-0ZLU4q.js";import{U as o,Y as s,Z as t}from"./pendingIntent-tggqvDQu.js";const a={},n={class:"library-view"};function c(i,e){return o(),s("div",n,[...e[0]||(e[0]=[t("h1",null,"Library Module",-1)])])}const d=r(a,[["render",c]]);export{d as default};
