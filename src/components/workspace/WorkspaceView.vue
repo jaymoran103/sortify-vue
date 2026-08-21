@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -9,16 +9,20 @@ import { useListSort } from '@/composables/useListSort'
 import { useListSelection } from '@/composables/useListSelection'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
+import { openSpotifyURI, copyToClipboard } from '@/utils/spotifyLinks'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import PromptModal from '@/components/modals/PromptModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
+import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import TrackRow from './TrackRow.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
-import type { Track } from '@/types/models'
-import type { SortOption, MenuEntry } from '@/types/ui'
+import AddContentModal from './AddContentModal.vue'
+import LeaveWorkspaceModal from './LeaveWorkspaceModal.vue'
+import type { Track, PlaylistId, WorkspacePlaylist } from '@/types/models'
+import type { SortOption, MenuEntry, AddContentChoice, LeaveChoice } from '@/types/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,13 +30,97 @@ const workspaceStore = useWorkspaceStore()
 const modal = useModal()
 const ctx = useContextMenu()
 
-// Sort options for workspace tracks.
-const sortOptions: SortOption<Track>[] = [
+// trackID → number of workspace playlists containing it.
+// Memoized because the "Most Playlists" comparator would otherwise re-scan every playlist for
+// both operands on every comparison — O(n log n × 2P). One pass per playlist change instead.
+// Read inside compareFn at sort time, so it always reflects current membership.
+const playlistCountMap = computed<Map<string, number>>(() => {
+  const counts = new Map<string, number>()
+  for (const pl of workspaceStore.playlists) {
+    for (const tid of pl.trackIdSet) {
+      counts.set(tid, (counts.get(tid) ?? 0) + 1)
+    }
+  }
+  return counts
+})
+
+// Sort options always available for workspace tracks.
+const staticSortOptions: SortOption<Track>[] = [
   { key: 'order-added', label: 'Order Added', compareFn: () => 0 },
   { key: 'title', label: 'Title', compareFn: (a, b) => a.title.localeCompare(b.title) },
   { key: 'artist', label: 'Artist', compareFn: (a, b) => a.artist.localeCompare(b.artist) },
   { key: 'album', label: 'Album', compareFn: (a, b) => a.album.localeCompare(b.album) },
+  {
+    key: 'most-playlists',
+    label: 'Most Playlists',
+    compareFn: (a, b) =>
+      (playlistCountMap.value.get(b.trackID) ?? 0) - (playlistCountMap.value.get(a.trackID) ?? 0),
+  },
 ]
+
+// The playlist whose order is currently driving the sort, or null when that sort is inactive.
+//
+// Held by object reference, not by id, because a playlist id is not stable for the lifetime of
+// the sort: save() resolves a workspace-created playlist by writing it to IDB and patching
+// `pl.id` from `pending-N` to the real auto-increment number — mutating the same object. An id
+// captured here went stale at exactly that moment, the lookup below failed, the dynamic option
+// vanished, and useListSort's fallback silently reordered the view to Order Added mid-session.
+// The object survives the event that invalidates the id, so it is the stabler handle.
+//
+// shallowRef because this is an identity handle: the playlist's own reactivity comes from the
+// store, and deep-tracking a copy of it here would be redundant.
+const playlistSortTarget = shallowRef<WorkspacePlaylist | null>(null)
+
+// Resolve the target to the live store entry, or null once it has left the workspace. Identity
+// comparison rather than id, for the reason above.
+const activeSortPlaylist = computed<WorkspacePlaylist | null>(
+  () => workspaceStore.playlists.find((p) => p === playlistSortTarget.value) ?? null,
+)
+
+// The option's key is likewise id-free: nothing parses this string, and its only consumer is the
+// equality check in the watcher below.
+const PLAYLIST_SORT_KEY = 'playlist:active'
+
+// trackID → position within the sort-driving playlist, or null when that sort is inactive.
+// Memoized for the same reason as playlistCountMap (D7): the comparator ran indexOf over
+// trackIDs for both operands on every comparison, measured at ~35ms to sort a 3000-track
+// workspace against a 1500-track playlist. Reads pl.trackIDs, so it invalidates when
+// membership changes and the order stays consistent with what the column shows.
+const playlistSortPositions = computed<Map<string, number> | null>(() => {
+  const pl = activeSortPlaylist.value
+  if (!pl) return null
+  return new Map(pl.trackIDs.map((id, index) => [id, index]))
+})
+
+/**
+ * Order tracks by their position within the sort-driving playlist.
+ * Members sort ahead of non-members, in playlist order; non-members keep their relative
+ * order. A no-op while the playlist is absent from the workspace.
+ */
+function comparePlaylistOrder(a: Track, b: Track): number {
+  const positions = playlistSortPositions.value
+  if (!positions) return 0
+  // A missing entry means a non-member, which would sort first at -1 — map to Infinity
+  // so non-members fall to the bottom instead.
+  return (positions.get(a.trackID) ?? Infinity) - (positions.get(b.trackID) ?? Infinity)
+}
+
+// Static options plus, when active, a dynamic entry for the chosen playlist. Passing this
+// computed (rather than a plain array) to useListSort is why D2 widened that signature.
+// When the sorted playlist leaves the workspace the entry disappears and useListSort's
+// unknown-key fallback drops the view back to the first static option.
+const sortOptions = computed<SortOption<Track>[]>(() => {
+  const pl = activeSortPlaylist.value
+  if (!pl) return staticSortOptions
+  return [
+    ...staticSortOptions,
+    {
+      key: PLAYLIST_SORT_KEY,
+      label: `Playlist: ${pl.name}`,
+      compareFn: comparePlaylistOrder,
+    },
+  ]
+})
 
 // Chain: trackList -> filtered -> sorted -> displayTracks
 const { query, filtered } = useListFilter<Track>(
@@ -47,6 +135,26 @@ const { query, filtered } = useListFilter<Track>(
   },
 )
 const { currentSort, sorted: displayTracks } = useListSort<Track>(filtered, sortOptions)
+
+// Retire the dynamic playlist option as soon as the user picks a static sort, so a stale
+// "Playlist: X" entry does not linger in the dropdown.
+watch(currentSort, (key) => {
+  if (playlistSortTarget.value !== null && key !== PLAYLIST_SORT_KEY) {
+    playlistSortTarget.value = null
+  }
+})
+
+/**
+ * Activate the playlist-order sort for one column, adding its dynamic option and selecting it.
+ * Resolves the id to the live playlist object once, here, and holds that. No-op if the
+ * playlist is not in the workspace. Side effect: sets playlistSortTarget and currentSort.
+ */
+function handleSortByPlaylist(playlistId: PlaylistId): void {
+  const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
+  if (!pl) return
+  playlistSortTarget.value = pl
+  currentSort.value = PLAYLIST_SORT_KEY
+}
 
 // Row selection: single-click selects, shift extends, cmd togglesss.
 // validItems uses full trackList so filter changes do not deselect.
@@ -77,50 +185,92 @@ const virtualizer = useVirtualizer(
 )
 // On component mount, load the session based on the 'session' query parameter.
 onMounted(async () => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
   await workspaceStore.loadSession(Number(route.query.session))
 })
 
 // Reset store before unmounting to clear session data and avoid flash of stale content if user quickly opens another session.
 onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
   workspaceStore.$reset()
 })
 
-// Before navigating away from the workspace, check for unsaved changes and warn user if necessary.
-onBeforeRouteLeave(async (_to, _from, next) => {
+// Conditions that make leaving cost something. The rules live in utils/workspaceIssues.ts;
+// this view only decides what each severity does — loss blocks, quality is a footnote.
+const lossIssues = computed(() => workspaceStore.issues.filter((i) => i.severity === 'loss'))
+const qualityIssues = computed(() => workspaceStore.issues.filter((i) => i.severity === 'quality'))
 
-  // If there are no unsaved changes, reset the store and navigate away.
-  if (!workspaceStore.hasUnsavedChanges) {
+/**
+ * Warn before navigating away, but only when leaving actually costs something.
+ *
+ * Quality issues never gate the exit: an empty playlist is marked in its column header for
+ * the whole session, and nothing in this dialog could fix one. They ride along as a footnote
+ * when a loss issue has already opened it, and are silent otherwise.
+ *
+ * Side effects: may open a modal, may save, resets the store on the way out.
+ */
+onBeforeRouteLeave(async (_to, _from, next) => {
+  // Nothing at risk — reset the store and navigate away without interrupting.
+  if (lossIssues.value.length === 0) {
     workspaceStore.$reset()
     next()
     return
   }
 
-  // Build and show confirmation modal if there are unsaved changes, await user response.
-  // FUTURE: Give option to save changes here as well.
-  const confirmed = await modal.open<true>(ConfirmModal, {
-    title: 'Unsaved Changes',
-    message: 'You have unsaved changes. Leave without saving?',
-    confirmLabel: 'Leave',
-    cancelLabel: 'Stay',
+  const choice = await modal.open<LeaveChoice>(LeaveWorkspaceModal, {
+    lossMessages: lossIssues.value.map((i) => i.message),
+    qualityMessages: qualityIssues.value.map((i) => i.message),
+    // Saving resolves unsaved changes and nothing else; unassigned tracks are discarded
+    // either way, so the action is offered only when there is something to save.
+    canSave: lossIssues.value.some((i) => i.code === 'unsaved-changes'),
   })
 
-  // If confirmed, reset the store and navigate away. Otherwise stay on page.
-  if (confirmed) {
-    workspaceStore.$reset()
-    next()
-  } else {
+  if (choice === null) {
     next(false)
+    return
   }
+
+  // Leaving after a failed save would discard the very work the user chose to keep, so stay
+  // put and let the error banner explain why. The buffer is untouched, so they can retry.
+  if (choice === 'save' && !(await handleSave())) {
+    next(false)
+    return
+  }
+
+  workspaceStore.$reset()
+  next()
 })
+
+/**
+ * Ask the browser to confirm a refresh or tab close while work is at risk.
+ *
+ * The route guard cannot see either. Browsers show their own generic prompt — the message
+ * is not ours to write — so this only decides whether to prompt at all.
+ */
+function handleBeforeUnload(event: BeforeUnloadEvent): void {
+  if (lossIssues.value.length > 0) {
+    event.preventDefault()
+  }
+}
 
 // Navigate back to the main app view. Currently specifying as dashboard, since the root page is currently the about view.
 function goBack(): void {
   router.push({ name: 'dashboard' }) 
 }
 
+// Time of the most recent successful save, formatted for display. Deliberately
+// component-local: it dies with the component on unmount, which is the correct lifecycle
+// for it, so no reset wiring is needed.
+const lastSavedTime = ref<string | null>(null)
+
 // Handle save action: call the store's save method, which persists the session to IndexedDB.
-async function handleSave(): Promise<void> {
-  await workspaceStore.save()
+// Stamps lastSavedTime only on success, so the label never claims a save that failed — the
+// store reports failure by returning false and publishing the reason to workspaceStore.error.
+// Returns whether the save succeeded, which the leave guard uses to decide about navigating.
+async function handleSave(): Promise<boolean> {
+  const saved = await workspaceStore.save()
+  if (saved) lastSavedTime.value = new Date().toLocaleTimeString()
+  return saved
 }
 
 // Helper to get track at a given virtualizer row index from the filtered+sorted displayTracks list.
@@ -132,7 +282,7 @@ function trackAt(index: number): Track {
 
 // ─── Playlist column action handlers ────────────────────────────────────────
 
-async function handleRename(playlistId: number | string): Promise<void> {
+async function handleRename(playlistId: PlaylistId): Promise<void> {
   const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
   if (!pl) return
   const newName = await modal.open<string>(PromptModal, {
@@ -146,12 +296,105 @@ async function handleRename(playlistId: number | string): Promise<void> {
   }
 }
 
-function handleRemove(playlistId: number | string): void {
+/**
+ * Remove a playlist from the workspace, confirming first when that discards buffered edits.
+ *
+ * removePlaylist drops the playlist from modifiedIds, so any unsaved rename or membership
+ * change to it goes with it. That is the right semantics — "remove" should not apply edits
+ * on the way out — but it was silent, and no leave warning could cover it afterwards.
+ */
+async function handleRemove(playlistId: PlaylistId): Promise<void> {
+  const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
+  if (!pl) return
+
+  if (workspaceStore.modifiedIds.has(playlistId)) {
+    const confirmed = await modal.open<true>(ConfirmModal, {
+      title: 'Remove Playlist',
+      message: `"${pl.name}" has unsaved changes. Remove it from the workspace and discard them?`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Cancel',
+    })
+    if (!confirmed) return
+  }
+
   workspaceStore.removePlaylist(playlistId)
 }
 
-function handleDuplicate(playlistId: number | string): void {
+function handleDuplicate(playlistId: PlaylistId): void {
   workspaceStore.duplicatePlaylist(playlistId)
+}
+
+/**
+ * Set membership of every currently visible track in one playlist.
+ *
+ * Operates on displayTracks — the post-filter, post-sort list — so a search narrows the
+ * action to what is on screen, matching vanilla. Side effect: mutates the workspace buffer
+ * via the store; hidden tracks are left untouched.
+ */
+function handleSetAllInPlaylist(playlistId: PlaylistId, member: boolean): void {
+  workspaceStore.setTracksInPlaylist(
+    playlistId,
+    displayTracks.value.map((t) => t.trackID),
+    member,
+  )
+}
+
+/**
+ * Assemble and show the context menu for one playlist column.
+ *
+ * Inputs: the requesting playlist's id, and the originating mouse event used to position
+ * the menu. Side effect: opens the shared context menu via useContextMenu().show().
+ *
+ * This is the single assembly point for the column menu. It lives here rather than in
+ * PlaylistColumnHeader because upcoming entries depend on state only this view owns —
+ * the filtered track count, the active sort, and Spotify URIs (design decision D1).
+ * No-ops if the playlist is no longer in the workspace.
+ */
+function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
+  const index = workspaceStore.playlists.findIndex((p) => p.id === playlistId)
+  if (index === -1) return
+
+  // Bulk membership acts on what the user can currently see. The label says so explicitly:
+  // these edits are buffered until Save and have no per-action undo, so naming the scope at
+  // click time is the cheap safeguard against a filtered "select all" surprising someone.
+  //
+  // "Filtered" is derived from the visible count rather than from `query`, because the query
+  // ref updates immediately while useListFilter debounces by 200ms. Reading `query` here
+  // would let the label claim a scope the action would not actually apply.
+  const visibleCount = displayTracks.value.length
+  const isFiltered = visibleCount < workspaceStore.trackList.length
+  const scope = isFiltered ? `${visibleCount} visible tracks` : `all ${visibleCount} tracks`
+
+  const items: MenuEntry[] = [
+    { label: `Add ${scope}`, action: () => handleSetAllInPlaylist(playlistId, true) },
+    { label: `Remove ${scope}`, action: () => handleSetAllInPlaylist(playlistId, false) },
+    { label: 'Sort by this Playlist', action: () => handleSortByPlaylist(playlistId) },
+    { divider: true },
+    { label: 'Rename', action: () => void handleRename(playlistId) },
+    { label: 'Duplicate', action: () => handleDuplicate(playlistId) },
+  ]
+
+  // Move entries are offered only where there is somewhere to move to. The view knows each
+  // playlist's index already, so the header no longer needs canMoveLeft/canMoveRight props.
+  if (index > 0) {
+    items.push({ label: 'Move Left', action: () => workspaceStore.movePlaylist(playlistId, -1) })
+  }
+  if (index < workspaceStore.playlists.length - 1) {
+    items.push({ label: 'Move Right', action: () => workspaceStore.movePlaylist(playlistId, 1) })
+  }
+
+  items.push({ divider: true })
+  items.push({ label: 'Remove from Workspace', action: () => void handleRemove(playlistId) })
+
+  // Spotify entries only for playlists that came from Spotify and carry a URI.
+  const playlistURI = workspaceStore.playlists[index]?.playlistURI
+  if (playlistURI) {
+    items.push({ divider: true })
+    items.push({ label: 'Open in Spotify', action: () => openSpotifyURI(playlistURI) })
+    items.push({ label: 'Copy Playlist ID', action: () => void copyToClipboard(playlistURI) })
+  }
+
+  ctx.show(event, items)
 }
 
 // ─── Row selection + context menu handlers ────────────────────
@@ -175,6 +418,21 @@ function handleTrackContextMenu(trackId: string, event: MouseEvent): void {
     items.push({ label: 'Remove from All Playlists', action: () => handleRemoveFromAll(trackId) })
     items.push({ divider: true })
     items.push({ label: 'Remove from Workspace', action: () => handleDeleteTrack(trackId) })
+
+    // Prefer the explicit spotifyURI field; fall back to the trackID when that is itself a
+    // Spotify track URI, which is how Spotify-imported tracks are keyed. Track carries an
+    // index signature, so narrow with typeof rather than asserting.
+    // Kept inside the single-selection branch: there is no meaningful "open several tracks".
+    const track = workspaceStore.tracks.get(trackId)
+    const spotifyURI =
+      (typeof track?.spotifyURI === 'string' ? track.spotifyURI : undefined) ??
+      (trackId.startsWith('spotify:track:') ? trackId : undefined)
+
+    if (spotifyURI) {
+      items.push({ divider: true })
+      items.push({ label: 'Open in Spotify', action: () => openSpotifyURI(spotifyURI) })
+      items.push({ label: 'Copy Track ID', action: () => void copyToClipboard(spotifyURI) })
+    }
   } else {
     items.push({
       label: `Add ${selectedCount} Tracks to All Playlists`,
@@ -242,7 +500,33 @@ async function handleBulkDelete(): Promise<void> {
   }
 }
 
-// ─── Add playlist / create playlist ──────────────
+// ─── Add content flow + handlers ──────────────
+
+/**
+ * Run the add-content flow behind the control bar's single Add button.
+ *
+ * Opens AddContentModal, then hands off to the picker for whichever card was chosen. No
+ * side effects of its own — each branch below owns its own modal and store call. Resolving
+ * to null (cancelled, or dismissed) ends the flow.
+ *
+ * Two dialogs deep by design: the card grid is step one of the same shape Import and Export
+ * use, so the workspace asks the question the same way the rest of the app does.
+ */
+async function handleAddContent(): Promise<void> {
+  const choice = await modal.open<AddContentChoice>(AddContentModal)
+
+  switch (choice) {
+    case 'tracks':
+      await handleAddTracks()
+      break
+    case 'playlist':
+      await handleAddPlaylistToWorkspace()
+      break
+    case 'new':
+      await handleCreatePlaylist()
+      break
+  }
+}
 
 async function handleAddPlaylistToWorkspace(): Promise<void> {
   const result = await modal.open<number[]>(PlaylistSelectModal, { mode: 'export' })
@@ -253,10 +537,32 @@ async function handleAddPlaylistToWorkspace(): Promise<void> {
   }
 }
 
+/**
+ * Add library tracks to the workspace without assigning them to a playlist.
+ *
+ * Opens TrackSelectModal with the workspace's current track IDs excluded, so the picker only
+ * offers genuine additions — that exclusion replaces the "no new tracks" pre-check the
+ * original spec described. Side effect: extends the workspace buffer via the store.
+ */
+async function handleAddTracks(): Promise<void> {
+  const selectedIds = await modal.open<string[]>(TrackSelectModal, {
+    excludeIds: [...workspaceStore.tracks.keys()],
+    confirmLabel: 'Add',
+    confirmVariant: 'primary',
+    excludedEmptyLabel: 'All library tracks are already in this workspace.',
+  })
+  if (!selectedIds?.length) return
+  await workspaceStore.addTracksToWorkspace(selectedIds)
+}
+
 async function handleCreatePlaylist(): Promise<void> {
-  // window.prompt is a temporary scaffold — replace with modal in polish pass
-  const name = window.prompt('New playlist name:')
-  if (name && name.trim()) {
+  const name = await modal.open<string>(PromptModal, {
+    title: 'New Playlist',
+    label: 'Playlist name',
+    initialValue: '',
+    confirmLabel: 'Create',
+  })
+  if (name?.trim()) {
     workspaceStore.createEmptyPlaylist(name.trim())
   }
 }
@@ -273,7 +579,9 @@ useKeyboardShortcuts({
 </script>
 
 <template>
-  <div class="workspace">
+  <!-- no-text-select covers the whole view, not just the rows: the sticky table header and
+       the control bar are just as easy to catch on a drag that starts over the list. -->
+  <div class="workspace no-text-select">
     <!-- Header -->
     <header class="workspace__header">
 
@@ -284,12 +592,14 @@ useKeyboardShortcuts({
       <span class="workspace__meta text-muted">
         {{ workspaceStore.playlists.length }} playlists · {{ workspaceStore.trackList.length }} tracks
       </span>
-      <!-- Actions/Save Section -->
+      <!-- Save section. Content actions live in the control bar, beside the list they act on. -->
       <div class="workspace__header-actions">
-        <button class="btn btn--secondary" @click="handleAddPlaylistToWorkspace">+ Add Playlist</button>
-        <button class="btn btn--secondary" @click="handleCreatePlaylist">+ New Playlist</button>
+        <!-- Unsaved indicator or last-saved time, never both. -->
         <span v-if="workspaceStore.hasUnsavedChanges" class="workspace__unsaved-indicator">
           Unsaved changes
+        </span>
+        <span v-else-if="lastSavedTime" class="workspace__saved-indicator text-muted">
+          Saved at {{ lastSavedTime }}
         </span>
         <button
           class="btn btn--primary"
@@ -315,21 +625,26 @@ useKeyboardShortcuts({
     <!-- Main Workspace Table -->
     <div v-else class="workspace__main">
 
-      <!-- Control Bar: search, sort, track count -->
-      <!-- FUTURE: Extract to separate module? --> 
+      <!-- Control Bar. Left holds what the list currently is — search, sort, and the counts
+           those two change. Right holds what can be done to it. -->
+      <!-- FUTURE: Extract to separate module? -->
       <ControlBar class="workspace__control-bar">
         <SearchBar v-model="query" placeholder="Search tracks…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
 
-        <!-- Track Count: display number of shown tracks, plus selection count if active -->
+        <!-- Track Count: shown tracks, qualified by the unfiltered total while searching -->
+        <span class="text-muted text-sm">
+          {{ displayTracks.length }}{{ query ? ` of ${workspaceStore.trackList.length}` : '' }} tracks
+        </span>
+        <span v-if="rowSelection.selectedCount.value > 0" class="workspace__selection-count">
+          {{ rowSelection.selectedCount.value }} selected
+          <button class="btn btn--ghost btn--sm" @click="rowSelection.clear()">Clear</button>
+        </span>
+
         <template #actions>
-          <span v-if="rowSelection.selectedCount.value > 0" class="workspace__selection-count">
-            {{ rowSelection.selectedCount.value }} selected
-            <button class="btn btn--ghost btn--sm" @click="rowSelection.clear()">Clear</button>
-          </span>
-          <span class="text-muted text-sm">
-            {{ displayTracks.length }}{{ query ? ` of ${workspaceStore.trackList.length}` : '' }} tracks
-          </span>
+          <button class="btn btn--secondary workspace__add-btn" @click="handleAddContent">
+            + Add
+          </button>
         </template>
       </ControlBar>
 
@@ -346,16 +661,10 @@ useKeyboardShortcuts({
 
             <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
             <PlaylistColumnHeader
-              v-for="(pl, i) in workspaceStore.playlists"
+              v-for="pl in workspaceStore.playlists"
               :key="pl.id"
               :playlist="pl"
-              :can-move-left="i > 0"
-              :can-move-right="i < workspaceStore.playlists.length - 1"
-              @rename="handleRename"
-              @remove="handleRemove"
-              @duplicate="handleDuplicate"
-              @move-left="(id) => workspaceStore.movePlaylist(id, -1)"
-              @move-right="(id) => workspaceStore.movePlaylist(id, 1)"
+              @request-menu="buildColumnMenu"
             />
           </div>
 
@@ -423,6 +732,10 @@ useKeyboardShortcuts({
 .workspace__unsaved-indicator {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+
+.workspace__saved-indicator {
+  font-size: var(--font-size-sm);
 }
 
 .workspace__error,

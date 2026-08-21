@@ -13,6 +13,27 @@ import SelectableItem from '@/components/common/SelectableItem.vue'
 import type { Track } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
+// Neutral by default. Destructive styling is opt-in so a caller that omits these props
+// gets a plain Confirm button rather than a red Delete one it did not ask for.
+const props = withDefaults(
+  defineProps<{
+    excludeIds?: string[]
+    confirmLabel?: string
+    confirmVariant?: 'primary' | 'danger'
+    /**
+     * Shown when the list is empty because everything was excluded rather than filtered out.
+     * The caller owns this string: only it knows why it excluded what it did.
+     */
+    excludedEmptyLabel?: string
+  }>(),
+  {
+    excludeIds: () => [],
+    confirmLabel: 'Confirm',
+    confirmVariant: 'primary',
+    excludedEmptyLabel: 'No tracks available to select.',
+  },
+)
+
 const emit = defineEmits<{
   cancel: []
   confirm: [ids: string[]]
@@ -20,7 +41,14 @@ const emit = defineEmits<{
 
 const trackStore = useTrackStore()
 
-const allTracks = computed((): Track[] => trackStore.tracks ?? [])
+const excludeSet = computed(() => new Set(props.excludeIds))
+
+// Excluded tracks are dropped before the filter/sort pipeline rather than at render time,
+// so the confirm count, Select All, and the selected-first display all operate on the
+// same candidate set.
+const allTracks = computed((): Track[] =>
+  (trackStore.tracks ?? []).filter((t: Track) => !excludeSet.value.has(t.trackID)),
+)
 
 const sortOptions: SortOption<Track>[] = [
   { key: 'title', label: 'Title', compareFn: (a, b) => a.title.localeCompare(b.title) },
@@ -33,6 +61,15 @@ const { query, filtered } = useListFilter<Track>(
   (item, q) => item.title.toLowerCase().includes(q.toLowerCase()) || item.artist.toLowerCase().includes(q.toLowerCase()),
 )
 const { currentSort, sorted } = useListSort<Track>(filtered, sortOptions)
+
+// "No matching tracks" blames a search the user may not have run. When the list is empty
+// with no query active and candidates were excluded, the cause is the exclusion, so say so —
+// this is where W1-H's "No New Tracks" pre-check ended up after D3 replaced it with excludeIds.
+const emptyLabel = computed(() =>
+  query.value.trim() === '' && excludeSet.value.size > 0
+    ? props.excludedEmptyLabel
+    : 'No matching tracks',
+)
 
 // Determine selection state: orthogonal to the display pipeline.
 const selection = useListSelection<Track>(
@@ -102,7 +139,7 @@ function confirmSelection(): void {
           />
         </template>
         <template #empty>
-          <p class="text-muted">No matching tracks</p>
+          <p class="text-muted track-select__empty">{{ emptyLabel }}</p>
         </template>
       </ScrollableList>
     </div>
@@ -115,12 +152,14 @@ function confirmSelection(): void {
       </button>
       <div class="track-select__footer-actions">
         <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
+        <!-- Label and variant come from the caller; see the props block for defaults. -->
         <button
-          class="btn btn--danger"
+          class="btn track-select__confirm"
+          :class="confirmVariant === 'danger' ? 'btn--danger' : 'btn--primary'"
           :disabled="selection.selectedIds.value.size === 0"
           @click="confirmSelection"
         >
-          Delete ({{ selection.selectedCount.value }})
+          {{ confirmLabel }} ({{ selection.selectedCount.value }})
         </button>
       </div>
     </div>

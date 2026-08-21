@@ -54,4 +54,10 @@ describe('SelectableItem', () => {
     })
     expect(wrapper.find('.selectable-item').classes()).toContain('selectable-item--selected')
   })
+
+  // The row is a click target, so dragging across a list of them must not highlight text.
+  it('opts out of text selection', () => {
+    const wrapper = mount(SelectableItem, { props: { label: 'A', selected: false } })
+    expect(wrapper.find('.selectable-item').classes()).toContain('no-text-select')
+  })
 })
