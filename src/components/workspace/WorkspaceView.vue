@@ -179,6 +179,12 @@ const expandedIds = ref(new Set<PlaylistId>())
 function toggleColumn(playlistId: PlaylistId): void {
   if (!expandedIds.value.delete(playlistId)) expandedIds.value.add(playlistId)
 }
+function expandAllColumns(): void {
+  expandedIds.value = new Set(workspaceStore.playlists.map((pl) => pl.id))
+}
+function collapseAllColumns(): void {
+  expandedIds.value = new Set()
+}
 const columnTemplate = computed(() => {
   const playlistCols = workspaceStore.playlists
     .map((pl) => (expandedIds.value.has(pl.id) ? EXPANDED_COLUMN_WIDTH : COLLAPSED_COLUMN_WIDTH))
@@ -656,6 +662,11 @@ useKeyboardShortcuts({
         </span>
 
         <template #actions>
+          <!-- Column width controls. Each header also toggles its own column. -->
+          <div class="workspace__column-controls" role="group" aria-label="Playlist columns">
+            <button class="btn btn--ghost btn--sm" @click="collapseAllColumns">Collapse all</button>
+            <button class="btn btn--ghost btn--sm" @click="expandAllColumns">Expand all</button>
+          </div>
           <button class="btn btn--secondary workspace__add-btn" @click="handleAddContent">
             + Add
           </button>
@@ -831,6 +842,11 @@ useKeyboardShortcuts({
 
 .workspace__th--track {
   min-width: 0;
+}
+
+.workspace__column-controls {
+  display: flex;
+  gap: var(--space-1);
 }
 
 .workspace__selection-count {

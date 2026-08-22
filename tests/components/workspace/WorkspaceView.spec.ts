@@ -526,6 +526,17 @@ describe('WorkspaceView', () => {
       expect(template(wrapper)).toContain('1fr) 140px 140px')
     })
 
+    it('opens every column with Expand all, and closes them with Collapse all', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      const button = (label: string) =>
+        wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === label)!
+      await button('Expand all').trigger('click')
+      expect(template(wrapper)).toContain('1fr) 140px 140px')
+      await button('Collapse all').trigger('click')
+      expect(template(wrapper)).toContain('1fr) 48px 48px')
+    })
+
     it('collapses an open column when its header is clicked again', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
       const wrapper = mountWorkspace()
