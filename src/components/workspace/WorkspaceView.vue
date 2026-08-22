@@ -174,7 +174,10 @@ const ROW_HEIGHT = 48
 const COLLAPSED_COLUMN_WIDTH = `${ROW_HEIGHT}px`
 // An expanded column is wide enough to read its header. Each header toggles its own
 // column, and any number can be open at once.
-const EXPANDED_COLUMN_WIDTH = '140px'
+const EXPANDED_COLUMN_PX = 140
+const EXPANDED_COLUMN_WIDTH = `${EXPANDED_COLUMN_PX}px`
+const INDEX_COLUMN_PX = 60
+const TRACK_COLUMN_MIN_PX = 200
 const expandedIds = ref(new Set<PlaylistId>())
 function toggleColumn(playlistId: PlaylistId): void {
   if (!expandedIds.value.delete(playlistId)) expandedIds.value.add(playlistId)
@@ -185,11 +188,21 @@ function expandAllColumns(): void {
 function collapseAllColumns(): void {
   expandedIds.value = new Set()
 }
+// Open as many columns as fit the visible width, left to right, with the track column at
+// its minimum, so the table needs no horizontal scroll. A one-off action: it does not
+// re-run when the window resizes.
+function fitColumnsToScreen(): void {
+  const playlists = workspaceStore.playlists
+  const available = (scrollContainer.value?.clientWidth ?? 0) - INDEX_COLUMN_PX - TRACK_COLUMN_MIN_PX
+  const spare = available - playlists.length * ROW_HEIGHT
+  const count = Math.max(0, Math.min(playlists.length, Math.floor(spare / (EXPANDED_COLUMN_PX - ROW_HEIGHT))))
+  expandedIds.value = new Set(playlists.slice(0, count).map((pl) => pl.id))
+}
 const columnTemplate = computed(() => {
   const playlistCols = workspaceStore.playlists
     .map((pl) => (expandedIds.value.has(pl.id) ? EXPANDED_COLUMN_WIDTH : COLLAPSED_COLUMN_WIDTH))
     .join(' ')
-  return `60px minmax(200px, 1fr) ${playlistCols}`
+  return `${INDEX_COLUMN_PX}px minmax(${TRACK_COLUMN_MIN_PX}px, 1fr) ${playlistCols}`
 })
 
 // Configure virtualizer: use displayTracks count, scroll container, and estimated row height.
@@ -666,6 +679,7 @@ useKeyboardShortcuts({
           <div class="workspace__column-controls" role="group" aria-label="Playlist columns">
             <button class="btn btn--ghost btn--sm" @click="collapseAllColumns">Collapse all</button>
             <button class="btn btn--ghost btn--sm" @click="expandAllColumns">Expand all</button>
+            <button class="btn btn--ghost btn--sm" @click="fitColumnsToScreen">Fit to screen</button>
           </div>
           <button class="btn btn--secondary workspace__add-btn" @click="handleAddContent">
             + Add

@@ -537,6 +537,27 @@ describe('WorkspaceView', () => {
       expect(template(wrapper)).toContain('1fr) 48px 48px')
     })
 
+    // 60 index + 200 track + 4 × 48 collapsed = 452. 600 leaves 148 spare: one column
+    // opens (+92), a second would need 184.
+    it('opens as many columns as fit the width with Fit to screen, left to right', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const wrapper = mountWorkspace()
+      Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 600 })
+      const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
+      await fit.trigger('click')
+      expect(template(wrapper)).toContain('1fr) 140px 48px 48px 48px')
+    })
+
+    it('opens nothing with Fit to screen when even collapsed columns overflow', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const wrapper = mountWorkspace()
+      await wrapper.find('.playlist-col-header').trigger('click')
+      Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 300 })
+      const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
+      await fit.trigger('click')
+      expect(template(wrapper)).toContain('1fr) 48px 48px 48px 48px')
+    })
+
     it('collapses an open column when its header is clicked again', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
       const wrapper = mountWorkspace()
