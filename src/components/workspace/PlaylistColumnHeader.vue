@@ -105,12 +105,18 @@ function onMenu(event: MouseEvent): void {
   background: var(--color-border-subtle);
 }
 
+/* Safe centring: short initials sit centred, long ones start at the left edge and are
+   clipped on the right, so the first letters always show. */
 .playlist-col-header--collapsed {
-  justify-content: center;
-  padding: var(--space-2) 0;
+  justify-content: safe center;
+  padding: var(--space-2) var(--space-1);
 }
 
 .playlist-col-header__initials {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
