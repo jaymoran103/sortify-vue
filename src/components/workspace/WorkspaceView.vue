@@ -167,6 +167,8 @@ const rowSelection = useListSelection<Track>(
 
 // Dynamic CSS grid column template: index + track info + one column per playlist.
 // TODO refactor: this feels hacky
+// Row height in px. The virtualizer sizes rows with it, and every row is exactly this tall.
+const ROW_HEIGHT = 48
 const columnTemplate = computed(() => {
   const playlistCols = workspaceStore.playlists.map(() => 'minmax(100px, 200px)').join(' ')
   return `60px minmax(200px, 1fr) ${playlistCols}`
@@ -179,7 +181,7 @@ const virtualizer = useVirtualizer(
   computed(() => ({
     count: displayTracks.value.length,
     getScrollElement: () => scrollContainer.value,
-    estimateSize: () => 48,
+    estimateSize: () => ROW_HEIGHT,
     overscan: 10,
   })),
 )
