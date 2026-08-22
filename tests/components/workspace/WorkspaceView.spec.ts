@@ -272,6 +272,13 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).toContain('Song A')
   })
 
+  it('renders the minimap beside the scroll container, not inside it', () => {
+    mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
+    const wrapper = mountWorkspace()
+    expect(wrapper.find('.workspace__body-wrap > .minimap').exists()).toBe(true)
+    expect(wrapper.find('.workspace__body .minimap').exists()).toBe(false)
+  })
+
   it('renders one column header per playlist', () => {
     mockWorkspaceStore.playlists = [
       makePlaylist(1, 'Morning Mix', ['t1']),
