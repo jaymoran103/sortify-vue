@@ -666,6 +666,7 @@ useKeyboardShortcuts({
               v-for="pl in workspaceStore.playlists"
               :key="pl.id"
               :playlist="pl"
+              :expanded="true"
               @request-menu="buildColumnMenu"
             />
           </div>

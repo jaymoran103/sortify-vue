@@ -13,9 +13,9 @@ function makePlaylist(id: number, name: string, trackIDs: string[] = []): Worksp
   return { id, name, trackIDs, trackIdSet: new Set(trackIDs), origin: 'library' }
 }
 
-function mountHeader(playlist: WorkspacePlaylist) {
+function mountHeader(playlist: WorkspacePlaylist, expanded = true) {
   return mount(PlaylistColumnHeader, {
-    props: { playlist },
+    props: { playlist, expanded },
   })
 }
 
@@ -119,6 +119,39 @@ describe('PlaylistColumnHeader', () => {
     it('still reports the count itself', () => {
       const wrapper = mountHeader(makePlaylist(1, 'Morning Mix', []))
       expect(wrapper.find('.playlist-col-header__count').text()).toContain('0 tracks')
+    })
+  })
+
+  // ─── Collapsed ─────────────────────────────────────────────────────────────
+  // A collapsed column is one square cell wide, so only initials fit.
+
+  describe('collapsed', () => {
+    it('shows initials in place of the name, count and menu button', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Road Trip Mix', ['t1']), false)
+      expect(wrapper.find('.playlist-col-header__initials').text()).toContain('RT')
+      expect(wrapper.find('.playlist-col-header__name').exists()).toBe(false)
+      expect(wrapper.find('.playlist-col-header__count').exists()).toBe(false)
+      expect(wrapper.find('.playlist-col-header__menu-btn').exists()).toBe(false)
+    })
+
+    it('keeps the full name as a tooltip and for screen readers', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Road Trip Mix', ['t1']), false)
+      const label = wrapper.find('.playlist-col-header__initials')
+      expect(label.attributes('title')).toBe('Road Trip Mix')
+      expect(label.find('.sr-only').text()).toBe('Road Trip Mix')
+    })
+
+    it('still flags an empty playlist, in colour and in words', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Morning Mix', []), false)
+      const label = wrapper.find('.playlist-col-header__initials')
+      expect(label.classes()).toContain('playlist-col-header__initials--empty')
+      expect(label.find('.sr-only').text()).toBe('Morning Mix, empty')
+    })
+
+    it('still emits requestMenu on right-click', async () => {
+      const wrapper = mountHeader(makePlaylist(7, 'PL'), false)
+      await wrapper.find('.playlist-col-header').trigger('contextmenu')
+      expect(wrapper.emitted('requestMenu')).toBeDefined()
     })
   })
 })

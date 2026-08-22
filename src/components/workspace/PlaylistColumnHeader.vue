@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { initials } from '@/utils/initials'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 
 // Presentational only. The menu this header opens depends on state the header does not
 // own — search-filter counts, the active sort, Spotify URIs — so WorkspaceView builds it
 // and this component just reports that one was requested (design decision D1).
+// A collapsed column is one square cell wide, so its header shows only initials.
 const props = defineProps<{
   playlist: WorkspacePlaylist
+  expanded: boolean
 }>()
 
 const emit = defineEmits<{
@@ -23,35 +26,54 @@ function onMenu(event: MouseEvent): void {
 
 <template>
   <!-- Right-click anywhere on the header requests the menu at the cursor position. -->
-  <div class="playlist-col-header" @contextmenu.prevent="onMenu">
-    <!-- Name over count. Stacked in their own column so the ellipsis button below stays a
-         flex sibling on the right rather than being pushed down. -->
-    <div class="playlist-col-header__text">
-      <!-- Playlist Title. FUTURE: Find solution for long playlist names in tight displays -->
-      <span class="playlist-col-header__name" :title="playlist.name">
-        {{ playlist.name }}
-      </span>
-      <!-- An empty column is marked here, continuously, rather than sprung at exit. The
-           leave dialog only repeats it as a footnote, and only if it opened anyway. -->
-      <span
-        class="playlist-col-header__count"
-        :class="{ 'playlist-col-header__count--empty': playlist.trackIDs.length === 0 }"
-      >
-        <!-- Not aria-hidden: the glyph is what carries the warning to a screen reader,
-             since colour alone does not. -->
-        <span v-if="playlist.trackIDs.length === 0">⚠</span>
-        {{ playlist.trackIDs.length }} track{{ playlist.trackIDs.length === 1 ? '' : 's' }}
-      </span>
-    </div>
-    <!-- Ellipsis button: hidden by default, revealed on header hover. -->
-    <!-- Also triggered by right-click anywhere on the header. -->
-    <button
-      class="playlist-col-header__menu-btn"
-      aria-label="Playlist actions"
-      @click.stop="onMenu"
+  <div
+    class="playlist-col-header"
+    :class="{ 'playlist-col-header--collapsed': !expanded }"
+    @contextmenu.prevent="onMenu"
+  >
+    <!-- Collapsed: initials, with the full name as tooltip and for screen readers. An empty
+         playlist keeps its warning here too, in colour and in words. -->
+    <span
+      v-if="!expanded"
+      class="playlist-col-header__initials"
+      :class="{ 'playlist-col-header__initials--empty': playlist.trackIDs.length === 0 }"
+      :title="playlist.name"
     >
-      ⋮
-    </button>
+      <span aria-hidden="true">{{ initials(playlist.name) }}</span>
+      <span class="sr-only">
+        {{ playlist.name }}{{ playlist.trackIDs.length === 0 ? ', empty' : '' }}
+      </span>
+    </span>
+    <template v-else>
+      <!-- Name over count. Stacked in their own column so the ellipsis button below stays a
+           flex sibling on the right rather than being pushed down. -->
+      <div class="playlist-col-header__text">
+        <!-- Playlist Title. FUTURE: Find solution for long playlist names in tight displays -->
+        <span class="playlist-col-header__name" :title="playlist.name">
+          {{ playlist.name }}
+        </span>
+        <!-- An empty column is marked here, continuously, rather than sprung at exit. The
+             leave dialog only repeats it as a footnote, and only if it opened anyway. -->
+        <span
+          class="playlist-col-header__count"
+          :class="{ 'playlist-col-header__count--empty': playlist.trackIDs.length === 0 }"
+        >
+          <!-- Not aria-hidden: the glyph is what carries the warning to a screen reader,
+               since colour alone does not. -->
+          <span v-if="playlist.trackIDs.length === 0">⚠</span>
+          {{ playlist.trackIDs.length }} track{{ playlist.trackIDs.length === 1 ? '' : 's' }}
+        </span>
+      </div>
+      <!-- Ellipsis button: hidden by default, revealed on header hover. -->
+      <!-- Also triggered by right-click anywhere on the header. -->
+      <button
+        class="playlist-col-header__menu-btn"
+        aria-label="Playlist actions"
+        @click.stop="onMenu"
+      >
+        ⋮
+      </button>
+    </template>
   </div>
 </template>
 
@@ -70,6 +92,21 @@ function onMenu(event: MouseEvent): void {
 
 .playlist-col-header:hover {
   background: var(--color-border-subtle);
+}
+
+.playlist-col-header--collapsed {
+  justify-content: center;
+  padding: var(--space-2) 0;
+}
+
+.playlist-col-header__initials {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.playlist-col-header__initials--empty {
+  color: var(--color-warning);
 }
 
 /* Stacks name over count. min-width: 0 lets the name ellipsise instead of forcing
