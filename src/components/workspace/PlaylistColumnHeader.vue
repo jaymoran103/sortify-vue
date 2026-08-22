@@ -53,7 +53,7 @@ function onMenu(event: MouseEvent): void {
       <!-- Name over count. Stacked in their own column so the ellipsis button below stays a
            flex sibling on the right rather than being pushed down. -->
       <span v-else class="playlist-col-header__text">
-        <!-- Playlist Title. FUTURE: Find solution for long playlist names in tight displays -->
+        <!-- Playlist Title. Wraps up to three lines; see .playlist-col-header__name. -->
         <span class="playlist-col-header__name" :title="playlist.name">
           {{ playlist.name }}
         </span>
@@ -156,11 +156,16 @@ function onMenu(event: MouseEvent): void {
   align-items: flex-start;
 }
 
+/* A long name wraps onto more lines rather than ellipsising, and the header row grows to
+   fit. Three lines is the cap. Past that it clamps, and the tooltip has the rest. */
 .playlist-col-header__name {
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
 }
