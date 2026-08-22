@@ -162,8 +162,9 @@ function findMenuAction(label: string): (() => void) | undefined {
   return entry && 'action' in entry ? entry.action : undefined
 }
 
+// Right-click, since a collapsed column header has no ellipsis button.
 async function openColumnMenu(wrapper: ReturnType<typeof mountWorkspace>, columnIndex = 0) {
-  await wrapper.findAll('.playlist-col-header__menu-btn')[columnIndex]!.trigger('click')
+  await wrapper.findAll('.playlist-col-header')[columnIndex]!.trigger('contextmenu')
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -278,10 +279,10 @@ describe('WorkspaceView', () => {
     ]
     mockWorkspaceStore.trackList = []
     const wrapper = mountWorkspace()
-    const headers = wrapper.findAll('.playlist-col-header__name')
+    const headers = wrapper.findAll('.playlist-col-header__initials')
     expect(headers).toHaveLength(2)
-    expect(headers[0]?.text()).toBe('Morning Mix')
-    expect(headers[1]?.text()).toBe('Evening Chill')
+    expect(headers[0]?.attributes('title')).toBe('Morning Mix')
+    expect(headers[1]?.attributes('title')).toBe('Evening Chill')
   })
 
   it('renders a row for each track in trackList', () => {
@@ -484,6 +485,23 @@ describe('WorkspaceView', () => {
       const albumEl = wrapper.find('.track-row__album')
       expect(artistEl.text()).not.toContain('AlbumName')
       expect(albumEl.text()).not.toContain('ArtistName')
+    })
+  })
+
+  describe('column widths', () => {
+    beforeEach(() => {
+      mockWorkspaceStore.playlists = []
+      mockWorkspaceStore.trackList = []
+    })
+
+    function template(wrapper: ReturnType<typeof mountWorkspace>): string {
+      return wrapper.get('.workspace__table').attributes('style') ?? ''
+    }
+
+    it('gives every playlist a square column as wide as a row is tall', () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      expect(template(wrapper)).toContain('60px minmax(200px, 1fr) 48px 48px')
     })
   })
 
@@ -801,13 +819,6 @@ describe('WorkspaceView', () => {
   // Migrated from PlaylistColumnHeader.spec.ts when D1 moved menu construction here.
 
   describe('playlist column menu', () => {
-    it('opens from the ellipsis button', async () => {
-      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
-      const wrapper = mountWorkspace()
-      await openColumnMenu(wrapper)
-      expect(mockContextMenuShow).toHaveBeenCalledOnce()
-    })
-
     it('opens from a right-click anywhere on the header', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
       const wrapper = mountWorkspace()

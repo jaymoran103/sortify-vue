@@ -169,8 +169,10 @@ const rowSelection = useListSelection<Track>(
 // TODO refactor: this feels hacky
 // Row height in px. The virtualizer sizes rows with it, and every row is exactly this tall.
 const ROW_HEIGHT = 48
+// A collapsed playlist column is as wide as a row is tall, so each cell is a square tile.
+const COLLAPSED_COLUMN_WIDTH = `${ROW_HEIGHT}px`
 const columnTemplate = computed(() => {
-  const playlistCols = workspaceStore.playlists.map(() => 'minmax(100px, 200px)').join(' ')
+  const playlistCols = workspaceStore.playlists.map(() => COLLAPSED_COLUMN_WIDTH).join(' ')
   return `60px minmax(200px, 1fr) ${playlistCols}`
 })
 
@@ -666,7 +668,7 @@ useKeyboardShortcuts({
               v-for="pl in workspaceStore.playlists"
               :key="pl.id"
               :playlist="pl"
-              :expanded="true"
+              :expanded="false"
               @request-menu="buildColumnMenu"
             />
           </div>
