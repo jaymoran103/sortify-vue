@@ -1,19 +1,29 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { Track } from '@/types/models'
 import type { WorkspacePlaylist } from '@/types/models'
 
-defineProps<{
+const props = defineProps<{
   track: Track
   index: number
   playlists: WorkspacePlaylist[]
   selected: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   toggleTrack: [playlistId: number | string, trackId: string]
   select: [trackId: string, event: MouseEvent]
   contextMenu: [trackId: string, event: MouseEvent]
 }>()
+
+// Cells the user just toggled. Each one plays a short edge flash, then drops out of the
+// set when its animation ends. Only a toggle from this row flashes, never a bulk change.
+const flashing = ref(new Set<number | string>())
+
+function toggle(playlistId: number | string): void {
+  emit('toggleTrack', playlistId, props.track.trackID)
+  flashing.value.add(playlistId)
+}
 </script>
 
 <template>
@@ -58,15 +68,19 @@ defineEmits<{
       v-for="pl in playlists"
       :key="pl.id"
       class="track-row__checkbox"
-      :class="{ 'track-row__checkbox--checked': pl.trackIdSet.has(track.trackID) }"
-      @click.stop="$emit('toggleTrack', pl.id!, track.trackID)"
+      :class="{
+        'track-row__checkbox--checked': pl.trackIdSet.has(track.trackID),
+        'track-row__checkbox--flash': flashing.has(pl.id!),
+      }"
+      @click.stop="toggle(pl.id!)"
+      @animationend="flashing.delete(pl.id!)"
     >
       <!-- Visually hidden, but kept for keyboard focus and screen readers. -->
       <input
         type="checkbox"
         class="sr-only"
         :checked="pl.trackIdSet.has(track.trackID)"
-        @change="$emit('toggleTrack', pl.id!, track.trackID)"
+        @change="toggle(pl.id!)"
         @click.stop
         :aria-label="`${track.title} in ${pl.name}`"
       />
@@ -189,6 +203,31 @@ defineEmits<{
   text-align: center;
   cursor: pointer;
   transition: background 0.1s, box-shadow 0.1s;
+  position: relative;
+}
+
+/* Toggle flash: a bright inner edge that closes in four hard steps. It sits on ::after so
+   it layers over the hover edge instead of replacing it. */
+.track-row__checkbox::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.track-row__checkbox--flash::after {
+  animation: cell-flash 420ms steps(4) both;
+}
+
+@keyframes cell-flash {
+  from { box-shadow: inset 0 0 0 13px var(--color-accent-hover); }
+  to   { box-shadow: inset 0 0 0 0 var(--color-accent-hover); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track-row__checkbox--flash::after {
+    animation: none;
+  }
 }
 
 /* Hover lightens a 4px inner edge rather than the whole cell, so at rest every cell is
