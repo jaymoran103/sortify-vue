@@ -188,16 +188,21 @@ defineEmits<{
   align-self: stretch;
   text-align: center;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.1s, box-shadow 0.1s;
 }
 
+/* Hover lightens a 4px inner edge rather than the whole cell, so at rest every cell is
+   pure background or pure accent. */
 .track-row__checkbox:hover {
-  background: var(--color-cell-checkbox-hover);
+  box-shadow: inset 0 0 0 4px var(--color-cell-hover-edge);
 }
 
-.track-row__checkbox--checked,
-.track-row__checkbox--checked:hover {
+.track-row__checkbox--checked {
   background: var(--color-accent);
+}
+
+.track-row__checkbox--checked:hover {
+  box-shadow: inset 0 0 0 4px var(--color-accent-hover);
 }
 
 /* The input is hidden, so its focus ring is drawn on the cell instead. */

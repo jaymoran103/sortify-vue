@@ -42,7 +42,7 @@
   /* ── Interactive States ── */
   --color-row-hover: var(--gray-600);
   --color-row-selected: var(--gray-500);
-  --color-cell-checkbox-hover: var(--gray-500);
+  --color-cell-hover-edge: color-mix(in srgb, var(--gray-400) 60%, transparent);
 
   --color-focus-ring: var(--green-400);
 
