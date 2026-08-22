@@ -86,7 +86,7 @@ defineEmits<{
 }
 
 .track-row:hover {
-  background: var(--color-row-hover);
+  background: var(--color-track-row-hover);
 }
 
 .track-row--selected {
