@@ -518,12 +518,12 @@ describe('WorkspaceView', () => {
       expect(template(wrapper)).toContain('1fr) 48px 140px')
     })
 
-    it('keeps one column open at a time', async () => {
+    it('lets several columns stay open at once', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
       const wrapper = mountWorkspace()
       await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
       await wrapper.findAll('.playlist-col-header')[1]!.trigger('click')
-      expect(template(wrapper)).toContain('1fr) 48px 140px')
+      expect(template(wrapper)).toContain('1fr) 140px 140px')
     })
 
     it('collapses an open column when its header is clicked again', async () => {
