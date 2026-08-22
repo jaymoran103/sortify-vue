@@ -503,6 +503,30 @@ describe('WorkspaceView', () => {
       const wrapper = mountWorkspace()
       expect(template(wrapper)).toContain('60px minmax(200px, 1fr) 48px 48px')
     })
+
+    it('widens a column when its header is clicked', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await wrapper.findAll('.playlist-col-header')[1]!.trigger('click')
+      expect(template(wrapper)).toContain('1fr) 48px 140px')
+    })
+
+    it('keeps one column open at a time', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
+      await wrapper.findAll('.playlist-col-header')[1]!.trigger('click')
+      expect(template(wrapper)).toContain('1fr) 48px 140px')
+    })
+
+    it('collapses an open column when its header is clicked again', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      await wrapper.find('.playlist-col-header').trigger('click')
+      await wrapper.find('.playlist-col-header').trigger('click')
+      expect(template(wrapper)).toContain('1fr) 48px')
+      expect(template(wrapper)).not.toContain('140px')
+    })
   })
 
   // ─── Save timestamp (W1-G) ─────────────────────────────────────────────────
@@ -819,6 +843,14 @@ describe('WorkspaceView', () => {
   // Migrated from PlaylistColumnHeader.spec.ts when D1 moved menu construction here.
 
   describe('playlist column menu', () => {
+    it('opens from the ellipsis button of an expanded column', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
+      const wrapper = mountWorkspace()
+      await wrapper.find('.playlist-col-header').trigger('click')
+      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(mockContextMenuShow).toHaveBeenCalledOnce()
+    })
+
     it('opens from a right-click anywhere on the header', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
       const wrapper = mountWorkspace()

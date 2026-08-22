@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   requestMenu: [playlistId: PlaylistId, event: MouseEvent]
+  toggleExpand: [playlistId: PlaylistId]
 }>()
 
 /**
@@ -26,28 +27,32 @@ function onMenu(event: MouseEvent): void {
 
 <template>
   <!-- Right-click anywhere on the header requests the menu at the cursor position. -->
+  <!-- Left-click anywhere else on it toggles the column open or closed. -->
   <div
     class="playlist-col-header"
     :class="{ 'playlist-col-header--collapsed': !expanded }"
+    @click="emit('toggleExpand', playlist.id)"
     @contextmenu.prevent="onMenu"
   >
-    <!-- Collapsed: initials, with the full name as tooltip and for screen readers. An empty
-         playlist keeps its warning here too, in colour and in words. -->
-    <span
-      v-if="!expanded"
-      class="playlist-col-header__initials"
-      :class="{ 'playlist-col-header__initials--empty': playlist.trackIDs.length === 0 }"
-      :title="playlist.name"
-    >
-      <span aria-hidden="true">{{ initials(playlist.name) }}</span>
-      <span class="sr-only">
-        {{ playlist.name }}{{ playlist.trackIDs.length === 0 ? ', empty' : '' }}
+    <!-- The toggle is a real button for keyboard users. It has no handler of its own: its
+         click bubbles to the header, which does the toggling. -->
+    <button class="playlist-col-header__toggle" type="button" :aria-expanded="expanded">
+      <!-- Collapsed: initials, with the full name as tooltip and for screen readers. An empty
+           playlist keeps its warning here too, in colour and in words. -->
+      <span
+        v-if="!expanded"
+        class="playlist-col-header__initials"
+        :class="{ 'playlist-col-header__initials--empty': playlist.trackIDs.length === 0 }"
+        :title="playlist.name"
+      >
+        <span aria-hidden="true">{{ initials(playlist.name) }}</span>
+        <span class="sr-only">
+          {{ playlist.name }}{{ playlist.trackIDs.length === 0 ? ', empty' : '' }}
+        </span>
       </span>
-    </span>
-    <template v-else>
       <!-- Name over count. Stacked in their own column so the ellipsis button below stays a
            flex sibling on the right rather than being pushed down. -->
-      <div class="playlist-col-header__text">
+      <span v-else class="playlist-col-header__text">
         <!-- Playlist Title. FUTURE: Find solution for long playlist names in tight displays -->
         <span class="playlist-col-header__name" :title="playlist.name">
           {{ playlist.name }}
@@ -63,17 +68,18 @@ function onMenu(event: MouseEvent): void {
           <span v-if="playlist.trackIDs.length === 0">⚠</span>
           {{ playlist.trackIDs.length }} track{{ playlist.trackIDs.length === 1 ? '' : 's' }}
         </span>
-      </div>
-      <!-- Ellipsis button: hidden by default, revealed on header hover. -->
-      <!-- Also triggered by right-click anywhere on the header. -->
-      <button
-        class="playlist-col-header__menu-btn"
-        aria-label="Playlist actions"
-        @click.stop="onMenu"
-      >
-        ⋮
-      </button>
-    </template>
+      </span>
+    </button>
+    <!-- Ellipsis button: expanded columns only, revealed on header hover. -->
+    <!-- Also triggered by right-click anywhere on the header. -->
+    <button
+      v-if="expanded"
+      class="playlist-col-header__menu-btn"
+      aria-label="Playlist actions"
+      @click.stop="onMenu"
+    >
+      ⋮
+    </button>
   </div>
 </template>
 
@@ -88,6 +94,11 @@ function onMenu(event: MouseEvent): void {
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.1s;
+  /* Tall enough for name over count in both states, so opening a column does not push
+     the rows down. */
+  min-height: calc(
+    (var(--font-size-sm) + var(--font-size-xs)) * var(--line-height-normal) + 2 * var(--space-2)
+  );
 }
 
 .playlist-col-header:hover {
@@ -107,6 +118,26 @@ function onMenu(event: MouseEvent): void {
 
 .playlist-col-header__initials--empty {
   color: var(--color-warning);
+}
+
+/* A bare button: it exists for focus and Enter/Space, not for looks. */
+.playlist-col-header__toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: inherit;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.playlist-col-header__toggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 /* Stacks name over count. min-width: 0 lets the name ellipsise instead of forcing

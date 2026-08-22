@@ -171,8 +171,17 @@ const rowSelection = useListSelection<Track>(
 const ROW_HEIGHT = 48
 // A collapsed playlist column is as wide as a row is tall, so each cell is a square tile.
 const COLLAPSED_COLUMN_WIDTH = `${ROW_HEIGHT}px`
+// One column at a time opens wide enough to read its header. Clicking it again, or
+// opening another, closes it.
+const EXPANDED_COLUMN_WIDTH = '140px'
+const expandedPlaylistId = ref<PlaylistId | null>(null)
+function toggleColumn(playlistId: PlaylistId): void {
+  expandedPlaylistId.value = expandedPlaylistId.value === playlistId ? null : playlistId
+}
 const columnTemplate = computed(() => {
-  const playlistCols = workspaceStore.playlists.map(() => COLLAPSED_COLUMN_WIDTH).join(' ')
+  const playlistCols = workspaceStore.playlists
+    .map((pl) => (pl.id === expandedPlaylistId.value ? EXPANDED_COLUMN_WIDTH : COLLAPSED_COLUMN_WIDTH))
+    .join(' ')
   return `60px minmax(200px, 1fr) ${playlistCols}`
 })
 
@@ -668,8 +677,9 @@ useKeyboardShortcuts({
               v-for="pl in workspaceStore.playlists"
               :key="pl.id"
               :playlist="pl"
-              :expanded="false"
+              :expanded="pl.id === expandedPlaylistId"
               @request-menu="buildColumnMenu"
+              @toggle-expand="toggleColumn"
             />
           </div>
 

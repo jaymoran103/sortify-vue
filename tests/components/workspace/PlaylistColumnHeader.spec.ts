@@ -122,6 +122,37 @@ describe('PlaylistColumnHeader', () => {
     })
   })
 
+  // ─── Expand toggle ─────────────────────────────────────────────────────────
+
+  describe('expand toggle', () => {
+    it('emits toggleExpand with the playlist id on a header click', async () => {
+      const wrapper = mountHeader(makePlaylist(7, 'PL'), false)
+      await wrapper.find('.playlist-col-header').trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toEqual([[7]])
+    })
+
+    it('emits toggleExpand once when the toggle button itself is clicked', async () => {
+      const wrapper = mountHeader(makePlaylist(7, 'PL'), false)
+      await wrapper.find('.playlist-col-header__toggle').trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toEqual([[7]])
+    })
+
+    it('does not toggle when the ellipsis button is clicked', async () => {
+      const wrapper = mountHeader(makePlaylist(7, 'PL'))
+      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toBeUndefined()
+    })
+
+    it('reports its state through aria-expanded', () => {
+      expect(
+        mountHeader(makePlaylist(1, 'PL'), true).find('.playlist-col-header__toggle').attributes('aria-expanded'),
+      ).toBe('true')
+      expect(
+        mountHeader(makePlaylist(1, 'PL'), false).find('.playlist-col-header__toggle').attributes('aria-expanded'),
+      ).toBe('false')
+    })
+  })
+
   // ─── Collapsed ─────────────────────────────────────────────────────────────
   // A collapsed column is one square cell wide, so only initials fit.
 
