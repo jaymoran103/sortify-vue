@@ -49,6 +49,7 @@ defineEmits<{
     </div>
 
     <!-- Playlist Checkbox Cells: one rendered per playlist column, reflecting membership. -->
+    <!-- The whole cell is the checkbox: pure accent when checked, background when not. -->
     <!-- Clicking anywhere in the cell toggles membership. -->
     <!-- The div's @click.stop handles clicks outside the checkbox and stops row-selection bubbling. -->
     <!-- The input's @click.stop prevents the click from also reaching the div (would double-fire). -->
@@ -57,10 +58,13 @@ defineEmits<{
       v-for="pl in playlists"
       :key="pl.id"
       class="track-row__checkbox"
+      :class="{ 'track-row__checkbox--checked': pl.trackIdSet.has(track.trackID) }"
       @click.stop="$emit('toggleTrack', pl.id!, track.trackID)"
     >
+      <!-- Visually hidden, but kept for keyboard focus and screen readers. -->
       <input
         type="checkbox"
+        class="sr-only"
         :checked="pl.trackIdSet.has(track.trackID)"
         @change="$emit('toggleTrack', pl.id!, track.trackID)"
         @click.stop
@@ -189,5 +193,15 @@ defineEmits<{
 
 .track-row__checkbox:hover {
   background: var(--color-cell-checkbox-hover);
+}
+
+.track-row__checkbox--checked,
+.track-row__checkbox--checked:hover {
+  background: var(--color-accent);
+}
+
+/* The input is hidden, so its focus ring is drawn on the cell instead. */
+.track-row__checkbox:has(input:focus-visible) {
+  box-shadow: inset 0 0 0 2px var(--color-focus-ring);
 }
 </style>

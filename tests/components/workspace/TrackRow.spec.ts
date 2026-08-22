@@ -72,6 +72,19 @@ describe('TrackRow', () => {
     expect((checkbox.element as HTMLInputElement).checked).toBe(false)
   })
 
+  it('marks only the cells of member playlists as checked', () => {
+    const playlists = [makePlaylist(1, 'PL1', ['t1']), makePlaylist(2, 'PL2', [])]
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, playlists)
+    const cells = wrapper.findAll('.track-row__checkbox')
+    expect(cells[0]!.classes()).toContain('track-row__checkbox--checked')
+    expect(cells[1]!.classes()).not.toContain('track-row__checkbox--checked')
+  })
+
+  it('keeps the native checkbox for assistive tech, visually hidden', () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [makePlaylist(1, 'PL1', [])])
+    expect(wrapper.find('input[type="checkbox"]').classes()).toContain('sr-only')
+  })
+
   it('checkbox checked state uses trackIdSet not trackIDs array', () => {
     const pl = makePlaylist(1, 'PL1', ['t1'])
     // Override trackIdSet so it disagrees with trackIDs
