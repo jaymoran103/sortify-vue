@@ -1,48 +1,52 @@
 # Sortify
 
+# Sortify
 
-A Vue 3 single-page application for managing Spotify playlist libraries — import, organize, edit, and export playlists locally with full Spotify PKCE integration. [Live on GitHub Pages](https://jaymoran103.github.io/sortify-vue/#/). 
+A browser-based playlist manager for music libraries. Import from Spotify or CSV/JSON, rearrange tracks across a multi-playlist grid, then save back to Spotify or as local files.
 
-For the original implementation with Vanilla JS and IndexedDB, see the [Vanilla Repo](https://github.com/jaymoran103/sortify-feb), hosted [here](https://jaymoran103.github.io/sortify-feb/)
+[Try it here](https://jaymoran103.github.io/sortify-vue/#/) — no signup, no install, nothing leaves your browser.
 
 ## Features
 
-- **Dashboard** — import/export playlists via CSV, JSON, or Spotify OAuth
-- **Workspace** — load a session, edit track membership across playlists in a virtualized table, and save changes back to the local library
-- **Local persistence** — all data lives in IndexedDB via Dexie; no backend, no login required beyond Spotify
-- **Save Buffer** – workspace changes arent applied to your local version until you save them. 
-- **Spotify integration** — PKCE OAuth flow with a typed API client and token lifecycle management
-- **IO Adapters** — swappable import/export adapters ensure a consistent process with progress updates for transparency, regardless of operation scale or type.
+- **Dashboard** — import and export playlists from Spotify, or as CSV or JSON files.
+- **Workspace** — displays playlists and track membership in a grid; move songs between playlists, add from your library, and create new ones as you go.
+- **Save buffer** — edits live in memory until you explicitly save, so nothing changes underneath you.
+- **Local persistence** — everything lives in IndexedDB. No backend, no account, no tracking.
+
+## Spotify access
+
+Spotify integration works fully, but the app is still in Spotify's development mode — accounts must be added explictly to connect. Contact [jaymorandev@gmail.com](mailto:jaymorandev@gmail.com) to join the list today!
+
+In the meantime, the CSV and JSON import paths work for anyone. Try [exportify](https://exportify.net) as an alternate way to quickly download your library data for use here.
+
+## Stack
+
+| Layer          | Service                          |
+| -------------- | -------------------------------- |
+| Framework      | Vue 3 · TypeScript strict · Vite |
+| State          | Pinia (setup stores)             |
+| Persistence    | Dexie.js (IndexedDB, liveQuery)  |
+| Routing        | Vue Router, hash mode            |
+| Virtual scroll | @tanstack/vue-virtual            |
+| Testing        | Vitest + Playwright              |
+
+Three concerns that don't bleed into each other:
+
+- **stores** own data and write to Dexie
+- **composables** own reusable UI logic (filtering, sorting, selection, modals)
+- **components** compose both without owning either. The workspace uses a buffer pattern — playlists are cloned into memory on session load, edits stay local, and saving flushes to IndexedDB.
+
+## Upcoming
+
+The scaffolded `/library` and `/similarity` routes are in development and not yet implemented on main. Planned work:
+
+- **Similarity Module (in development)** - detect and visualize overlap and near-duplicates across playlists. Reconciles track duplicates and redundant playlists across your library, quickly and confidently.
+- **Library page** dedicated library page, with a shell-based layout making it the primary view.
+- **Advanced workspace features** - apply set manipulations and call similarity/consolidation tools from the workspace.
+- **Playback SDK integration** - listen to your library while sorting it.
+
+The original vanilla JS implementation lives in a [separate repo](https://github.com/jaymoran103/sortify-feb), hosted [here](https://jaymoran103.github.io/sortify-feb/).
+
 ---
 
-## Architecture
-
-| Layer | Choice |
-|---|---|
-| Framework | Vue 3 · TypeScript strict · Vite |
-| State | Pinia (setup stores) |
-| Persistence | Dexie.js (IndexedDB, liveQuery) |
-| Routing | Vue Router hash mode |
-| Virtual scroll | @tanstack/vue-virtual |
-| Testing | Vitest + Playwright |
-
-The app is organized around three concerns that don't bleed into each other: 
-- `Stores` own data and write to Dexie,
-- `Composables` own reusable UI logic (filtering, sorting, selection, modals), 
-- `Components` compose both without owning either. The workspace uses a buffer pattern — playlists are cloned into memory on session load, edits stay local, and a save action flushes to IDB.
-
-<!-- See ARCHITECTURE.md for the full reference. -->
----
-## Project Outline
-Upcoming feature additions include: 
-
-From Vanilla Implementation:
-- Refined reporting for I/O warnings
-- Similarity Engine
-- Advanced workspace features
-
-New:
-- Dedicated route for similarity visualization and configruation
-- Dedicated library page
-- Shell-based layout promoting the library as the primary view.
-- Integration of playback SDK for song access while editing.
+MIT © Jay Moran
