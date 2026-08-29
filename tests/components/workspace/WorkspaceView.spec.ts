@@ -29,6 +29,7 @@ const mockWorkspaceStore = reactive({
   removePlaylist: vi.fn(),
   duplicatePlaylist: vi.fn(),
   movePlaylist: vi.fn(),
+  persistPlaylistOrder: vi.fn().mockResolvedValue(undefined),
   addPlaylist: vi.fn().mockResolvedValue(undefined),
   createEmptyPlaylist: vi.fn(),
   addTrackToAll: vi.fn(),
@@ -1054,6 +1055,35 @@ describe('WorkspaceView', () => {
   })
 
   // ─── Most Playlists sort (W1-D / design decision D7) ───────────────────────
+
+  describe('column order persistence', () => {
+    beforeEach(() => {
+      mockWorkspaceStore.playlists = [
+        makePlaylist(1, 'A', []),
+        makePlaylist(2, 'B', []),
+        makePlaylist(3, 'C', []),
+      ]
+      mockWorkspaceStore.persistPlaylistOrder.mockClear()
+    })
+
+    // movePlaylist only mutates the array now, so a caller that does not follow it with
+    // persistPlaylistOrder leaves the new order unwritten.
+    it('writes the order after a menu move', async () => {
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 1)
+      findMenuAction('Move Right')!()
+      expect(mockWorkspaceStore.movePlaylist).toHaveBeenCalledWith(2, 1)
+      expect(mockWorkspaceStore.persistPlaylistOrder).toHaveBeenCalledOnce()
+    })
+
+    it('writes the order after a move in the other direction', async () => {
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 1)
+      findMenuAction('Move Left')!()
+      expect(mockWorkspaceStore.movePlaylist).toHaveBeenCalledWith(2, -1)
+      expect(mockWorkspaceStore.persistPlaylistOrder).toHaveBeenCalledOnce()
+    })
+  })
 
   describe('most-playlists sort', () => {
     it('is offered in the sort dropdown', () => {

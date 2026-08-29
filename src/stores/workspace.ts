@@ -286,15 +286,34 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     // exit early if new index is out of bounds (already at leftmost or rightmost position)
     if (newIdx < 0 || newIdx >= playlists.value.length) return
 
-    // Swap the two playlists in the array, mark both as modified for dirty tracking.
+    // Swap the two playlists in the array. Nothing is marked modified: modifiedIds means a
+    // playlist's own name or contents changed, and neither did. Persisting the new order is
+    // persistPlaylistOrder's job, called once the interaction settles.
     const arr = [...playlists.value]
     const temp = arr[idx]!
     arr[idx] = arr[newIdx]!
     arr[newIdx] = temp
     playlists.value = arr
+  }
 
-    modifiedIds.value.add(arr[idx]!.id)
-    modifiedIds.value.add(arr[newIdx]!.id)
+  /**
+   * Write the current column order to the session record.
+   *
+   * Column order is session state, not playlist state: it lives in the same
+   * session.playlistIds that addPlaylist and removePlaylist already rewrite the moment they
+   * change it. This is the third operation on that field and now behaves like the other two.
+   *
+   * Kept separate from movePlaylist so a drag that hops across several columns costs one
+   * write rather than one per hop — callers invoke it when the interaction settles. save()
+   * writes the same field too, which is what covers the case this cannot: a
+   * workspace-created playlist has no numeric id to record until save() gives it one.
+   *
+   * No-op without a session. Resolves either way — callers with nothing to await may void it.
+   */
+  async function persistPlaylistOrder(): Promise<void> {
+    if (sessionId.value === null) return
+    const sessionStore = useSessionStore()
+    await sessionStore.updateSession(sessionId.value, { playlistIds: persistedPlaylistIds() })
   }
 
   /**
@@ -580,6 +599,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     renamePlaylist,
     duplicatePlaylist,
     movePlaylist,
+    persistPlaylistOrder,
     createEmptyPlaylist,
     addTrackToAll,
     removeTrackFromAll,

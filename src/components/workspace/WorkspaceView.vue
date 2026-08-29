@@ -329,6 +329,18 @@ async function handleRemove(playlistId: PlaylistId): Promise<void> {
   workspaceStore.removePlaylist(playlistId)
 }
 
+/**
+ * Move one column and record where it landed.
+ *
+ * movePlaylist only rearranges the in-memory array; column order reaches IDB through
+ * persistPlaylistOrder, which is separate so a drag can hop across several columns and
+ * still write once. A menu move is a settled interaction, so it writes immediately.
+ */
+function handleMoveColumn(playlistId: PlaylistId, direction: -1 | 1): void {
+  workspaceStore.movePlaylist(playlistId, direction)
+  void workspaceStore.persistPlaylistOrder()
+}
+
 function handleDuplicate(playlistId: PlaylistId): void {
   workspaceStore.duplicatePlaylist(playlistId)
 }
@@ -386,10 +398,10 @@ function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
   // Move entries are offered only where there is somewhere to move to. The view knows each
   // playlist's index already, so the header no longer needs canMoveLeft/canMoveRight props.
   if (index > 0) {
-    items.push({ label: 'Move Left', action: () => workspaceStore.movePlaylist(playlistId, -1) })
+    items.push({ label: 'Move Left', action: () => handleMoveColumn(playlistId, -1) })
   }
   if (index < workspaceStore.playlists.length - 1) {
-    items.push({ label: 'Move Right', action: () => workspaceStore.movePlaylist(playlistId, 1) })
+    items.push({ label: 'Move Right', action: () => handleMoveColumn(playlistId, 1) })
   }
 
   items.push({ divider: true })
