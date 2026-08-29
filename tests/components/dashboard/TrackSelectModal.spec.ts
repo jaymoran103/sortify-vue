@@ -244,3 +244,27 @@ describe('TrackSelectModal row pitch', () => {
     expect(list.props('estimateSize')).toBe(SELECTABLE_ITEM_HEIGHT)
   })
 })
+
+// The dialog used to carry a private .track-select shell that duplicated .selection-modal
+// and drifted from it on width. Sharing the shell is what keeps the two pickers alike.
+describe('TrackSelectModal shell', () => {
+  it('uses the shared selection-modal shell', () => {
+    const wrapper = mountModal()
+    expect(wrapper.find('.selection-modal').exists()).toBe(true)
+    expect(wrapper.find('.selection-modal__body').exists()).toBe(true)
+    expect(wrapper.find('.selection-modal__list').exists()).toBe(true)
+    expect(wrapper.find('.selection-modal__footer').exists()).toBe(true)
+  })
+
+  it('keeps no private shell of its own', () => {
+    const wrapper = mountModal()
+    expect(wrapper.find('.track-select').exists()).toBe(false)
+  })
+
+  it('gives Select All the shared class that stops it squashing', () => {
+    const wrapper = mountModal()
+    expect(wrapper.find('.track-select__select-all').classes()).toContain(
+      'selection-modal__select-all',
+    )
+  })
+})

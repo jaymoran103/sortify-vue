@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import SpotifyPlaylistPickerModal, { resetPlaylistCache } from '@/components/dashboard/SpotifyPlaylistPickerModal.vue'
 import { useActivityStore } from '@/stores/activity'
+import { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 
 const testState = vi.hoisted(() => ({
   mockApiGet: vi.fn(),
@@ -46,7 +47,7 @@ vi.mock('@/composables/useSpotifyAuth', async () => {
 })
 
 const ScrollableListStub = {
-  props: ['items'],
+  props: ['items', 'keyField', 'estimateSize'],
   template: `
     <div>
       <template v-if="items.length === 0">
@@ -290,6 +291,31 @@ describe('SpotifyPlaylistPickerModal', () => {
 
     await selectAll().trigger('click')
     expect(selectAll().text()).toContain('Deselect All')
+  })
+
+
+  it('gives ScrollableList the height SelectableItem renders at', async () => {
+    testState.mockApiGet.mockResolvedValue({
+      items: [
+        {
+          id: 'pl-1',
+          name: 'Morning Mix',
+          tracks: { total: 12 },
+          owner: { display_name: 'Alice' },
+          images: [],
+        },
+      ],
+      total: 1,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+
+    const wrapper = mountModal()
+    await flushPromises()
+
+    const list = wrapper.findComponent(ScrollableListStub)
+    expect(list.props('estimateSize')).toBe(SELECTABLE_ITEM_HEIGHT)
   })
 
 })
