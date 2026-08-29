@@ -67,8 +67,25 @@ describe('SelectableItem', () => {
   it('renders at the height it publishes', () => {
     const wrapper = mount(SelectableItem, { props: { label: 'A', selected: false } })
     expect(wrapper.find('.selectable-item').attributes('style')).toContain(
-      `min-height: ${SELECTABLE_ITEM_HEIGHT}px`,
+      `height: ${SELECTABLE_ITEM_HEIGHT}px`,
     )
+  })
+
+  // A floor would let a long artist list wrap the subtitle onto a second line and push the
+  // row past the pitch the virtualiser lays rows out at. The height is exact, not a minimum.
+  it('fixes the height rather than setting a floor', () => {
+    const wrapper = mount(SelectableItem, { props: { label: 'A', selected: false } })
+    expect(wrapper.find('.selectable-item').attributes('style')).not.toContain('min-height')
+  })
+
+  // Truncated text is unreachable without this; the row has no other affordance for it.
+  it('exposes the full label and subtitle via title', () => {
+    const artists = 'Bowie, Eno, Fripp, Visconti, Alomar, Davis, Murray, Garson'
+    const wrapper = mount(SelectableItem, {
+      props: { label: 'Station to Station', subtitle: artists, selected: false },
+    })
+    expect(wrapper.find('.selectable-item__label').attributes('title')).toBe('Station to Station')
+    expect(wrapper.find('.selectable-item__subtitle').attributes('title')).toBe(artists)
   })
 
 })
