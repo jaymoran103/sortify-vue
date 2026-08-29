@@ -7,7 +7,7 @@ import ControlBar from '@/components/common/ControlBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
-import SelectableItem from '@/components/common/SelectableItem.vue'
+import SelectableItem, { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 import type { Track } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
@@ -101,7 +101,7 @@ function confirmSelection(): void {
 
       <!-- Track list with selection -->
       <div class="selection-modal__list">
-        <ScrollableList :items="displayItems" key-field="trackID" :estimate-size="48">
+        <ScrollableList :items="displayItems" key-field="trackID" :estimate-size="SELECTABLE_ITEM_HEIGHT">
           <template #item="{ item }">
             <SelectableItem
               :label="(item as Track).title"

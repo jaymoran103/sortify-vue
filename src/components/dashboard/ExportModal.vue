@@ -10,7 +10,7 @@ import { useSelectableList } from '@/composables/useSelectableList'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
-import SelectableItem from '@/components/common/SelectableItem.vue'
+import SelectableItem, { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 import type { Playlist } from '@/types/models'
 import type { SortOption } from '@/types/ui'
 
@@ -223,7 +223,7 @@ async function handleExport(): Promise<void> {
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
       </div>
       <div class="selection-modal__list selection-modal__list--compact">
-        <ScrollableList :items="displayItems" key-field="id" :estimate-size="56">
+        <ScrollableList :items="displayItems" key-field="id" :estimate-size="SELECTABLE_ITEM_HEIGHT">
           <template #item="{ item }">
             <SelectableItem
               :label="(item as Playlist).name"

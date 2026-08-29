@@ -1,3 +1,17 @@
+<script lang="ts">
+/**
+ * Row height in pixels, published for callers to hand to ScrollableList.
+ *
+ * ScrollableList is a fixed-pitch virtualiser: it positions rows at index * estimateSize and
+ * never measures them, so this is the row pitch, not a hint. A call site that passes anything
+ * smaller lays every row short of its own height and the rows overlap by the difference.
+ *
+ * Bound inline below rather than set in the stylesheet, so the number the virtualiser is told
+ * and the number the row renders at cannot drift apart.
+ */
+export const SELECTABLE_ITEM_HEIGHT = 56
+</script>
+
 <script setup lang="ts">
 defineProps<{
   label: string
@@ -8,14 +22,18 @@ defineProps<{
 const emit = defineEmits<{
   toggle: []
 }>()
+
+const rowHeight = `${SELECTABLE_ITEM_HEIGHT}px`
 </script>
 
 <template>
   <!-- no-text-select: the row is a click target, so dragging across a list of them should not
        leave a text highlight. No shift guard here — these rows do not handle shift-click. -->
+  <!-- min-height is bound, not styled: see SELECTABLE_ITEM_HEIGHT above. -->
   <div
     class="selectable-item no-text-select"
     :class="{ 'selectable-item--selected': selected }"
+    :style="{ minHeight: rowHeight }"
     @click="emit('toggle')"
   >
     <input
@@ -39,7 +57,6 @@ const emit = defineEmits<{
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
-  min-height: 56px;
   box-sizing: border-box;
   cursor: pointer;
   border-radius: 0;

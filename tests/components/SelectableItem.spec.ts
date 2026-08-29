@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import SelectableItem from '@/components/common/SelectableItem.vue'
+import SelectableItem, { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 
 describe('SelectableItem', () => {
   it('renders label', () => {
@@ -60,4 +60,15 @@ describe('SelectableItem', () => {
     const wrapper = mount(SelectableItem, { props: { label: 'A', selected: false } })
     expect(wrapper.find('.selectable-item').classes()).toContain('no-text-select')
   })
+
+  // jsdom performs no layout, so a rendered height cannot be asserted. Binding the height
+  // inline is what makes the pairing observable: the number ScrollableList is handed and the
+  // number the row renders at are the same constant.
+  it('renders at the height it publishes', () => {
+    const wrapper = mount(SelectableItem, { props: { label: 'A', selected: false } })
+    expect(wrapper.find('.selectable-item').attributes('style')).toContain(
+      `min-height: ${SELECTABLE_ITEM_HEIGHT}px`,
+    )
+  })
+
 })

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
 import type { Track } from '@/types/models'
+import { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 
 const tracks: Track[] = [
   { trackID: 't1', title: 'Blue Monday', artist: 'New Order', album: 'Power', source: 'csv' },
@@ -228,5 +229,18 @@ describe('TrackSelectModal', () => {
       await new Promise((r) => setTimeout(r, 250))
       expect(wrapper.find('.track-select__empty').text()).toBe('No matching tracks')
     })
+  })
+})
+
+/**
+ * ScrollableList lays rows out at `index * estimateSize` without measuring them, so this modal
+ * must hand it the height SelectableItem actually renders at. A literal 48 against rows of 56
+ * laid every row 8px short and left each selected row's background overlapping its neighbour.
+ */
+describe('TrackSelectModal row pitch', () => {
+  it('gives ScrollableList the height SelectableItem renders at', () => {
+    const wrapper = mountModal()
+    const list = wrapper.findComponent(ScrollableListStub)
+    expect(list.props('estimateSize')).toBe(SELECTABLE_ITEM_HEIGHT)
   })
 })

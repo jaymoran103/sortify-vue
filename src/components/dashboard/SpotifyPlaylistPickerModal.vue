@@ -26,7 +26,7 @@ import ControlBar from '@/components/common/ControlBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
-import SelectableItem from '@/components/common/SelectableItem.vue'
+import SelectableItem, { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import UnapprovedSpotifyModal from '../modals/UnapprovedSpotifyModal.vue'
 import type { ImportResult } from '@/types/adapters'
@@ -393,7 +393,7 @@ onMounted(fetchPlaylists)
       </ControlBar>
 
       <div class="selection-modal__list">
-        <ScrollableList :items="displayItems" key-field="id" :estimate-size="56">
+        <ScrollableList :items="displayItems" key-field="id" :estimate-size="SELECTABLE_ITEM_HEIGHT">
           <template #item="{ item }">
             <SelectableItem
               :label="getPlaylistName(item)"
