@@ -505,12 +505,23 @@ function handleRemoveFromAll(trackId: string): void {
  * effect is a checkbox the user can see and tick back; this one takes the row out of the
  * table, and the track is gone from every playlist with it. The bulk path has always
  * confirmed — this closes the gap where removing one track was the less guarded action.
+ *
+ * The message counts the playlists actually holding the track, not the workspace's
+ * playlists, so it never promises to empty a playlist the track was never in.
  */
 async function handleDeleteTrack(trackId: string): Promise<void> {
   const title = workspaceStore.tracks.get(trackId)?.title ?? trackId
+  const memberOf = workspaceStore.playlists.filter((pl) => pl.trackIdSet.has(trackId)).length
+  const alsoLeaves =
+    memberOf === 0
+      ? ''
+      : memberOf === 1
+        ? ', and from the playlist holding it'
+        : `, and from the ${memberOf} playlists holding it`
+
   const confirmed = await modal.open<true>(ConfirmModal, {
     title: 'Remove from Workspace',
-    message: `Remove "${title}" from the workspace entirely?`,
+    message: `Remove "${title}" from the workspace${alsoLeaves}?`,
     confirmLabel: 'Remove',
   })
   if (!confirmed) return

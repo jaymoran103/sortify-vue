@@ -1562,6 +1562,50 @@ describe('track removal scope', () => {
     expect(mockWorkspaceStore.removeTrackFromWorkspace).not.toHaveBeenCalled()
   })
 
+  // "Remove from Workspace" is an escalation: the track leaves every playlist holding it,
+  // not just the display. The message says so rather than leaving it to the word "entirely".
+  it('names the playlists the track will also leave', async () => {
+    const track = makeTrack('t1', 'Song A', 'Artist')
+    mockWorkspaceStore.trackList = [track]
+    mockWorkspaceStore.tracks = new Map([['t1', track]])
+    mockWorkspaceStore.playlists = [
+      makePlaylist(1, 'PL1', ['t1']),
+      makePlaylist(2, 'PL2', ['t1']),
+      makePlaylist(3, 'PL3', []),
+    ]
+    const wrapper = mountWorkspace()
+    await wrapper.find('.track-row').trigger('contextmenu')
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).toContain('2 playlists holding it')
+  })
+
+  it('uses the singular form for a track in one playlist', async () => {
+    const track = makeTrack('t1', 'Song A', 'Artist')
+    mockWorkspaceStore.trackList = [track]
+    mockWorkspaceStore.tracks = new Map([['t1', track]])
+    mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
+    const wrapper = mountWorkspace()
+    await wrapper.find('.track-row').trigger('contextmenu')
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).toContain('the playlist holding it')
+  })
+
+  it('promises nothing about playlists when the track is in none', async () => {
+    await openTrackMenu(2)
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).not.toContain('holding it')
+    expect(props.message).toContain('Song A')
+  })
+
   // Membership edits stay instant: their effect is a visible checkbox and re-tickable.
   it('does not confirm when removing a track from the workspace playlists', async () => {
     await openTrackMenu(2)
