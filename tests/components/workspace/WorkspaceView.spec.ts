@@ -97,6 +97,15 @@ vi.mock('@/composables/useModal', () => ({
   useModal: () => ({ open: mockModalOpen, close: vi.fn() }),
 }))
 
+// ─── Mock spotifyLinks ───────────────────────────────────────────────────────
+
+const mockOpenSpotifyURI = vi.hoisted(() => vi.fn())
+const mockCopyToClipboard = vi.hoisted(() => vi.fn())
+vi.mock('@/utils/spotifyLinks', () => ({
+  openSpotifyURI: mockOpenSpotifyURI,
+  copyToClipboard: mockCopyToClipboard,
+}))
+
 // ─── Mock useKeyboardShortcuts ───────────────────────────────────────────────
 // Captures the map instead of binding it to `document`. Every mounted WorkspaceView in
 // this file stays mounted and keeps its listener, so a real keydown would be handled by
@@ -223,6 +232,8 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.addTracksToWorkspace.mockResolvedValue(undefined)
     mockWorkspaceStore.$reset.mockReset()
     mockContextMenuShow.mockClear()
+    mockOpenSpotifyURI.mockClear()
+    mockCopyToClipboard.mockClear()
     mockModalOpen.mockReset()
     mockModalOpen.mockResolvedValue(null)
   })
@@ -1377,6 +1388,56 @@ describe('WorkspaceView', () => {
       // Selection is single-select in the workspace, so this still resolves to one track;
       // the assertion guards the entries staying inside the single-selection branch.
       expect(lastMenuLabels().filter((l) => l === 'Open in Spotify').length).toBeLessThanOrEqual(1)
+    })
+
+    // The entries above are only checked for being offered. These check that they carry
+    // the right URI through to the helpers, which is the part a schema change would break.
+    it('opens the track URI from the track menu', async () => {
+      const track = makeTrack('t1', 'Song A', 'Artist')
+      track.spotifyURI = 'spotify:track:abc'
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['t1', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+
+      findMenuAction('Open in Spotify')!()
+      expect(mockOpenSpotifyURI).toHaveBeenCalledWith('spotify:track:abc')
+    })
+
+    it('copies the track URI rather than the raw track id', async () => {
+      const track = makeTrack('t1', 'Song A', 'Artist')
+      track.spotifyURI = 'spotify:track:abc'
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['t1', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+
+      findMenuAction('Copy Track ID')!()
+      expect(mockCopyToClipboard).toHaveBeenCalledWith('spotify:track:abc')
+    })
+
+    it('opens the trackID when that is itself the URI', async () => {
+      const track = makeTrack('spotify:track:xyz', 'Song A', 'Artist')
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['spotify:track:xyz', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+
+      findMenuAction('Open in Spotify')!()
+      expect(mockOpenSpotifyURI).toHaveBeenCalledWith('spotify:track:xyz')
+    })
+
+    it('opens and copies the playlist URI from the column menu', async () => {
+      const pl = makePlaylist(1, 'PL', [])
+      pl.playlistURI = 'spotify:playlist:xyz'
+      mockWorkspaceStore.playlists = [pl]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+
+      findMenuAction('Open in Spotify')!()
+      findMenuAction('Copy Playlist ID')!()
+      expect(mockOpenSpotifyURI).toHaveBeenCalledWith('spotify:playlist:xyz')
+      expect(mockCopyToClipboard).toHaveBeenCalledWith('spotify:playlist:xyz')
     })
   })
 
