@@ -15,8 +15,6 @@ export interface SelectableListConfig<T> {
   debounceMs?: number
   /** Checkbox semantics by default — every selection modal wants them. */
   selectMultiple?: boolean
-  /** Re-sort selected-to-top on every toggle, not just when the list changes. */
-  reorderOnSelectionChange?: boolean
 }
 
 export interface SelectableList<T> {
@@ -60,9 +58,7 @@ export function useSelectableList<T>(config: SelectableListConfig<T>): Selectabl
     items,
   )
 
-  const { displayItems } = useSelectedFirstDisplay(sorted, selection.selectedIds, keyFn, {
-    reorderOnSelectionChange: config.reorderOnSelectionChange,
-  })
+  const { displayItems } = useSelectedFirstDisplay(sorted, selection.selectedIds, keyFn)
 
   const allSelected = computed(
     () => sorted.value.length > 0 && sorted.value.every((item) => selection.isSelected(keyFn(item))),

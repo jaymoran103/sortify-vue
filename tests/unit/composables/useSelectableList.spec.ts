@@ -90,21 +90,4 @@ describe('useSelectableList', () => {
     expect(selectedIds.value.has('b')).toBe(true)
   })
 
-  it('forwards reorderOnSelectionChange to the display order', async () => {
-    const items = makeItems()
-    const list = useSelectableList<Item>({
-      items,
-      keyFn,
-      filterFn,
-      sortOptions,
-      debounceMs: 0,
-      reorderOnSelectionChange: true,
-    })
-
-    // Default behaviour would leave 'c' where the sort put it until the list changed.
-    list.toggle('c')
-    await nextTick()
-    expect(list.displayItems.value[0]!.id).toBe('c')
-  })
-
 })

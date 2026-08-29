@@ -53,18 +53,6 @@ describe('useSelectedFirstDisplay', () => {
     expect(displayItems.value.map(keyFn)).toEqual(['d', 'a', 'b', 'c'])
   })
 
-  it('reorders on selection change when asked to', async () => {
-    const items = makeItems()
-    const selectedIds = ref(new Set<string>())
-    const { displayItems } = useSelectedFirstDisplay(items, selectedIds, keyFn, {
-      reorderOnSelectionChange: true,
-    })
-
-    select(selectedIds, 'd')
-    await nextTick()
-    expect(displayItems.value.map(keyFn)).toEqual(['d', 'a', 'b', 'c'])
-  })
-
   it('never mutates the source list', async () => {
     const items = makeItems()
     const selectedIds = ref(new Set(['c']))
