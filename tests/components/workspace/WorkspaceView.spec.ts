@@ -96,6 +96,20 @@ vi.mock('@/composables/useModal', () => ({
   useModal: () => ({ open: mockModalOpen, close: vi.fn() }),
 }))
 
+// ─── Mock useKeyboardShortcuts ───────────────────────────────────────────────
+// Captures the map instead of binding it to `document`. Every mounted WorkspaceView in
+// this file stays mounted and keeps its listener, so a real keydown would be handled by
+// all of them at once; holding the map lets a test invoke exactly the instance it built.
+
+const registeredShortcuts = vi.hoisted(() => ({
+  current: {} as Record<string, (e: KeyboardEvent) => void>,
+}))
+vi.mock('@/composables/useKeyboardShortcuts', () => ({
+  useKeyboardShortcuts: (map: Record<string, (e: KeyboardEvent) => void>) => {
+    registeredShortcuts.current = map
+  },
+}))
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 const router = createRouter({
@@ -1345,5 +1359,133 @@ describe('WorkspaceView', () => {
       const titles = wrapper.findAll('.track-row__title').map((n) => n.text())
       expect(titles).toEqual(['Apple Song', 'Zebra Song'])
     })
+  })
+})
+
+describe('track removal scope', () => {
+  beforeEach(() => {
+    mockWorkspaceStore.playlists = []
+    mockWorkspaceStore.trackList = []
+    mockWorkspaceStore.tracks = new Map()
+    mockModalOpen.mockReset()
+    mockModalOpen.mockResolvedValue(null)
+  })
+
+  /** Right-click the only row, having seeded one track and `count` playlists. */
+  async function openTrackMenu(count: number) {
+    const track = makeTrack('t1', 'Song A', 'Artist')
+    mockWorkspaceStore.trackList = [track]
+    mockWorkspaceStore.tracks = new Map([['t1', track]])
+    mockWorkspaceStore.playlists = Array.from({ length: count }, (_, i) =>
+      makePlaylist(i + 1, `PL${i + 1}`, []),
+    )
+    const wrapper = mountWorkspace()
+    await wrapper.find('.track-row').trigger('contextmenu')
+    return wrapper
+  }
+
+  // "All Playlists" reads as the whole library. These entries only ever touch the
+  // playlists currently in the workspace, so the label says how many that is.
+  it('names the workspace and the number of playlists affected', async () => {
+    await openTrackMenu(4)
+    const labels = lastMenuLabels()
+    expect(labels).toContain('Add to 4 Workspace Playlists')
+    expect(labels).toContain('Remove from 4 Workspace Playlists')
+  })
+
+  it('uses the singular form for a workspace holding one playlist', async () => {
+    await openTrackMenu(1)
+    const labels = lastMenuLabels()
+    expect(labels).toContain('Add to 1 Workspace Playlist')
+    expect(labels).toContain('Remove from 1 Workspace Playlist')
+  })
+
+  // A label reading "0 Workspace Playlists" describes an action that cannot do anything.
+  it('offers no membership entries when the workspace holds no playlists', async () => {
+    await openTrackMenu(0)
+    const labels = lastMenuLabels()
+    expect(labels.some((l) => l.startsWith('Add to'))).toBe(false)
+    expect(labels.some((l) => l.startsWith('Remove from 0'))).toBe(false)
+    expect(labels).toContain('Remove from Workspace')
+  })
+
+  // The one single-track action whose effect cannot be undone by eye: the row leaves the
+  // table, and unticking a checkbox will not bring it back.
+  it('confirms before removing a track from the workspace, naming the track', async () => {
+    await openTrackMenu(2)
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+    expect(mockModalOpen).toHaveBeenCalledOnce()
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).toContain('Song A')
+  })
+
+  it('removes the track once the confirmation is accepted', async () => {
+    mockModalOpen.mockResolvedValueOnce(true)
+    await openTrackMenu(2)
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+    expect(mockWorkspaceStore.removeTrackFromWorkspace).toHaveBeenCalledWith('t1')
+  })
+
+  it('keeps the track when the confirmation is dismissed', async () => {
+    mockWorkspaceStore.removeTrackFromWorkspace.mockClear()
+    mockModalOpen.mockResolvedValueOnce(null)
+    await openTrackMenu(2)
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+    expect(mockWorkspaceStore.removeTrackFromWorkspace).not.toHaveBeenCalled()
+  })
+
+  // Membership edits stay instant: their effect is a visible checkbox and re-tickable.
+  it('does not confirm when removing a track from the workspace playlists', async () => {
+    await openTrackMenu(2)
+    await findMenuAction('Remove from 2 Workspace Playlists')!()
+    await flushPromises()
+    expect(mockModalOpen).not.toHaveBeenCalled()
+    expect(mockWorkspaceStore.removeTrackFromAll).toHaveBeenCalledWith('t1')
+  })
+})
+
+describe('delete shortcut', () => {
+  beforeEach(() => {
+    mockWorkspaceStore.playlists = []
+    mockWorkspaceStore.tracks = new Map()
+    mockModalOpen.mockReset()
+    mockModalOpen.mockResolvedValue(null)
+  })
+
+  function pressDelete(): void {
+    registeredShortcuts.current['cmd+backspace']!(new KeyboardEvent('keydown'))
+  }
+
+  // The shortcut and the row's own menu entry are the same action, so they ask the same
+  // question. Routing both through handleDeleteTrack is what keeps them from diverging —
+  // the bulk dialog would have said "1 track(s)".
+  it('asks the single-track question when one row is selected', async () => {
+    const track = makeTrack('t1', 'Song A', 'Artist')
+    mockWorkspaceStore.trackList = [track]
+    mockWorkspaceStore.tracks = new Map([['t1', track]])
+    const wrapper = mountWorkspace()
+    await wrapper.find('.track-row').trigger('click')
+    await nextTick()
+
+    pressDelete()
+    await flushPromises()
+
+    expect(mockModalOpen).toHaveBeenCalledOnce()
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).toContain('Song A')
+  })
+
+  it('opens nothing when no row is selected', async () => {
+    mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist')]
+    mountWorkspace()
+    await nextTick()
+
+    pressDelete()
+    await flushPromises()
+
+    expect(mockModalOpen).not.toHaveBeenCalled()
   })
 })
