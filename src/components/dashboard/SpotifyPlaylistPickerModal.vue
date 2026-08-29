@@ -15,10 +15,7 @@ export function resetPlaylistCache(): void {
 import { computed, onMounted, ref } from 'vue'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import { useModal } from '@/composables/useModal'
-import { useListFilter } from '@/composables/useListFilter'
-import { useListSelection } from '@/composables/useListSelection'
-import { useListSort } from '@/composables/useListSort'
-import { useSelectedFirstDisplay } from '@/composables/useSelectedFirstDisplay'
+import { useSelectableList } from '@/composables/useSelectableList'
 import { useActivityStore } from '@/stores/activity'
 import { getImporter } from '@/adapters/registry'
 import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
@@ -61,13 +58,21 @@ const sortOptions: SortOption<SpotifyPlaylistSummary>[] = [
   { key: 'trackCount', label: 'Track Count', compareFn: (a, b) => b.tracks.total - a.tracks.total },
 ]
 
-const { query, filtered } = useListFilter<SpotifyPlaylistSummary>(
-  playlists,
-  (item, q) => item.name.toLowerCase().includes(q.toLowerCase()),
-)
-const { currentSort, sorted } = useListSort<SpotifyPlaylistSummary>(filtered, sortOptions)
-const selection = useListSelection<SpotifyPlaylistSummary>(sorted, (item) => item.id, { selectMultiple: true }, playlists)
-const { displayItems } = useSelectedFirstDisplay(sorted, selection.selectedIds, (item) => item.id)
+const {
+  query,
+  currentSort,
+  displayItems,
+  selectedCount,
+  isSelected,
+  toggle,
+  allSelected,
+  toggleSelectAll,
+} = useSelectableList<SpotifyPlaylistSummary>({
+  items: playlists,
+  keyFn: (item) => item.id,
+  filterFn: (item, q) => item.name.toLowerCase().includes(q.toLowerCase()),
+  sortOptions,
+})
 const playlistFetchProgress = computed(() => {
   if (playlistFetchTotal.value <= 0) return -1
   return Math.min(playlistFetchLoaded.value / playlistFetchTotal.value, 1)
@@ -150,7 +155,7 @@ function getPlaylistSubtitle(item: unknown): string {
 
 function isPlaylistSelected(item: unknown): boolean {
   const id = getPlaylistId(item)
-  return id ? selection.isSelected(id) : false
+  return id ? isSelected(id) : false
 }
 
 function togglePlaylist(item: unknown): void {
@@ -160,7 +165,7 @@ function togglePlaylist(item: unknown): void {
     logWarning(warning, item)
     return
   }
-  selection.toggle(id)
+  toggle(id)
 }
 
 // Fetches the user's Spotify playlists, handling pagination and potential data inconsistencies. 
@@ -270,7 +275,7 @@ async function fetchPlaylists(): Promise<void> {
 // Handles progress updates, potential errors, and logging throughout the process.
 */
 async function startImport(): Promise<void> {
-  const selected = playlists.value.filter((item) => selection.isSelected(item.id))
+  const selected = playlists.value.filter((item) => isSelected(item.id))
   if (selected.length === 0) return
 
   // Close modal immediately; progress and result display delegate to ActivityIndicator / IOSummaryCard.
@@ -380,9 +385,9 @@ onMounted(fetchPlaylists)
         <template #actions>
           <button
             class="btn btn--ghost btn--sm"
-            @click="selection.selectedCount.value === playlists.length ? selection.clear() : selection.selectAll()"
+            @click="toggleSelectAll"
           >
-            {{ selection.selectedCount.value === playlists.length ? 'Deselect All' : 'Select All' }}
+            {{ allSelected ? 'Deselect All' : 'Select All' }}
           </button>
         </template>
       </ControlBar>
@@ -423,8 +428,8 @@ onMounted(fetchPlaylists)
     </div>
 
     <div class="selection-modal__footer">
-      <span v-if="step === 'ready' && selection.selectedCount.value > 0" class="text-muted text-sm">
-        {{ selection.selectedCount.value }} selected
+      <span v-if="step === 'ready' && selectedCount > 0" class="text-muted text-sm">
+        {{ selectedCount }} selected
       </span>
       <div v-else />
       <div class="selection-modal__footer-actions">
@@ -434,10 +439,10 @@ onMounted(fetchPlaylists)
         <button
           v-if="step === 'ready'"
           class="btn btn--primary"
-          :disabled="selection.selectedCount.value === 0"
+          :disabled="selectedCount === 0"
           @click="startImport"
         >
-          Import ({{ selection.selectedCount.value }})
+          Import ({{ selectedCount }})
         </button>
       </div>
     </div>

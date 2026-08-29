@@ -6,10 +6,7 @@ import { useActivityStore } from '@/stores/activity'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
 import type { SpotifyExportOptions } from '@/adapters/spotifyExport'
-import { useListFilter } from '@/composables/useListFilter'
-import { useListSelection } from '@/composables/useListSelection'
-import { useListSort } from '@/composables/useListSort'
-import { useSelectedFirstDisplay } from '@/composables/useSelectedFirstDisplay'
+import { useSelectableList } from '@/composables/useSelectableList'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import ScrollableList from '@/components/common/ScrollableList.vue'
@@ -54,8 +51,7 @@ watch(enableProfile, (enabled) => {
   }
 })
 
-// ── Playlist selection (inline, mirrors PlaylistSelectModal) ──────────────────
-// FUTURE: Extract selection body into a shared component to avoid drift between the modals?
+// ── Playlist selection ────────────────────────────────────────────────────────
 
 const playlistStore = usePlaylistStore()
 const allPlaylists = computed((): Playlist[] => playlistStore.playlists ?? [])
@@ -65,34 +61,22 @@ const sortOptions: SortOption<Playlist>[] = [
   { key: 'trackCount', label: 'Track Count', compareFn: (a, b) => b.trackIDs.length - a.trackIDs.length },
 ]
 
-const { query, filtered } = useListFilter<Playlist>(
-  allPlaylists,
-  (item, q) => item.name.toLowerCase().includes(q.toLowerCase()),
-)
-const { currentSort, sorted } = useListSort<Playlist>(filtered, sortOptions)
-const selection = useListSelection<Playlist>(
-  sorted,
-  (item) => String(item.id!),
-  { selectMultiple: true },
-  allPlaylists,
-)
-// Display selected items first in the list, while maintaining sort order within selected and unselected groups.
-const { displayItems } = useSelectedFirstDisplay(
-  sorted,
-  selection.selectedIds,
-  (item) => String(item.id!),
-)
-
-const allSelected = computed(
-  () =>
-    sorted.value.length > 0 &&
-    sorted.value.every((item) => selection.isSelected(String(item.id!))),
-)
-
-function toggleSelectAll(): void {
-  if (allSelected.value) selection.clear()
-  else selection.selectAll()
-}
+const {
+  query,
+  currentSort,
+  displayItems,
+  selectedIds,
+  selectedCount,
+  isSelected,
+  toggle,
+  allSelected,
+  toggleSelectAll,
+} = useSelectableList<Playlist>({
+  items: allPlaylists,
+  keyFn: (item) => String(item.id!),
+  filterFn: (item, q) => item.name.toLowerCase().includes(q.toLowerCase()),
+  sortOptions,
+})
 
 // ── Step navigation ───────────────────────────────────────────────────────────
 
@@ -132,7 +116,7 @@ function confirmPlaylists(): void {
 // - updates activity status based on progress and result. 
 // - display caught errors to the user, log in the activity store.
 async function handleSpotifyExport(): Promise<void> {
-  const ids = [...selection.selectedIds.value].map(Number)
+  const ids = [...selectedIds.value].map(Number)
   if (ids.length === 0) return
 
   const adapter = getExporter<SpotifyExportOptions>('spotify')
@@ -196,7 +180,7 @@ async function handleExport(): Promise<void> {
   activityStore.startOperation(operationId, 'Exporting to file', 'file-export')
 
   try {
-    const ids = [...selection.selectedIds.value].map(Number)
+    const ids = [...selectedIds.value].map(Number)
     const playlistIds = ids.length > 0 ? ids : 'all'
 
     if (format.value === 'csv') {
@@ -244,8 +228,8 @@ async function handleExport(): Promise<void> {
             <SelectableItem
               :label="(item as Playlist).name"
               :subtitle="`${(item as Playlist).trackIDs.length} tracks`"
-              :selected="selection.isSelected(String((item as Playlist).id!))"
-              @toggle="selection.toggle(String((item as Playlist).id!))"
+              :selected="isSelected(String((item as Playlist).id!))"
+              @toggle="toggle(String((item as Playlist).id!))"
             />
           </template>
           <template #empty>
@@ -283,10 +267,10 @@ async function handleExport(): Promise<void> {
         <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
         <button
           class="btn btn--primary"
-          :disabled="selection.selectedIds.value.size === 0"
+          :disabled="selectedCount === 0"
           @click="confirmPlaylists"
         >
-          Next ({{ selection.selectedCount.value }})
+          Next ({{ selectedCount }})
         </button>
       </div>
     </div>
