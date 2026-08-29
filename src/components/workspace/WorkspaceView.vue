@@ -165,11 +165,20 @@ const rowSelection = useListSelection<Track>(
   computed(() => workspaceStore.trackList),
 )
 
-// Dynamic CSS grid column template: index + track info + one column per playlist.
-// TODO refactor: this feels hacky
+// Dynamic CSS grid column template: index, track info, one column per playlist, and a
+// trailing track that absorbs whatever is left over.
+//
+// The track column used to be the 1fr, which meant a workspace with two playlists spent
+// every spare pixel widening the gap between the track text and the first checkbox. Every
+// column is now a fixed size and the slack parks past the last playlist, so a checkbox
+// stays where the cursor last left it however many playlists come and go. The trailing
+// track holds no element — both the header and each row place their children implicitly,
+// so it is simply the last one nothing lands in, and it collapses to 0 once the columns
+// overflow and the table scrolls.
+const PLAYLIST_COLUMN_WIDTH = '140px'
 const columnTemplate = computed(() => {
-  const playlistCols = workspaceStore.playlists.map(() => 'minmax(100px, 200px)').join(' ')
-  return `60px minmax(200px, 1fr) ${playlistCols}`
+  const playlistCols = workspaceStore.playlists.map(() => PLAYLIST_COLUMN_WIDTH)
+  return ['60px', 'minmax(200px, 480px)', ...playlistCols, '1fr'].join(' ')
 })
 
 // Configure virtualizer: use displayTracks count, scroll container, and estimated row height.

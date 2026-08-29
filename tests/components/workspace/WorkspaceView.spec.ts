@@ -503,6 +503,40 @@ describe('WorkspaceView', () => {
 
   // ─── Save timestamp (W1-G) ─────────────────────────────────────────────────
 
+  describe('column widths', () => {
+    beforeEach(() => {
+      mockWorkspaceStore.playlists = []
+      mockWorkspaceStore.trackList = []
+    })
+
+    function template(wrapper: ReturnType<typeof mountWorkspace>): string {
+      return wrapper.get('.workspace__table').attributes('style') ?? ''
+    }
+
+    // A 1fr track column swallowed every spare pixel, so a workspace with two playlists put
+    // a wide empty gap between the track text and the first checkbox. Fixed columns plus a
+    // trailing track park the slack past the last playlist instead, and keep a checkbox in
+    // the same place whatever the playlist count.
+    it('parks leftover width past the last playlist column', () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 140px 140px 1fr')
+    })
+
+    it('gives every playlist the same width regardless of how many there are', () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 5 }, (_, i) =>
+        makePlaylist(i + 1, `PL${i + 1}`, []),
+      )
+      const wrapper = mountWorkspace()
+      expect(template(wrapper)).toContain('140px 140px 140px 140px 140px 1fr')
+    })
+
+    it('still ends in a trailing track when the workspace holds no playlists', () => {
+      const wrapper = mountWorkspace()
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 1fr')
+    })
+  })
+
   describe('save timestamp', () => {
     it('shows a saved timestamp after a successful save', async () => {
       mockWorkspaceStore.hasUnsavedChanges = true
