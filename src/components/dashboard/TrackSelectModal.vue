@@ -89,39 +89,43 @@ function confirmSelection(): void {
 </script>
 
 <template>
-  <div class="track-select">
-    <h2 class="track-select__title">Select Tracks</h2>
+  <div class="selection-modal">
+    <h2 class="selection-modal__title">Select Tracks</h2>
 
     <!-- Control bar with search and sort options -->
-    <ControlBar>
-      <SearchBar v-model="query" placeholder="Filter tracks…" />
-      <SelectDropdown v-model="currentSort" :options="sortOptions" />
-    </ControlBar>
+    <div class="selection-modal__body">
+      <ControlBar>
+        <SearchBar v-model="query" placeholder="Filter tracks…" />
+        <SelectDropdown v-model="currentSort" :options="sortOptions" />
+      </ControlBar>
 
-    <!-- Track list with selection -->
-    <div class="track-select__list">
-      <ScrollableList :items="displayItems" key-field="trackID" :estimate-size="48">
-        <template #item="{ item }">
-          <SelectableItem
-            :label="(item as Track).title"
-            :subtitle="(item as Track).artist"
-            :selected="isSelected((item as Track).trackID)"
-            @toggle="toggle((item as Track).trackID)"
-          />
-        </template>
-        <template #empty>
-          <p class="text-muted track-select__empty">{{ emptyLabel }}</p>
-        </template>
-      </ScrollableList>
+      <!-- Track list with selection -->
+      <div class="selection-modal__list">
+        <ScrollableList :items="displayItems" key-field="trackID" :estimate-size="48">
+          <template #item="{ item }">
+            <SelectableItem
+              :label="(item as Track).title"
+              :subtitle="(item as Track).artist"
+              :selected="isSelected((item as Track).trackID)"
+              @toggle="toggle((item as Track).trackID)"
+            />
+          </template>
+          <template #empty>
+            <p class="text-muted track-select__empty">{{ emptyLabel }}</p>
+          </template>
+        </ScrollableList>
+      </div>
     </div>
 
-
     <!-- Footer with select all and action buttons -->
-    <div class="track-select__footer">
-      <button class="btn btn--secondary track-select__select-all" @click="toggleSelectAll">
+    <div class="selection-modal__footer">
+      <button
+        class="btn btn--secondary selection-modal__select-all track-select__select-all"
+        @click="toggleSelectAll"
+      >
         {{ allSelected ? 'Deselect All' : 'Select All' }}
       </button>
-      <div class="track-select__footer-actions">
+      <div class="selection-modal__footer-actions">
         <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
         <!-- Label and variant come from the caller; see the props block for defaults. -->
         <button
@@ -136,37 +140,3 @@ function confirmSelection(): void {
     </div>
   </div>
 </template>
-
-<style scoped>
-.track-select {
-  padding: var(--space-5);
-  min-width: 440px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.track-select__title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-}
-
-.track-select__list {
-  height: 320px;
-  overflow: hidden;
-  border-top: 1px solid var(--color-border-subtle);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.track-select__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.track-select__footer-actions {
-  display: flex;
-  gap: var(--space-2);
-}
-</style>

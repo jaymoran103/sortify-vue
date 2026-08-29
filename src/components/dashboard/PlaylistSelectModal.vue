@@ -90,7 +90,7 @@ function confirmSelection(): void {
 
     <!-- Footer with select all and action buttons -->
     <div class="selection-modal__footer">
-      <button class="btn btn--secondary playlist-select__select-all" @click="toggleSelectAll">
+      <button class="btn btn--secondary selection-modal__select-all" @click="toggleSelectAll">
         {{ allSelected ? 'Deselect All' : 'Select All' }}
       </button>
       <div class="selection-modal__footer-actions">
@@ -107,9 +107,3 @@ function confirmSelection(): void {
     </div>
   </div>
 </template>
-
-<style scoped>
-.playlist-select__select-all {
-  flex-shrink: 0;
-}
-</style>
