@@ -259,7 +259,10 @@ async function handleExport(): Promise<void> {
 
     <!-- Footer: playlists step has select-all on left + nav on right -->
     <div v-if="step === 'playlists'" class="selection-modal__footer">
-      <button class="btn btn--ghost io-modal__select-all" @click="toggleSelectAll">
+      <button
+        class="btn btn--ghost selection-modal__select-all io-modal__select-all"
+        @click="toggleSelectAll"
+      >
         {{ allSelected ? 'Deselect All' : 'Select All' }}
       </button>
       <div class="selection-modal__footer-actions">

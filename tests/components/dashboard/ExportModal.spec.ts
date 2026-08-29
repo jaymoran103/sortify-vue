@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import ExportModal from '@/components/dashboard/ExportModal.vue'
 import * as registry from '@/adapters/registry'
 import type { Playlist } from '@/types/models'
+import { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 
 const mockExport = vi.fn()
 
@@ -171,5 +172,29 @@ describe('ExportModal', () => {
     // Spotify card is the second one
     await cards[1]!.trigger('click')
     expect(mockLogin).toHaveBeenCalledWith('open-spotify-exporter')
+  })
+})
+
+describe('ExportModal playlist step', () => {
+  // Local Files is the first source card and needs no auth; it lands on the playlist step.
+  async function mountAtPlaylists() {
+    const wrapper = mountExport()
+    await wrapper.find('.source-card').trigger('click')
+    return wrapper
+  }
+
+  it('gives ScrollableList the height SelectableItem renders at', async () => {
+    const wrapper = await mountAtPlaylists()
+    const list = wrapper.findComponent(ScrollableListStub)
+    expect(list.props('estimateSize')).toBe(SELECTABLE_ITEM_HEIGHT)
+  })
+
+  // Sits opposite Back/Cancel/Next; without the shared rule it is the one Select All
+  // that flex would squash as those labels grow.
+  it('carries the shared select-all class', async () => {
+    const wrapper = await mountAtPlaylists()
+    expect(wrapper.find('.io-modal__select-all').classes()).toContain(
+      'selection-modal__select-all',
+    )
   })
 })
