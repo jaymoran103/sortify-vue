@@ -165,11 +165,20 @@ const rowSelection = useListSelection<Track>(
   computed(() => workspaceStore.trackList),
 )
 
-// Dynamic CSS grid column template: index + track info + one column per playlist.
-// TODO refactor: this feels hacky
+// Dynamic CSS grid column template: index, track info, one column per playlist, and a
+// trailing track that absorbs whatever is left over.
+//
+// The track column used to be the 1fr, which meant a workspace with two playlists spent
+// every spare pixel widening the gap between the track text and the first checkbox. Every
+// column is now a fixed size and the slack parks past the last playlist, so a checkbox
+// stays where the cursor last left it however many playlists come and go. The trailing
+// track holds no element — both the header and each row place their children implicitly,
+// so it is simply the last one nothing lands in, and it collapses to 0 once the columns
+// overflow and the table scrolls.
+const PLAYLIST_COLUMN_WIDTH = '140px'
 const columnTemplate = computed(() => {
-  const playlistCols = workspaceStore.playlists.map(() => 'minmax(100px, 200px)').join(' ')
-  return `60px minmax(200px, 1fr) ${playlistCols}`
+  const playlistCols = workspaceStore.playlists.map(() => PLAYLIST_COLUMN_WIDTH)
+  return ['60px', 'minmax(200px, 480px)', ...playlistCols, '1fr'].join(' ')
 })
 
 // Configure virtualizer: use displayTracks count, scroll container, and estimated row height.
@@ -320,6 +329,18 @@ async function handleRemove(playlistId: PlaylistId): Promise<void> {
   workspaceStore.removePlaylist(playlistId)
 }
 
+/**
+ * Move one column and record where it landed.
+ *
+ * movePlaylist only rearranges the in-memory array; column order reaches IDB through
+ * persistPlaylistOrder, which is separate so a drag can hop across several columns and
+ * still write once. A menu move is a settled interaction, so it writes immediately.
+ */
+function handleMoveColumn(playlistId: PlaylistId, direction: -1 | 1): void {
+  workspaceStore.movePlaylist(playlistId, direction)
+  void workspaceStore.persistPlaylistOrder()
+}
+
 function handleDuplicate(playlistId: PlaylistId): void {
   workspaceStore.duplicatePlaylist(playlistId)
 }
@@ -377,10 +398,10 @@ function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
   // Move entries are offered only where there is somewhere to move to. The view knows each
   // playlist's index already, so the header no longer needs canMoveLeft/canMoveRight props.
   if (index > 0) {
-    items.push({ label: 'Move Left', action: () => workspaceStore.movePlaylist(playlistId, -1) })
+    items.push({ label: 'Move Left', action: () => handleMoveColumn(playlistId, -1) })
   }
   if (index < workspaceStore.playlists.length - 1) {
-    items.push({ label: 'Move Right', action: () => workspaceStore.movePlaylist(playlistId, 1) })
+    items.push({ label: 'Move Right', action: () => handleMoveColumn(playlistId, 1) })
   }
 
   items.push({ divider: true })
@@ -413,11 +434,24 @@ function handleTrackContextMenu(trackId: string, event: MouseEvent): void {
   const selectedCount = rowSelection.selectedCount.value
   const items: MenuEntry[] = []
 
+  // "All Playlists" reads as the whole library; these entries only ever reach the playlists
+  // currently in the workspace. Naming the count says which set is meant and how big it is,
+  // the same scope-at-click-time the column menu states for its bulk entries.
+  const playlistCount = workspaceStore.playlists.length
+  const playlistScope = `${playlistCount} Workspace Playlist${playlistCount === 1 ? '' : 's'}`
+
   if (selectedCount === 1) {
-    items.push({ label: 'Add to All Playlists', action: () => handleAddToAll(trackId) })
-    items.push({ label: 'Remove from All Playlists', action: () => handleRemoveFromAll(trackId) })
-    items.push({ divider: true })
-    items.push({ label: 'Remove from Workspace', action: () => handleDeleteTrack(trackId) })
+    // With no playlists in the workspace both entries are no-ops, and their labels would
+    // read "0 Workspace Playlists". Removing the track itself still applies.
+    if (playlistCount > 0) {
+      items.push({ label: `Add to ${playlistScope}`, action: () => handleAddToAll(trackId) })
+      items.push({
+        label: `Remove from ${playlistScope}`,
+        action: () => handleRemoveFromAll(trackId),
+      })
+      items.push({ divider: true })
+    }
+    items.push({ label: 'Remove from Workspace', action: () => void handleDeleteTrack(trackId) })
 
     // Prefer the explicit spotifyURI field; fall back to the trackID when that is itself a
     // Spotify track URI, which is how Spotify-imported tracks are keyed. Track carries an
@@ -434,15 +468,17 @@ function handleTrackContextMenu(trackId: string, event: MouseEvent): void {
       items.push({ label: 'Copy Track ID', action: () => void copyToClipboard(spotifyURI) })
     }
   } else {
-    items.push({
-      label: `Add ${selectedCount} Tracks to All Playlists`,
-      action: () => handleBulkAddToAll(),
-    })
-    items.push({
-      label: `Remove ${selectedCount} Tracks from All Playlists`,
-      action: () => handleBulkRemoveFromAll(),
-    })
-    items.push({ divider: true })
+    if (playlistCount > 0) {
+      items.push({
+        label: `Add ${selectedCount} Tracks to ${playlistScope}`,
+        action: () => handleBulkAddToAll(),
+      })
+      items.push({
+        label: `Remove ${selectedCount} Tracks from ${playlistScope}`,
+        action: () => handleBulkRemoveFromAll(),
+      })
+      items.push({ divider: true })
+    }
     items.push({
       label: `Remove ${selectedCount} Tracks from Workspace`,
       action: () => handleBulkDelete(),
@@ -462,7 +498,34 @@ function handleRemoveFromAll(trackId: string): void {
   workspaceStore.removeTrackFromAll(trackId)
 }
 
-function handleDeleteTrack(trackId: string): void {
+/**
+ * Remove one track from the workspace entirely, behind a confirmation.
+ *
+ * The only single-track action that confirms. Membership edits stay instant because their
+ * effect is a checkbox the user can see and tick back; this one takes the row out of the
+ * table, and the track is gone from every playlist with it. The bulk path has always
+ * confirmed — this closes the gap where removing one track was the less guarded action.
+ *
+ * The message counts the playlists actually holding the track, not the workspace's
+ * playlists, so it never promises to empty a playlist the track was never in.
+ */
+async function handleDeleteTrack(trackId: string): Promise<void> {
+  const title = workspaceStore.tracks.get(trackId)?.title ?? trackId
+  const memberOf = workspaceStore.playlists.filter((pl) => pl.trackIdSet.has(trackId)).length
+  const alsoLeaves =
+    memberOf === 0
+      ? ''
+      : memberOf === 1
+        ? ', and from the playlist holding it'
+        : `, and from the ${memberOf} playlists holding it`
+
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Remove from Workspace',
+    message: `Remove "${title}" from the workspace${alsoLeaves}?`,
+    confirmLabel: 'Remove',
+  })
+  if (!confirmed) return
+
   workspaceStore.removeTrackFromWorkspace(trackId)
   rowSelection.clear()
 }
@@ -567,14 +630,30 @@ async function handleCreatePlaylist(): Promise<void> {
   }
 }
 
+/**
+ * Route the delete shortcut to whichever confirmation matches the selection, so pressing
+ * it on a single row asks the same question the row's own menu entry asks — naming the
+ * track — rather than the bulk dialog's "1 track(s)".
+ */
+async function handleDeleteShortcut(): Promise<void> {
+  const count = rowSelection.selectedCount.value
+  if (count === 0) return
+  if (count === 1) {
+    const [only] = rowSelection.selectedIds.value
+    if (only) await handleDeleteTrack(only)
+    return
+  }
+  await handleBulkDelete()
+}
+
 // ─── Keyboard shortcuts ────────────────────
 
 useKeyboardShortcuts({
   'cmd+s': (e) => { e.preventDefault(); void handleSave() },
   'cmd+a': (e) => { e.preventDefault(); rowSelection.selectAll() },
   'escape': () => { rowSelection.clear() },
-  'cmd+delete': () => { if (rowSelection.selectedCount.value > 0) void handleBulkDelete() },
-  'cmd+backspace': () => { if (rowSelection.selectedCount.value > 0) void handleBulkDelete() },
+  'cmd+delete': () => void handleDeleteShortcut(),
+  'cmd+backspace': () => void handleDeleteShortcut(),
 })
 </script>
 
