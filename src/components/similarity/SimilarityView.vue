@@ -280,6 +280,18 @@ async function onSelectPreset(key: string): Promise<void> {
   await store.refreshRail()
 }
 
+// ── Navigation ────────────────────────────────────────────────────────────────
+function goBack(): void {
+  router.push({ name: 'dashboard' })
+}
+
+/** Library scale, for the header meta line. Mirrors the workspace header's playlists/tracks form. */
+const libraryMeta = computed(() => {
+  const playlists = (playlistStore.playlists ?? []).length
+  const tracks = new Set((playlistStore.playlists ?? []).flatMap((p) => p.trackIDs)).size
+  return `${playlists} playlist${playlists === 1 ? '' : 's'} \u00b7 ${tracks} track${tracks === 1 ? '' : 's'}`
+})
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await store.run()
@@ -317,6 +329,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="similarity-view">
+    <!-- Page header, matching the workspace view: back, title, then muted meta. -->
+    <header class="similarity-view__header">
+      <button class="btn btn--secondary" @click="goBack">Back to Dashboard</button>
+      <h1 class="similarity-view__title">Similarity</h1>
+      <span class="similarity-view__meta text-muted">{{ libraryMeta }}</span>
+    </header>
+
     <CursorBar
       :scope-label="scopeLabel"
       :is-empty="cursor.isEmpty"
@@ -399,8 +418,34 @@ onBeforeUnmount(() => {
 .similarity-view {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* 100vh, not 100%: nothing above this sets a height, so a percentage collapses to content
+     height and the view stops filling the screen. WorkspaceView solves it the same way. */
+  height: 100vh;
   min-height: 0;
+}
+
+/* Ported from WorkspaceView so the two pages share one header treatment. */
+.similarity-view__header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.similarity-view__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.similarity-view__meta {
+  white-space: nowrap;
 }
 
 .similarity-view__body {

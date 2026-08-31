@@ -169,3 +169,48 @@ describe('SimilarityView', () => {
     expect(wrapper.text().toLowerCase()).toContain('threshold')
   })
 })
+
+describe('SimilarityView header', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    pushMock.mockClear()
+    storeState.rows = [SEED_ROW]
+  })
+
+  it('renders a page header matching the workspace pattern', () => {
+    const wrapper = factory()
+    const header = wrapper.find('.similarity-view__header')
+    expect(header.exists()).toBe(true)
+    expect(header.find('.similarity-view__title').text()).toBe('Similarity')
+  })
+
+  it('offers Back to Dashboard, as the workspace header does', async () => {
+    const wrapper = factory()
+    const back = wrapper
+      .findAll('.similarity-view__header button')
+      .find((b) => b.text().includes('Back to Dashboard'))
+    expect(back).toBeDefined()
+    await back!.trigger('click')
+    expect(pushMock).toHaveBeenCalledWith({ name: 'dashboard' })
+  })
+
+  it('reports library scale in the meta line', () => {
+    // The mocked playlist store holds two playlists sharing track b: 2 playlists, 3 unique tracks.
+    expect(factory().find('.similarity-view__meta').text()).toBe('2 playlists · 3 tracks')
+  })
+
+  it('singularises a one-playlist library', () => {
+    playlistState.playlists = [{ id: 1, name: 'Only', trackIDs: ['a'] }]
+    expect(factory().find('.similarity-view__meta').text()).toBe('1 playlist · 1 track')
+    playlistState.playlists = [
+      { id: 1, name: 'Alpha', trackIDs: ['a', 'b'] },
+      { id: 2, name: 'Beta', trackIDs: ['b', 'c'] },
+    ]
+  })
+
+  it('keeps the cursor bar below the header rather than replacing it', () => {
+    const wrapper = factory()
+    expect(wrapper.find('.similarity-view__header').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'CursorBar' }).exists()).toBe(true)
+  })
+})

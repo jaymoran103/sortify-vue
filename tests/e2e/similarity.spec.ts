@@ -105,6 +105,29 @@ test.describe('similarity module', () => {
     await expect(page.locator('.result-table')).toContainText('100%')
   })
 
+  test('carries the same page header as the workspace view', async ({ page }) => {
+    await gotoRoute(page, '#/similarity', '.cursor-bar')
+
+    const header = page.locator('.similarity-view__header')
+    await expect(header).toBeVisible()
+    await expect(header.locator('.similarity-view__title')).toHaveText('Similarity')
+    await expect(header.locator('.similarity-view__meta')).toContainText('playlists')
+
+    // The view fills the viewport rather than collapsing to content height, as workspace does.
+    const viewport = page.viewportSize()
+    const box = await page.locator('.similarity-view').boundingBox()
+    expect(box!.height).toBeGreaterThan((viewport!.height ?? 0) * 0.9)
+  })
+
+  test('the header returns to the dashboard', async ({ page }) => {
+    await gotoRoute(page, '#/similarity', '.cursor-bar')
+    await page
+      .locator('.similarity-view__header button', { hasText: 'Back to Dashboard' })
+      .click()
+    await expect(page).toHaveURL(/#\/dashboard/)
+    await expect(page.locator('.library-card')).toBeVisible()
+  })
+
   test('shows the index as ready and reports the library size', async ({ page }) => {
     await gotoRoute(page, '#/similarity', '.cursor-bar')
     await expect(page.locator('.cursor-bar')).toContainText('Whole library')
