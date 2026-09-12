@@ -31,6 +31,8 @@ function factory(
     equivalenceEnabled: boolean
     hasConfirmedDoubles: boolean
     doublesControls: DoublesControls
+    resultView: 'table' | 'map'
+    canShowMap: boolean
   }> = {},
 ) {
   return mount(ResultControlBar, {
@@ -41,6 +43,8 @@ function factory(
       mode: 'overlap',
       equivalenceEnabled: true,
       hasConfirmedDoubles: false,
+      resultView: 'table',
+      canShowMap: false,
       ...overrides,
     },
   })
@@ -134,5 +138,29 @@ describe('ResultControlBar equivalence toggle', () => {
   it('does not offer the toggle in doubles mode, where it means nothing', () => {
     const wrapper = factory(CONTROLS, MEASURES, { mode: 'doubles', hasConfirmedDoubles: true })
     expect(wrapper.find('.result-control-bar__equivalence').exists()).toBe(false)
+  })
+})
+
+describe('ResultControlBar view toggle', () => {
+  it('stays hidden unless a map is meaningful for the active preset', () => {
+    expect(factory().find('.result-control-bar__view').exists()).toBe(false)
+  })
+
+  it('appears for the containment reading', () => {
+    const wrapper = factory(CONTROLS, MEASURES, { canShowMap: true })
+    expect(wrapper.find('.result-control-bar__view').exists()).toBe(true)
+  })
+
+  it('marks the active surface', () => {
+    const wrapper = factory(CONTROLS, MEASURES, { canShowMap: true, resultView: 'map' })
+    expect(wrapper.find('.result-control-bar__view-map').classes()).toContain(
+      'result-control-bar__view-btn--active',
+    )
+  })
+
+  it('emits the requested surface', async () => {
+    const wrapper = factory(CONTROLS, MEASURES, { canShowMap: true })
+    await wrapper.find('.result-control-bar__view-map').trigger('click')
+    expect(wrapper.emitted('updateView')?.[0]?.[0]).toBe('map')
   })
 })

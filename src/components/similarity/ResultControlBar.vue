@@ -15,6 +15,10 @@ const props = defineProps<{
   measures: ResultMeasure[]
   mode: 'overlap' | 'doubles'
   equivalenceEnabled: boolean
+  /** Which result surface is showing. The map reads containment only. */
+  resultView: 'table' | 'map'
+  /** The map is offered only for the containment reading, where nesting is the whole point. */
+  canShowMap: boolean
   /** The toggle only renders once there is something for it to change. */
   hasConfirmedDoubles: boolean
 }>()
@@ -23,6 +27,7 @@ const emit = defineEmits<{
   update: [patch: Partial<OverlapControls>]
   updateDoubles: [patch: Partial<DoublesControls>]
   updateEquivalence: [enabled: boolean]
+  updateView: [view: 'table' | 'map']
 }>()
 
 const REVIEW_FILTERS: { key: EquivalenceStatus | 'all'; label: string }[] = [
@@ -106,6 +111,23 @@ function onThreshold(event: Event): void {
     </label>
 
     <template #actions>
+      <div v-if="canShowMap" class="result-control-bar__view">
+        <button
+          class="result-control-bar__view-btn result-control-bar__view-table"
+          :class="{ 'result-control-bar__view-btn--active': resultView === 'table' }"
+          @click="emit('updateView', 'table')"
+        >
+          Table
+        </button>
+        <button
+          class="result-control-bar__view-btn result-control-bar__view-map"
+          :class="{ 'result-control-bar__view-btn--active': resultView === 'map' }"
+          @click="emit('updateView', 'map')"
+        >
+          Map
+        </button>
+      </div>
+
       <div v-if="mode === 'overlap'" class="result-control-bar__axis">
         <button
           class="result-control-bar__axis-btn result-control-bar__axis-playlist"
@@ -156,6 +178,7 @@ function onThreshold(event: Event): void {
   cursor: pointer;
 }
 
+.result-control-bar__view,
 .result-control-bar__axis {
   display: flex;
   border: 1px solid var(--color-border-subtle);
@@ -163,6 +186,7 @@ function onThreshold(event: Event): void {
   overflow: hidden;
 }
 
+.result-control-bar__view-btn,
 .result-control-bar__axis-btn {
   padding: var(--space-1) var(--space-3);
   font-size: var(--font-size-sm);
@@ -173,10 +197,12 @@ function onThreshold(event: Event): void {
   transition: background var(--duration-fast) var(--ease-default);
 }
 
+.result-control-bar__view-btn + .result-control-bar__view-btn,
 .result-control-bar__axis-btn + .result-control-bar__axis-btn {
   border-left: 1px solid var(--color-border-subtle);
 }
 
+.result-control-bar__view-btn--active,
 .result-control-bar__axis-btn--active {
   background: var(--color-accent);
   color: var(--color-text-on-accent);

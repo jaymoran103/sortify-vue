@@ -1,4 +1,5 @@
 import { buildIndex } from './invertedIndex'
+import { buildContainmentClusters } from './containment'
 import { buildDoublesRows, detectGroups, type ScannableGroup } from './doubles'
 import { scanPlaylistOverlap, scanTrackOverlap } from './overlap'
 import type { InvertedIndex, ScanNote, ScanRequest, ScanResponse } from './types'
@@ -49,6 +50,11 @@ ctx.addEventListener('message', (event: MessageEvent<ScanRequest>) => {
 
     if (!index) {
       post({ id: request.id, type: 'error', message: 'Index has not been built yet.' })
+      return
+    }
+
+    if (request.type === 'containment') {
+      post({ id: request.id, type: 'clusters', clusters: buildContainmentClusters(index) })
       return
     }
 

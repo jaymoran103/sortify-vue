@@ -11,6 +11,7 @@ import { useListSelection } from '@/composables/useListSelection'
 import { useModal } from '@/composables/useModal'
 import { describeConsolidation, planConsolidation } from '@/similarity/consolidate'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
+import ContainmentMap from '@/components/similarity/ContainmentMap.vue'
 import CursorBar from '@/components/similarity/CursorBar.vue'
 import DoublesReviewPanel from '@/components/similarity/DoublesReviewPanel.vue'
 import NoticedRail from '@/components/similarity/NoticedRail.vue'
@@ -273,11 +274,38 @@ function onRowClick(key: string, event: MouseEvent): void {
   openReview(key)
 }
 
+/** Clicking a circle points the cursor at that playlist, so the map can feed the next scan. */
+function onMapPlaylist(playlistId: number): void {
+  cursor.set('playlist', [String(playlistId)])
+}
+
 /** Applying a preset closes any open review, since the list beneath it just changed. */
 async function onSelectPreset(key: string): Promise<void> {
   reviewingGroupId.value = null
   await store.applyPreset(key)
   await store.refreshRail()
+}
+
+// ── Result surface ────────────────────────────────────────────────────────────
+const resultView = ref<'table' | 'map'>('table')
+
+/**
+ * The map is only offered for the containment reading. Overlap's other presets answer "how much
+ * do these share", which nested circles cannot express, and Doubles is not a playlist relation
+ * at all.
+ */
+const canShowMap = computed(
+  () => store.mode === 'overlap' && store.activePresetKey === 'overlap-contained',
+)
+
+/** Falls back to the table whenever the map stops being meaningful for the active preset. */
+watch(canShowMap, (allowed) => {
+  if (!allowed) resultView.value = 'table'
+})
+
+async function setResultView(view: 'table' | 'map'): Promise<void> {
+  resultView.value = view
+  if (view === 'map') await store.loadContainment()
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -365,9 +393,12 @@ onBeforeUnmount(() => {
           :mode="store.mode"
           :equivalence-enabled="store.equivalenceEnabled"
           :has-confirmed-doubles="hasConfirmedDoubles"
+          :result-view="resultView"
+          :can-show-map="canShowMap"
           @update="store.setControls($event)"
           @update-doubles="store.setDoublesControls($event)"
           @update-equivalence="store.setEquivalenceEnabled($event)"
+          @update-view="setResultView"
         />
 
         <p v-if="store.error" class="similarity-view__error text-sm">{{ store.error }}</p>
@@ -379,7 +410,16 @@ onBeforeUnmount(() => {
           </li>
         </ul>
 
+        <ContainmentMap
+          v-if="resultView === 'map'"
+          :clusters="store.containmentClusters"
+          :selected-key="store.selectedClusterKey"
+          @select="store.selectCluster($event)"
+          @select-playlist="onMapPlaylist"
+        />
+
         <ResultTable
+          v-else
           :rows="rows"
           :selected-keys="selectedIds"
           :empty-message="emptyMessage"

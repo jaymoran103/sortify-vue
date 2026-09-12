@@ -1,4 +1,5 @@
 import type {
+  ContainmentCluster,
   CursorScope,
   DetectedGroup,
   DoublesControls,
@@ -93,6 +94,14 @@ export class SimilarityWorkerClient {
 
     if (response.type === 'built') {
       ;(entry.resolve as (value: IndexStats) => void)(response.stats)
+      return
+    }
+
+    if (response.type === 'clusters') {
+      const stale = entry.isScan && response.id !== this.latestScanId
+      ;(entry.resolve as (value: ContainmentCluster[] | null) => void)(
+        stale ? null : response.clusters,
+      )
       return
     }
 
@@ -216,6 +225,17 @@ export class SimilarityWorkerClient {
       true,
       onProgress,
     )
+  }
+
+  /**
+   * Derives the containment forest from the index already held in the worker.
+   *
+   * Routed through the worker rather than rebuilt on the main thread so there is one index and
+   * one answer: with the equivalence fold on, confirmed doubles change which playlists count as
+   * contained, and a second index built here would disagree.
+   */
+  async containment(): Promise<ContainmentCluster[] | null> {
+    return this.send<ContainmentCluster[] | null>({ type: 'containment' }, true)
   }
 
   /** Tears down the worker and drops every pending request. */

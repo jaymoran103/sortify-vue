@@ -170,10 +170,18 @@ export interface TrackLabelInput {
   artist: string
 }
 
+// Type-only, so the cycle with containment.ts (which imports InvertedIndex from here) is erased
+// at compile time and never reaches the bundle.
+import type { ContainmentCluster } from './containment'
+
+/** Re-exported so callers can name the worker protocol's payload from one place. */
+export type { ContainmentCluster, ContainmentNode } from './containment'
+
 /** Main thread to worker. The id correlates a request with its response. */
 export type ScanRequest =
   | { id: number; type: 'build'; playlists: IndexInput[]; canonical?: [string, string][] }
   | { id: number; type: 'scan'; controls: OverlapControls; scope: CursorScope }
+  | { id: number; type: 'containment' }
   | {
       id: number
       type: 'doubles'
@@ -197,6 +205,7 @@ export interface StoredGroupInput {
 export type ScanResponse =
   | { id: number; type: 'built'; stats: IndexStats }
   | { id: number; type: 'detected'; groups: DetectedGroup[]; result: ScanResult }
+  | { id: number; type: 'clusters'; clusters: ContainmentCluster[] }
   | { id: number; type: 'progress'; done: number; total: number; phase: string }
   | { id: number; type: 'result'; result: ScanResult }
   | { id: number; type: 'error'; message: string }

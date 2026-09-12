@@ -13,6 +13,7 @@ import {
   isDoublesPreset,
 } from '@/similarity/presets'
 import type {
+  ContainmentCluster,
   DoublesControls,
   IndexInput,
   IndexStats,
@@ -92,6 +93,10 @@ export const useSimilarityStore = defineStore('similarity', () => {
   const indexedWithEquivalence = ref(false)
 
   const railFindings = ref<RailFinding[]>([])
+
+  /** Containment forest for the map view. Empty until the map is opened. */
+  const containmentClusters = ref<ContainmentCluster[]>([])
+  const selectedClusterKey = ref('')
   const controls = ref<OverlapControls>({
     ...(getPreset(DEFAULT_PRESET_KEY)?.controls ?? FALLBACK_CONTROLS),
   })
@@ -386,6 +391,37 @@ export const useSimilarityStore = defineStore('similarity', () => {
     await run()
   }
 
+  /**
+   * Loads the containment forest, building the index first if needed.
+   *
+   * Called when the map view opens rather than on every scan: it is only meaningful for the
+   * containment reading, and deriving it costs a pass over every playlist pair that shares a
+   * track.
+   */
+  async function loadContainment(): Promise<void> {
+    await ensureIndex()
+    if (indexStatus.value !== 'ready') {
+      containmentClusters.value = []
+      return
+    }
+
+    try {
+      const clusters = await client.containment()
+      if (!clusters) return
+      containmentClusters.value = clusters
+      if (!clusters.some((cluster) => cluster.key === selectedClusterKey.value)) {
+        selectedClusterKey.value = clusters[0]?.key ?? ''
+      }
+    } catch (caught) {
+      error.value = caught instanceof Error ? caught.message : 'Containment scan failed.'
+    }
+  }
+
+  /** Which cluster the map is showing. */
+  function selectCluster(key: string): void {
+    selectedClusterKey.value = key
+  }
+
   /** Tears down the worker. Called when the similarity view unmounts. */
   function dispose(): void {
     client.terminate()
@@ -403,6 +439,8 @@ export const useSimilarityStore = defineStore('similarity', () => {
     equivalenceEnabled,
     mode,
     railFindings,
+    containmentClusters,
+    selectedClusterKey,
     activePresetKey,
     isScanning,
     scanProgress,
@@ -416,6 +454,8 @@ export const useSimilarityStore = defineStore('similarity', () => {
     setDoublesControls,
     setEquivalenceEnabled,
     refreshRail,
+    loadContainment,
+    selectCluster,
     dispose,
   }
 })

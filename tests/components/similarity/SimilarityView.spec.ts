@@ -8,6 +8,7 @@ import type { Playlist } from '@/types/models'
 const runMock = vi.fn()
 const applyPresetMock = vi.fn()
 const setControlsMock = vi.fn()
+const loadContainmentMock = vi.fn()
 
 const SEED_ROW: ResultRow = {
   key: '1:2',
@@ -42,6 +43,8 @@ const storeState = reactive({
   },
   equivalenceEnabled: true,
   railFindings: [] as { presetKey: string; label: string; count: number }[],
+  containmentClusters: [] as unknown[],
+  selectedClusterKey: '',
   isScanning: false,
   scanProgress: null,
   error: null as string | null,
@@ -51,6 +54,8 @@ const storeState = reactive({
   setDoublesControls: vi.fn(),
   setEquivalenceEnabled: vi.fn(),
   refreshRail: vi.fn(),
+  loadContainment: loadContainmentMock,
+  selectCluster: vi.fn(),
   ensureIndex: vi.fn(),
   dispose: vi.fn(),
 })
@@ -212,5 +217,48 @@ describe('SimilarityView header', () => {
     const wrapper = factory()
     expect(wrapper.find('.similarity-view__header').exists()).toBe(true)
     expect(wrapper.findComponent({ name: 'CursorBar' }).exists()).toBe(true)
+  })
+})
+
+describe('SimilarityView containment map', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    loadContainmentMock.mockClear()
+    storeState.activePresetKey = 'overlap-any'
+    storeState.containmentClusters = []
+  })
+
+  it('offers no map for a preset that does not read containment', () => {
+    const bar = factory().findComponent({ name: 'ResultControlBar' })
+    expect(bar.props('canShowMap')).toBe(false)
+  })
+
+  it('offers the map for the containment preset', () => {
+    storeState.activePresetKey = 'overlap-contained'
+    const bar = factory().findComponent({ name: 'ResultControlBar' })
+    expect(bar.props('canShowMap')).toBe(true)
+  })
+
+  it('loads the containment forest only when the map is opened', async () => {
+    storeState.activePresetKey = 'overlap-contained'
+    const wrapper = factory()
+    expect(loadContainmentMock).not.toHaveBeenCalled()
+
+    await wrapper.findComponent({ name: 'ResultControlBar' }).vm.$emit('updateView', 'map')
+    expect(loadContainmentMock).toHaveBeenCalledTimes(1)
+    expect(wrapper.findComponent({ name: 'ContainmentMap' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ResultTable' }).exists()).toBe(false)
+  })
+
+  it('falls back to the table when the preset stops reading containment', async () => {
+    storeState.activePresetKey = 'overlap-contained'
+    const wrapper = factory()
+    await wrapper.findComponent({ name: 'ResultControlBar' }).vm.$emit('updateView', 'map')
+    expect(wrapper.findComponent({ name: 'ContainmentMap' }).exists()).toBe(true)
+
+    storeState.activePresetKey = 'overlap-any'
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent({ name: 'ContainmentMap' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'ResultTable' }).exists()).toBe(true)
   })
 })
