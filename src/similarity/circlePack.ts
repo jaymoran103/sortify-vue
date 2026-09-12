@@ -22,6 +22,11 @@ export interface PackedCircle {
   r: number
   /** 0 for a cluster root, 1 for its children, and so on. Drives styling, not geometry. */
   depth: number
+  /**
+   * Whether anything is nested inside. A container's interior belongs to its children, so its
+   * label goes on the rim; a leaf can use its middle.
+   */
+  hasChildren: boolean
 }
 
 /** Fraction of a parent's radius its children may occupy, leaving a visible ring for the label. */
@@ -148,6 +153,7 @@ function layoutChildren(node: ContainmentNode, cx: number, cy: number, r: number
       y: childY,
       r: childR,
       depth,
+      hasChildren: child.children.length > 0,
     })
     circles.push(...layoutChildren(child, childX, childY, childR, depth + 1))
   })
@@ -195,6 +201,7 @@ export function packCluster(roots: ContainmentNode[], side: number): PackedCircl
       y,
       r,
       depth: 0,
+      hasChildren: root.children.length > 0,
     })
     circles.push(...layoutChildren(root, x, y, r, 1))
   })

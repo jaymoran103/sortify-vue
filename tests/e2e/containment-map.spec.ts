@@ -16,7 +16,7 @@ const AUG = ['t6', 't7', 't8']
 const HIGH = ['t6'] // inside August, therefore inside the year too
 const YEAR = [...JAN, ...FEB, ...AUG, 't9', 't10']
 
-const TRACKS = [...new Set([...YEAR])].map((id) => ({
+const TRACKS = [...new Set(YEAR)].map((id) => ({
   trackID: id,
   title: `Track ${id}`,
   artist: 'Artist',
@@ -170,6 +170,86 @@ test.describe('containment map', () => {
     await expect(page.locator('.cursor-bar')).toContainText('1 playlist')
   })
 
+  test('never overlaps two labels, including down a concentric chain', async ({ page }) => {
+    await openContainment(page)
+    await page.locator('.result-control-bar__view-map').click()
+    await expect(page.locator('.containment-map__circle')).toHaveCount(5, { timeout: 15_000 })
+
+    // getBBox is real SVG layout, so this measures what is actually drawn rather than intent.
+    const boxes = await page.evaluate(() =>
+      [...document.querySelectorAll('.containment-map__label')].map((label) => {
+        const box = (label as SVGGraphicsElement).getBBox()
+        return { text: label.textContent!.trim(), x: box.x, y: box.y, w: box.width, h: box.height }
+      }),
+    )
+
+    expect(boxes.length).toBeGreaterThan(1)
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i]!
+        const b = boxes[j]!
+        const overlaps =
+          a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+        expect(overlaps, `"${a.text}" overlaps "${b.text}"`).toBe(false)
+      }
+    }
+  })
+
+  test('labels a container on its rim and a leaf in its middle', async ({ page }) => {
+    await openContainment(page)
+    await page.locator('.result-control-bar__view-map').click()
+    await expect(page.locator('.containment-map__circle')).toHaveCount(5, { timeout: 15_000 })
+
+    const { placement, titled } = await page.evaluate(() => {
+      const out: Record<string, { labelY: number; cy: number; r: number }> = {}
+      const names: string[] = []
+      for (const node of document.querySelectorAll('.containment-map__node')) {
+        const circle = node.querySelector('circle')!
+        const name = circle.querySelector('title')!.textContent!.split(' — ')[0]!
+        names.push(name)
+        const label = node.querySelector('.containment-map__label')
+        if (!label) continue
+        out[name] = {
+          labelY: Number(label.getAttribute('y')),
+          cy: Number(circle.getAttribute('cy')),
+          r: Number(circle.getAttribute('r')),
+        }
+      }
+      return { placement: out, titled: names }
+    })
+
+    // Year contains things, so its label sits on the rim, clear of its children.
+    const year = placement['Year_2018']!
+    expect(year.labelY).toBeLessThan(year.cy - year.r * 0.7)
+
+    // Every other labelled container does the same.
+    for (const [name, c] of Object.entries(placement)) {
+      if (name === 'Year_2018' || name === 'January' || name === 'February') continue
+      if (c.labelY < c.cy - 1) expect(c.labelY).toBeLessThan(c.cy - c.r * 0.7)
+    }
+
+    // January contains nothing, so it keeps its middle.
+    const january = placement['January']!
+    expect(Math.abs(january.labelY - january.cy)).toBeLessThan(10)
+
+    // August contains High_Shit, but its rim ring is too narrow to hold legible text, so it
+    // carries no drawn label and falls back to its hover title. Suppressing beats spilling.
+    expect(placement['August']).toBeUndefined()
+    expect(titled).toContain('August')
+  })
+
+  test('shows a legend saying what size encodes, and what it does not', async ({ page }) => {
+    await openContainment(page)
+    await page.locator('.result-control-bar__view-map').click()
+
+    const legend = page.locator('.containment-map__legend')
+    await expect(legend).toBeVisible({ timeout: 15_000 })
+    await expect(legend).toContainText('bigger circle, more tracks')
+    await expect(page.locator('.containment-map__scale-note')).toContainText(
+      'not across the whole map',
+    )
+  })
+
   test('returns to the table when the preset stops reading containment', async ({ page }) => {
     await openContainment(page)
     await page.locator('.result-control-bar__view-map').click()
@@ -178,5 +258,114 @@ test.describe('containment map', () => {
     await page.locator('.operation-palette__item', { hasText: 'that overlap' }).click()
     await expect(page.locator('.containment-map__svg')).toHaveCount(0)
     await expect(page.locator('.result-table')).toBeVisible()
+  })
+})
+
+/**
+ * The dense case, which is where labels actually collided: a year containing twelve months, one of
+ * which contains a smaller list. This mirrors the '18_ cluster in the real export.
+ */
+test.describe('containment map, densely packed', () => {
+  const MONTHS = Array.from({ length: 12 }, (_, i) => ({
+    id: 100 + i,
+    name: `Month_${String(i + 1).padStart(2, '0')}_2018`,
+    trackIDs: Array.from({ length: 8 }, (_, t) => `m${i}t${t}`),
+  }))
+  const YEAR_TRACKS = MONTHS.flatMap((m) => m.trackIDs)
+  const DENSE_PLAYLISTS = [
+    { id: 1, name: 'Year_2018_Everything', trackIDs: [...YEAR_TRACKS, 'extra1', 'extra2'] },
+    ...MONTHS,
+    { id: 200, name: 'Best_Of_March', trackIDs: [MONTHS[2]!.trackIDs[0]!] },
+  ]
+  const DENSE_TRACKS = [...new Set([...YEAR_TRACKS, 'extra1', 'extra2'])].map((id) => ({
+    trackID: id,
+    title: `Track ${id}`,
+    artist: 'Artist',
+    album: 'Album',
+    source: 'csv',
+  }))
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('#/dashboard')
+    await page.reload()
+    await page.locator('.library-card').waitFor({ state: 'visible' })
+    await page.evaluate(
+      async ({ dbName, tracks, playlists }) => {
+        await new Promise<void>((resolve, reject) => {
+          const request = indexedDB.open(dbName)
+          request.onerror = () => reject(request.error)
+          request.onsuccess = () => {
+            const db = request.result
+            const tx = db.transaction(['tracks', 'playlists'], 'readwrite')
+            for (const track of tracks) tx.objectStore('tracks').put(track)
+            for (const playlist of playlists) tx.objectStore('playlists').put(playlist)
+            tx.oncomplete = () => {
+              db.close()
+              resolve()
+            }
+            tx.onerror = () => reject(tx.error)
+          }
+        })
+      },
+      { dbName: DB_NAME, tracks: DENSE_TRACKS, playlists: DENSE_PLAYLISTS },
+    )
+  })
+
+  test('keeps every label clear of every other with a dozen siblings', async ({ page }) => {
+    await openContainment(page)
+    await page.locator('.result-control-bar__view-map').click()
+    // Year + 12 months + Best_Of_March.
+    await expect(page.locator('.containment-map__circle')).toHaveCount(14, { timeout: 15_000 })
+
+    const boxes = await page.evaluate(() =>
+      [...document.querySelectorAll('.containment-map__label')].map((label) => {
+        const box = (label as SVGGraphicsElement).getBBox()
+        return { text: label.textContent!.trim(), x: box.x, y: box.y, w: box.width, h: box.height }
+      }),
+    )
+
+    expect(boxes.length).toBeGreaterThan(4)
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i]!
+        const b = boxes[j]!
+        const overlaps = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+        expect(overlaps, `"${a.text}" overlaps "${b.text}"`).toBe(false)
+      }
+    }
+  })
+
+  test('keeps every label inside the circle it belongs to', async ({ page }) => {
+    await openContainment(page)
+    await page.locator('.result-control-bar__view-map').click()
+    await expect(page.locator('.containment-map__circle')).toHaveCount(14, { timeout: 15_000 })
+
+    const escapes = await page.evaluate(() => {
+      const bad: string[] = []
+      for (const node of document.querySelectorAll('.containment-map__node')) {
+        const circle = node.querySelector('circle')!
+        const label = node.querySelector('.containment-map__label')
+        if (!label) continue
+        const box = (label as SVGGraphicsElement).getBBox()
+        const cx = Number(circle.getAttribute('cx'))
+        const cy = Number(circle.getAttribute('cy'))
+        const r = Number(circle.getAttribute('r'))
+        // Every corner of the text box must sit within the circle.
+        for (const [x, y] of [
+          [box.x, box.y],
+          [box.x + box.width, box.y],
+          [box.x, box.y + box.height],
+          [box.x + box.width, box.y + box.height],
+        ]) {
+          if (Math.hypot(x! - cx, y! - cy) > r + 1) {
+            bad.push(label.textContent!.trim())
+            break
+          }
+        }
+      }
+      return bad
+    })
+
+    expect(escapes).toEqual([])
   })
 })

@@ -177,3 +177,26 @@ describe('packCluster', () => {
     expect(packCluster(build(), 400)).toEqual(packCluster(build(), 400))
   })
 })
+
+describe('packCluster hasChildren', () => {
+  it('marks a container and leaves a leaf unmarked', () => {
+    const circles = packCluster([node(1, 'Year', 100, [node(2, 'Jan', 30)])], 400)
+    expect(circles.find((c) => c.name === 'Year')!.hasChildren).toBe(true)
+    expect(circles.find((c) => c.name === 'Jan')!.hasChildren).toBe(false)
+  })
+
+  it('marks a mid-chain circle, which is both child and container', () => {
+    const circles = packCluster(
+      [node(1, 'Year', 100, [node(2, 'August', 20, [node(3, 'High', 3)])])],
+      400,
+    )
+    const august = circles.find((c) => c.name === 'August')!
+    expect(august.depth).toBe(1)
+    expect(august.hasChildren).toBe(true)
+    expect(circles.find((c) => c.name === 'High')!.hasChildren).toBe(false)
+  })
+
+  it('marks a childless root unmarked', () => {
+    expect(packCluster([node(1, 'Lonely', 10)], 400)[0]!.hasChildren).toBe(false)
+  })
+})

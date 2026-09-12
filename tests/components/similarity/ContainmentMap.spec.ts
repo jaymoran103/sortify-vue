@@ -38,6 +38,17 @@ const OTHER: ContainmentCluster = {
   totalTracks: 21,
 }
 
+/** Same chain as YEAR, but August is most of the year, so its rim is wide enough to label. */
+const WIDE_CHAIN: ContainmentCluster = {
+  key: 'cluster-wide',
+  roots: [node(1, "'18_", 100, [node(3, 'August_2018', 90, [node(4, 'High_Shit', 3)])])],
+  playlistCount: 3,
+  depth: 3,
+  multiParentCount: 0,
+  coveredTracks: 90,
+  totalTracks: 100,
+}
+
 function factory(clusters = [YEAR, OTHER], selectedKey = 'cluster-1') {
   return mount(ContainmentMap, { props: { clusters, selectedKey } })
 }
@@ -122,5 +133,89 @@ describe('ContainmentMap', () => {
     const wrapper = factory()
     await wrapper.findAll('.containment-map__node')[0]!.trigger('click')
     expect(wrapper.emitted('selectPlaylist')?.[0]?.[0]).toBe(1)
+  })
+})
+
+describe('ContainmentMap labels', () => {
+  /** Reads a circle and its label straight out of the rendered SVG. */
+  function readNode(wrapper: ReturnType<typeof factory>, name: string) {
+    const group = wrapper
+      .findAll('.containment-map__node')
+      .find((g) => g.find('title').text().startsWith(`${name} `))!
+    const circle = group.find('circle')
+    const label = group.find('.containment-map__label')
+    return {
+      cy: Number(circle.attributes('cy')),
+      r: Number(circle.attributes('r')),
+      labelY: label.exists() ? Number(label.attributes('y')) : null,
+      text: label.exists() ? label.text() : '',
+    }
+  }
+
+  it('puts a container label on its rim, clear of its children', () => {
+    const year = readNode(factory(), "'18_")
+    // Near the top edge, not the middle, which belongs to the nested circles.
+    expect(year.labelY!).toBeLessThan(year.cy - year.r * 0.7)
+    expect(year.labelY!).toBeGreaterThan(year.cy - year.r)
+  })
+
+  it('puts a mid-chain container label on its own rim too', () => {
+    // A container's rim ring, not its middle, which belongs to whatever nests inside it. Sized so
+    // the ring is wide enough to hold text: the suppression rule below covers the narrow case.
+    const august = readNode(factory([WIDE_CHAIN], WIDE_CHAIN.key), 'August_2018')
+    expect(august.labelY!).toBeLessThan(august.cy - august.r * 0.7)
+  })
+
+  it('drops a label the circle is too small to hold, rather than letting it spill out', () => {
+    // August is a container here too, but a twentieth of the year, so its rim ring is only a few
+    // pixels of chord. No text fits legibly, so none is drawn and the hover title carries the name.
+    const august = readNode(factory(), 'August_2018')
+    expect(august.labelY).toBeNull()
+    expect(
+      factory()
+        .findAll('.containment-map__circle title')
+        .map((n) => n.text()),
+    ).toContain('August_2018 — 20 tracks')
+  })
+
+  it('keeps a leaf label in its middle', () => {
+    const january = readNode(factory(), 'January_2018')
+    expect(Math.abs(january.labelY! - january.cy)).toBeLessThan(8)
+  })
+
+  it('shows the track count on a container label, so size never has to be trusted', () => {
+    expect(readNode(factory(), "'18_").text).toContain('392')
+  })
+
+  it('shows the track count under a leaf name when there is room', () => {
+    const counts = factory()
+      .findAll('.containment-map__count')
+      .map((n) => n.text())
+    expect(counts).toContain('31')
+  })
+})
+
+describe('ContainmentMap legend', () => {
+  it('explains what circle size means', () => {
+    expect(factory().find('.containment-map__legend').text()).toContain('bigger circle, more tracks')
+  })
+
+  it('explains what nesting means', () => {
+    expect(factory().find('.containment-map__legend').text()).toContain(
+      'every track is in the outer playlist',
+    )
+  })
+
+  it('explains the dashed stroke', () => {
+    expect(factory().find('.containment-map__legend').text()).toContain('also inside another')
+  })
+
+  it('states the limit of the encoding rather than overclaiming', () => {
+    const note = factory().find('.containment-map__scale-note').text()
+    expect(note).toContain('comparable within a container, not across the whole map')
+  })
+
+  it('shows no legend when there is nothing drawn', () => {
+    expect(factory([]).find('.containment-map__legend').exists()).toBe(false)
   })
 })
