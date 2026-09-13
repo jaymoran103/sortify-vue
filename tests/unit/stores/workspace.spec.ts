@@ -1059,19 +1059,21 @@ describe('Workspace Store', () => {
   })
 
   // ─── Column order persistence ─────────────────────────────────────────────
-  // Order lives in the session record's playlistIds. save() returns early when nothing is
-  // dirty, so a reorder that marked nothing modified never reached IDB at all.
+  // Order lives in the session record's playlistIds — the same field addPlaylist and
+  // removePlaylist already write immediately. movePlaylist mutates the array and nothing
+  // else; persistPlaylistOrder writes the record once the interaction settles, so a drag
+  // can hop across several columns and still cost one write.
 
-  it('movePlaylist marks both swapped playlists modified', async () => {
+  it('movePlaylist dirties no playlist', async () => {
     const { pl1Id, pl2Id, sessionId } = await setupData()
     const store = useWorkspaceStore()
     await store.loadSession(sessionId)
 
     store.movePlaylist(pl1Id, 1)
 
-    expect(store.modifiedIds.has(pl1Id)).toBe(true)
-    expect(store.modifiedIds.has(pl2Id)).toBe(true)
-    expect(store.hasUnsavedChanges).toBe(true)
+    expect(store.modifiedIds.has(pl1Id)).toBe(false)
+    expect(store.modifiedIds.has(pl2Id)).toBe(false)
+    expect(store.hasUnsavedChanges).toBe(false)
   })
 
   it('movePlaylist leaves nothing modified when the move is a no-op at the boundary', async () => {
@@ -1084,29 +1086,74 @@ describe('Workspace Store', () => {
     expect(store.hasUnsavedChanges).toBe(false)
   })
 
-  it('save persists the new column order to the session record', async () => {
+  it('persistPlaylistOrder writes the new order to the session record', async () => {
     const { pl1Id, pl2Id, sessionId } = await setupData()
     const store = useWorkspaceStore()
     await store.loadSession(sessionId)
 
     store.movePlaylist(pl1Id, 1)
-    await store.save()
+    await store.persistPlaylistOrder()
 
     const sessionStore = useSessionStore()
     const session = await sessionStore.getSession(sessionId)
     expect(session?.playlistIds).toEqual([pl2Id, pl1Id])
   })
 
-  it('a reordered session reloads in the saved order', async () => {
+  // The point of moving order out of the save cycle: it no longer depends on a dirty flag
+  // that something else might clear first.
+  it('a reordered session reloads in the new order without any save', async () => {
     const { pl1Id, sessionId } = await setupData()
     const store = useWorkspaceStore()
     await store.loadSession(sessionId)
 
     store.movePlaylist(pl1Id, 1)
-    await store.save()
+    await store.persistPlaylistOrder()
     await store.loadSession(sessionId)
 
     expect(store.playlists.map((p) => p.name)).toEqual(['Playlist B', 'Playlist A'])
+  })
+
+  // The bug the old approach carried: movePlaylist faked a dirty flag by marking both
+  // swapped playlists modified, and removePlaylist deletes a playlist's id from that set.
+  // Reorder, then remove both, and hasUnsavedChanges went false — save() returned early
+  // and the reorder never reached IDB.
+  it('keeps a reorder after the reordered playlists are removed', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const playlistStore = usePlaylistStore()
+    const pl3Id = await playlistStore.addPlaylist({ name: 'Playlist C', trackIDs: ['track-1'] })
+
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+    await store.addPlaylist(pl3Id)
+
+    // Move C to the front, then drop the two playlists the old code would have marked.
+    store.movePlaylist(pl3Id, -1)
+    await store.persistPlaylistOrder()
+    store.removePlaylist(pl1Id)
+    store.removePlaylist(pl2Id)
+    await new Promise((r) => setTimeout(r, 30))
+
+    await store.loadSession(sessionId)
+    expect(store.playlists.map((p) => p.id)).toEqual([pl3Id])
+  })
+
+  // Order still rides along with save() for the case save() alone can fix: a
+  // workspace-created playlist only earns a real id there, so the record it belongs in
+  // cannot be written until then.
+  it('save still writes the order once a pending playlist gains a real id', async () => {
+    const { pl1Id, pl2Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    const created = store.createEmptyPlaylist('New Mix')
+    store.toggleTrack(created.id, 'track-1')
+    store.movePlaylist(created.id, -1)
+    expect(await store.save()).toBe(true)
+
+    const newId = store.playlists.find((p) => p.name === 'New Mix')?.id as number
+    const sessionStore = useSessionStore()
+    const session = await sessionStore.getSession(sessionId)
+    expect(session?.playlistIds).toEqual([pl1Id, newId, pl2Id])
   })
 
   // ─── issues ───────────────────────────────────────────────────────────────

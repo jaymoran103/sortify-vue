@@ -3,15 +3,14 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 const router = createRouter({
   history: createWebHashHistory(),   // Hash mode for GitHub Pages compatibility
   routes: [
-    // Site Root: currently uses /about as a landing page.
+    // Site Root: redirects to the dashboard, the app's primary hub.
     {
       path: '/',
       name: 'home',
-      component: () => import('@/components/about/AboutView.vue'),
+      redirect: { name: 'dashboard' },
     },
 
     // About page: Scrollable informational page outlining app functionality and uses. 
-    // Currently serves as the root landing page, this may change as the app develops and we move to a shell-based UI model.
     {
       path: '/about',
       name: 'about',

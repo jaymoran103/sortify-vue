@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
 import type { Playlist } from '@/types/models'
+import { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -241,4 +242,11 @@ describe('PlaylistSelectModal', () => {
     openBtn = wrapper.findAll('button').find((b) => b.text().startsWith('Open'))!
     expect(openBtn.text()).toContain('1')
   })
+
+  it('gives ScrollableList the height SelectableItem renders at', () => {
+    const wrapper = mountModal()
+    const list = wrapper.findComponent(ScrollableListStub)
+    expect(list.props('estimateSize')).toBe(SELECTABLE_ITEM_HEIGHT)
+  })
+
 })

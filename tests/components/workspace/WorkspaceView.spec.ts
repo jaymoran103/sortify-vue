@@ -29,6 +29,7 @@ const mockWorkspaceStore = reactive({
   removePlaylist: vi.fn(),
   duplicatePlaylist: vi.fn(),
   movePlaylist: vi.fn(),
+  persistPlaylistOrder: vi.fn().mockResolvedValue(undefined),
   addPlaylist: vi.fn().mockResolvedValue(undefined),
   createEmptyPlaylist: vi.fn(),
   addTrackToAll: vi.fn(),
@@ -94,6 +95,29 @@ vi.mock('@/composables/useDebounce', () => ({
 const mockModalOpen = vi.hoisted(() => vi.fn().mockResolvedValue(null))
 vi.mock('@/composables/useModal', () => ({
   useModal: () => ({ open: mockModalOpen, close: vi.fn() }),
+}))
+
+// ─── Mock spotifyLinks ───────────────────────────────────────────────────────
+
+const mockOpenSpotifyURI = vi.hoisted(() => vi.fn())
+const mockCopyToClipboard = vi.hoisted(() => vi.fn())
+vi.mock('@/utils/spotifyLinks', () => ({
+  openSpotifyURI: mockOpenSpotifyURI,
+  copyToClipboard: mockCopyToClipboard,
+}))
+
+// ─── Mock useKeyboardShortcuts ───────────────────────────────────────────────
+// Captures the map instead of binding it to `document`. Every mounted WorkspaceView in
+// this file stays mounted and keeps its listener, so a real keydown would be handled by
+// all of them at once; holding the map lets a test invoke exactly the instance it built.
+
+const registeredShortcuts = vi.hoisted(() => ({
+  current: {} as Record<string, (e: KeyboardEvent) => void>,
+}))
+vi.mock('@/composables/useKeyboardShortcuts', () => ({
+  useKeyboardShortcuts: (map: Record<string, (e: KeyboardEvent) => void>) => {
+    registeredShortcuts.current = map
+  },
 }))
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -209,6 +233,8 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.addTracksToWorkspace.mockResolvedValue(undefined)
     mockWorkspaceStore.$reset.mockReset()
     mockContextMenuShow.mockClear()
+    mockOpenSpotifyURI.mockClear()
+    mockCopyToClipboard.mockClear()
     mockModalOpen.mockReset()
     mockModalOpen.mockResolvedValue(null)
   })
@@ -508,14 +534,14 @@ describe('WorkspaceView', () => {
     it('gives every playlist a square column as wide as a row is tall', () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
       const wrapper = mountWorkspace()
-      expect(template(wrapper)).toContain('60px minmax(200px, 1fr) 48px 48px')
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 48px 48px')
     })
 
     it('widens a column when its header is clicked', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
       const wrapper = mountWorkspace()
       await wrapper.findAll('.playlist-col-header')[1]!.trigger('click')
-      expect(template(wrapper)).toContain('1fr) 48px 140px')
+      expect(template(wrapper)).toContain('480px) 48px 140px')
     })
 
     it('lets several columns stay open at once', async () => {
@@ -523,7 +549,7 @@ describe('WorkspaceView', () => {
       const wrapper = mountWorkspace()
       await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
       await wrapper.findAll('.playlist-col-header')[1]!.trigger('click')
-      expect(template(wrapper)).toContain('1fr) 140px 140px')
+      expect(template(wrapper)).toContain('480px) 140px 140px')
     })
 
     it('opens every column with Expand all, and closes them with Collapse all', async () => {
@@ -532,9 +558,9 @@ describe('WorkspaceView', () => {
       const button = (label: string) =>
         wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === label)!
       await button('Expand all').trigger('click')
-      expect(template(wrapper)).toContain('1fr) 140px 140px')
+      expect(template(wrapper)).toContain('480px) 140px 140px')
       await button('Collapse all').trigger('click')
-      expect(template(wrapper)).toContain('1fr) 48px 48px')
+      expect(template(wrapper)).toContain('480px) 48px 48px')
     })
 
     // 60 index + 200 track + 4 × 48 collapsed = 452. 600 leaves 148 spare: one column
@@ -545,7 +571,7 @@ describe('WorkspaceView', () => {
       Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 600 })
       const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
       await fit.trigger('click')
-      expect(template(wrapper)).toContain('1fr) 140px 48px 48px 48px')
+      expect(template(wrapper)).toContain('480px) 140px 48px 48px 48px')
     })
 
     it('opens nothing with Fit to screen when even collapsed columns overflow', async () => {
@@ -555,7 +581,7 @@ describe('WorkspaceView', () => {
       Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 300 })
       const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
       await fit.trigger('click')
-      expect(template(wrapper)).toContain('1fr) 48px 48px 48px 48px')
+      expect(template(wrapper)).toContain('480px) 48px 48px 48px 48px')
     })
 
     it('collapses an open column when its header is clicked again', async () => {
@@ -563,8 +589,29 @@ describe('WorkspaceView', () => {
       const wrapper = mountWorkspace()
       await wrapper.find('.playlist-col-header').trigger('click')
       await wrapper.find('.playlist-col-header').trigger('click')
-      expect(template(wrapper)).toContain('1fr) 48px')
+      expect(template(wrapper)).toContain('480px) 48px')
       expect(template(wrapper)).not.toContain('140px')
+    })
+
+    // A 1fr track column swallowed every spare pixel, so a workspace with two playlists put
+    // a wide empty gap between the track text and the first checkbox. A capped track column
+    // plus a trailing track park the slack past the last playlist instead.
+    it('parks leftover width past the last playlist column', () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 48px 48px 1fr')
+    })
+
+    it('keeps the trailing track when columns are expanded', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 140px 48px 1fr')
+    })
+
+    it('still ends in a trailing track when the workspace holds no playlists', () => {
+      const wrapper = mountWorkspace()
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 1fr')
     })
   })
 
@@ -1089,6 +1136,35 @@ describe('WorkspaceView', () => {
 
   // ─── Most Playlists sort (W1-D / design decision D7) ───────────────────────
 
+  describe('column order persistence', () => {
+    beforeEach(() => {
+      mockWorkspaceStore.playlists = [
+        makePlaylist(1, 'A', []),
+        makePlaylist(2, 'B', []),
+        makePlaylist(3, 'C', []),
+      ]
+      mockWorkspaceStore.persistPlaylistOrder.mockClear()
+    })
+
+    // movePlaylist only mutates the array now, so a caller that does not follow it with
+    // persistPlaylistOrder leaves the new order unwritten.
+    it('writes the order after a menu move', async () => {
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 1)
+      findMenuAction('Move Right')!()
+      expect(mockWorkspaceStore.movePlaylist).toHaveBeenCalledWith(2, 1)
+      expect(mockWorkspaceStore.persistPlaylistOrder).toHaveBeenCalledOnce()
+    })
+
+    it('writes the order after a move in the other direction', async () => {
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper, 1)
+      findMenuAction('Move Left')!()
+      expect(mockWorkspaceStore.movePlaylist).toHaveBeenCalledWith(2, -1)
+      expect(mockWorkspaceStore.persistPlaylistOrder).toHaveBeenCalledOnce()
+    })
+  })
+
   describe('most-playlists sort', () => {
     it('is offered in the sort dropdown', () => {
       const wrapper = mountWorkspace()
@@ -1382,6 +1458,56 @@ describe('WorkspaceView', () => {
       // the assertion guards the entries staying inside the single-selection branch.
       expect(lastMenuLabels().filter((l) => l === 'Open in Spotify').length).toBeLessThanOrEqual(1)
     })
+
+    // The entries above are only checked for being offered. These check that they carry
+    // the right URI through to the helpers, which is the part a schema change would break.
+    it('opens the track URI from the track menu', async () => {
+      const track = makeTrack('t1', 'Song A', 'Artist')
+      track.spotifyURI = 'spotify:track:abc'
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['t1', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+
+      findMenuAction('Open in Spotify')!()
+      expect(mockOpenSpotifyURI).toHaveBeenCalledWith('spotify:track:abc')
+    })
+
+    it('copies the track URI rather than the raw track id', async () => {
+      const track = makeTrack('t1', 'Song A', 'Artist')
+      track.spotifyURI = 'spotify:track:abc'
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['t1', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+
+      findMenuAction('Copy Track ID')!()
+      expect(mockCopyToClipboard).toHaveBeenCalledWith('spotify:track:abc')
+    })
+
+    it('opens the trackID when that is itself the URI', async () => {
+      const track = makeTrack('spotify:track:xyz', 'Song A', 'Artist')
+      mockWorkspaceStore.trackList = [track]
+      mockWorkspaceStore.tracks = new Map([['spotify:track:xyz', track]])
+      const wrapper = mountWorkspace()
+      await wrapper.find('.track-row').trigger('contextmenu')
+
+      findMenuAction('Open in Spotify')!()
+      expect(mockOpenSpotifyURI).toHaveBeenCalledWith('spotify:track:xyz')
+    })
+
+    it('opens and copies the playlist URI from the column menu', async () => {
+      const pl = makePlaylist(1, 'PL', [])
+      pl.playlistURI = 'spotify:playlist:xyz'
+      mockWorkspaceStore.playlists = [pl]
+      const wrapper = mountWorkspace()
+      await openColumnMenu(wrapper)
+
+      findMenuAction('Open in Spotify')!()
+      findMenuAction('Copy Playlist ID')!()
+      expect(mockOpenSpotifyURI).toHaveBeenCalledWith('spotify:playlist:xyz')
+      expect(mockCopyToClipboard).toHaveBeenCalledWith('spotify:playlist:xyz')
+    })
   })
 
   describe('sort options', () => {
@@ -1427,5 +1553,177 @@ describe('WorkspaceView', () => {
       const titles = wrapper.findAll('.track-row__title').map((n) => n.text())
       expect(titles).toEqual(['Apple Song', 'Zebra Song'])
     })
+  })
+})
+
+describe('track removal scope', () => {
+  beforeEach(() => {
+    mockWorkspaceStore.playlists = []
+    mockWorkspaceStore.trackList = []
+    mockWorkspaceStore.tracks = new Map()
+    mockModalOpen.mockReset()
+    mockModalOpen.mockResolvedValue(null)
+  })
+
+  /** Right-click the only row, having seeded one track and `count` playlists. */
+  async function openTrackMenu(count: number) {
+    const track = makeTrack('t1', 'Song A', 'Artist')
+    mockWorkspaceStore.trackList = [track]
+    mockWorkspaceStore.tracks = new Map([['t1', track]])
+    mockWorkspaceStore.playlists = Array.from({ length: count }, (_, i) =>
+      makePlaylist(i + 1, `PL${i + 1}`, []),
+    )
+    const wrapper = mountWorkspace()
+    await wrapper.find('.track-row').trigger('contextmenu')
+    return wrapper
+  }
+
+  // "All Playlists" reads as the whole library. These entries only ever touch the
+  // playlists currently in the workspace, so the label says how many that is.
+  it('names the workspace and the number of playlists affected', async () => {
+    await openTrackMenu(4)
+    const labels = lastMenuLabels()
+    expect(labels).toContain('Add to 4 Workspace Playlists')
+    expect(labels).toContain('Remove from 4 Workspace Playlists')
+  })
+
+  it('uses the singular form for a workspace holding one playlist', async () => {
+    await openTrackMenu(1)
+    const labels = lastMenuLabels()
+    expect(labels).toContain('Add to 1 Workspace Playlist')
+    expect(labels).toContain('Remove from 1 Workspace Playlist')
+  })
+
+  // A label reading "0 Workspace Playlists" describes an action that cannot do anything.
+  it('offers no membership entries when the workspace holds no playlists', async () => {
+    await openTrackMenu(0)
+    const labels = lastMenuLabels()
+    expect(labels.some((l) => l.startsWith('Add to'))).toBe(false)
+    expect(labels.some((l) => l.startsWith('Remove from 0'))).toBe(false)
+    expect(labels).toContain('Remove from Workspace')
+  })
+
+  // The one single-track action whose effect cannot be undone by eye: the row leaves the
+  // table, and unticking a checkbox will not bring it back.
+  it('confirms before removing a track from the workspace, naming the track', async () => {
+    await openTrackMenu(2)
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+    expect(mockModalOpen).toHaveBeenCalledOnce()
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).toContain('Song A')
+  })
+
+  it('removes the track once the confirmation is accepted', async () => {
+    mockModalOpen.mockResolvedValueOnce(true)
+    await openTrackMenu(2)
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+    expect(mockWorkspaceStore.removeTrackFromWorkspace).toHaveBeenCalledWith('t1')
+  })
+
+  it('keeps the track when the confirmation is dismissed', async () => {
+    mockWorkspaceStore.removeTrackFromWorkspace.mockClear()
+    mockModalOpen.mockResolvedValueOnce(null)
+    await openTrackMenu(2)
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+    expect(mockWorkspaceStore.removeTrackFromWorkspace).not.toHaveBeenCalled()
+  })
+
+  // "Remove from Workspace" is an escalation: the track leaves every playlist holding it,
+  // not just the display. The message says so rather than leaving it to the word "entirely".
+  it('names the playlists the track will also leave', async () => {
+    const track = makeTrack('t1', 'Song A', 'Artist')
+    mockWorkspaceStore.trackList = [track]
+    mockWorkspaceStore.tracks = new Map([['t1', track]])
+    mockWorkspaceStore.playlists = [
+      makePlaylist(1, 'PL1', ['t1']),
+      makePlaylist(2, 'PL2', ['t1']),
+      makePlaylist(3, 'PL3', []),
+    ]
+    const wrapper = mountWorkspace()
+    await wrapper.find('.track-row').trigger('contextmenu')
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).toContain('2 playlists holding it')
+  })
+
+  it('uses the singular form for a track in one playlist', async () => {
+    const track = makeTrack('t1', 'Song A', 'Artist')
+    mockWorkspaceStore.trackList = [track]
+    mockWorkspaceStore.tracks = new Map([['t1', track]])
+    mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
+    const wrapper = mountWorkspace()
+    await wrapper.find('.track-row').trigger('contextmenu')
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).toContain('the playlist holding it')
+  })
+
+  it('promises nothing about playlists when the track is in none', async () => {
+    await openTrackMenu(2)
+    await findMenuAction('Remove from Workspace')!()
+    await flushPromises()
+
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).not.toContain('holding it')
+    expect(props.message).toContain('Song A')
+  })
+
+  // Membership edits stay instant: their effect is a visible checkbox and re-tickable.
+  it('does not confirm when removing a track from the workspace playlists', async () => {
+    await openTrackMenu(2)
+    await findMenuAction('Remove from 2 Workspace Playlists')!()
+    await flushPromises()
+    expect(mockModalOpen).not.toHaveBeenCalled()
+    expect(mockWorkspaceStore.removeTrackFromAll).toHaveBeenCalledWith('t1')
+  })
+})
+
+describe('delete shortcut', () => {
+  beforeEach(() => {
+    mockWorkspaceStore.playlists = []
+    mockWorkspaceStore.tracks = new Map()
+    mockModalOpen.mockReset()
+    mockModalOpen.mockResolvedValue(null)
+  })
+
+  function pressDelete(): void {
+    registeredShortcuts.current['cmd+backspace']!(new KeyboardEvent('keydown'))
+  }
+
+  // The shortcut and the row's own menu entry are the same action, so they ask the same
+  // question. Routing both through handleDeleteTrack is what keeps them from diverging —
+  // the bulk dialog would have said "1 track(s)".
+  it('asks the single-track question when one row is selected', async () => {
+    const track = makeTrack('t1', 'Song A', 'Artist')
+    mockWorkspaceStore.trackList = [track]
+    mockWorkspaceStore.tracks = new Map([['t1', track]])
+    const wrapper = mountWorkspace()
+    await wrapper.find('.track-row').trigger('click')
+    await nextTick()
+
+    pressDelete()
+    await flushPromises()
+
+    expect(mockModalOpen).toHaveBeenCalledOnce()
+    const [, props] = mockModalOpen.mock.calls[0] as [unknown, { message: string }]
+    expect(props.message).toContain('Song A')
+  })
+
+  it('opens nothing when no row is selected', async () => {
+    mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist')]
+    mountWorkspace()
+    await nextTick()
+
+    pressDelete()
+    await flushPromises()
+
+    expect(mockModalOpen).not.toHaveBeenCalled()
   })
 })
