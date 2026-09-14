@@ -8,6 +8,12 @@ import type { ContainmentNode } from './containment'
  * That makes concentric circles the honest primitive, and the layout a packing problem rather
  * than a set-geometry one.
  *
+ * Sizes are laid out in track-root units — a radius of sqrt(tracks) — so a circle's AREA is its
+ * track count. The finished arrangement is measured once and scaled to the viewport by a single
+ * factor, which keeps area comparable between any two circles on the map, at any depth, in any
+ * container. An earlier version rescaled each sibling group to fit its parent, which drew well but
+ * meant no two circles could be compared unless they shared a parent.
+ *
  * Pure and deterministic, so the whole thing unit-tests without a DOM.
  */
 
@@ -20,6 +26,13 @@ export interface PackedCircle {
   x: number
   y: number
   r: number
+  /**
+   * Radius the track count alone calls for, in viewport units. Equal to `r` for most circles; on
+   * an inflated container it is smaller, and marks where the honest edge would have fallen.
+   */
+  trueR: number
+  /** Whether the contents forced this circle wider than its own track count warrants. */
+  inflated: boolean
   /** 0 for a cluster root, 1 for its children, and so on. Drives styling, not geometry. */
   depth: number
   /**
@@ -29,11 +42,28 @@ export interface PackedCircle {
   hasChildren: boolean
 }
 
-/** Fraction of a parent's radius its children may occupy, leaving a visible ring for the label. */
-const CHILD_AREA = 0.86
+/** A laid-out cluster, plus the scale that produced it. */
+export interface PackedMap {
+  circles: PackedCircle[]
+  /**
+   * Viewport radius per sqrt(track): `scale * Math.sqrt(size)` is the radius any playlist of that
+   * size is drawn at. The view uses it to draw a calibration key at the same scale as the data.
+   */
+  scale: number
+}
 
-/** Gap between siblings, as a fraction of the parent radius. Keeps edges from visually merging. */
-const SIBLING_GAP = 0.015
+/**
+ * How much wider than its contents a container is drawn, when its contents are the binding
+ * constraint. The surplus is the ring its own label sits in.
+ *
+ * Circles cannot tile a circle — a dozen equal circles fill at best about 74% of their enclosure —
+ * so a container whose children cover most of its tracks cannot also be drawn at its true area.
+ * Those containers are marked rather than quietly resized, and the ring keeps the label off them.
+ */
+const CONTENT_MARGIN = 1.08
+
+/** Gap between siblings, in track-root units. Keeps adjacent edges from visually merging. */
+const SIBLING_GAP = 0.1
 
 /** Candidate angles tried when seating a circle against an already-placed one. */
 const ANGLE_STEPS = 60
@@ -116,95 +146,97 @@ function boundingRadius(centres: { x: number; y: number }[], radii: number[]): n
   return max
 }
 
+/** A node sized in track-root units, with each child's offset from its own centre. */
+interface Sized {
+  node: ContainmentNode
+  r: number
+  trueR: number
+  children: { sized: Sized; dx: number; dy: number }[]
+}
+
 /**
- * Lays a node's children out inside it, recursing into their own children.
+ * Sizes a subtree bottom-up, in track-root units.
  *
- * Radii start proportional to the square root of track count, so area tracks size, then the whole
- * arrangement is scaled to fit the parent. The scale step means drawn area understates a child's
- * true share whenever siblings are dense — circles cannot tile a circle — so the view states
- * coverage numerically rather than asking the reader to judge it by eye.
+ * A node wants a radius of sqrt(tracks), so its area is its track count. It gets that unless its
+ * own contents need more room, in which case the contents win and the node is drawn wider than its
+ * count — recorded as `trueR` so the view can show what was given up.
  */
-function layoutChildren(node: ContainmentNode, cx: number, cy: number, r: number, depth: number): PackedCircle[] {
-  if (node.children.length === 0) return []
+function sizeSubtree(node: ContainmentNode): Sized {
+  const trueR = Math.sqrt(node.size)
+  if (node.children.length === 0) return { node, r: trueR, trueR, children: [] }
 
-  const totalSize = node.children.reduce((sum, child) => sum + child.size, 0)
-  if (totalSize === 0) return []
+  // Largest first, which is the order the greedy packer expects.
+  const sized = [...node.children].sort((a, b) => b.size - a.size).map(sizeSubtree)
+  const radii = sized.map((child) => child.r)
+  const centres = placeCircles(radii, SIBLING_GAP)
+  const enclosing = boundingRadius(centres, radii)
 
-  // Relative to the largest child, so one dominant child fills most of the parent.
-  const largest = Math.max(...node.children.map((child) => child.size))
-  const rawRadii = node.children.map((child) => Math.sqrt(child.size / largest))
+  return {
+    node,
+    r: Math.max(trueR, enclosing * CONTENT_MARGIN),
+    trueR,
+    children: sized.map((child, i) => ({ sized: child, dx: centres[i]!.x, dy: centres[i]!.y })),
+  }
+}
 
-  const centres = placeCircles(rawRadii, SIBLING_GAP)
-  const bound = boundingRadius(centres, rawRadii)
-  const scale = bound === 0 ? 0 : (r * CHILD_AREA) / bound
-
-  const circles: PackedCircle[] = []
-  node.children.forEach((child, i) => {
-    const childR = rawRadii[i]! * scale
-    const childX = cx + centres[i]!.x * scale
-    const childY = cy + centres[i]!.y * scale
-
-    circles.push({
-      playlistId: child.playlistId,
-      name: child.name,
-      size: child.size,
-      otherContainerCount: child.otherContainerCount,
-      x: childX,
-      y: childY,
-      r: childR,
-      depth,
-      hasChildren: child.children.length > 0,
-    })
-    circles.push(...layoutChildren(child, childX, childY, childR, depth + 1))
+/** Walks a sized subtree into viewport circles, parents before children. */
+function emitCircles(
+  sized: Sized,
+  cx: number,
+  cy: number,
+  scale: number,
+  depth: number,
+  out: PackedCircle[],
+): void {
+  const { node } = sized
+  out.push({
+    playlistId: node.playlistId,
+    name: node.name,
+    size: node.size,
+    otherContainerCount: node.otherContainerCount,
+    x: cx,
+    y: cy,
+    r: sized.r * scale,
+    trueR: sized.trueR * scale,
+    inflated: sized.r > sized.trueR + 1e-9,
+    depth,
+    hasChildren: node.children.length > 0,
   })
 
-  return circles
+  for (const child of sized.children) {
+    emitCircles(child.sized, cx + child.dx * scale, cy + child.dy * scale, scale, depth + 1, out)
+  }
 }
 
 /**
  * Packs a cluster's forest into a square viewport.
  *
  * Input: the cluster's roots, and the side length of the square to fill.
- * Output: circles ordered outermost first, in viewport coordinates.
+ * Output: circles ordered outermost first in viewport coordinates, and the scale that sized them.
  * Side effects: none.
  *
  * Roots are packed against each other exactly as siblings are, so a cluster with several roots
- * reads as several adjacent maps rather than needing a separate layout path.
+ * reads as several adjacent maps rather than needing a separate layout path. The fit-to-viewport
+ * step is one multiplication applied to every circle, which is what keeps areas comparable.
  */
-export function packCluster(roots: ContainmentNode[], side: number): PackedCircle[] {
-  if (roots.length === 0 || side <= 0) return []
+export function packCluster(roots: ContainmentNode[], side: number): PackedMap {
+  const empty: PackedMap = { circles: [], scale: 0 }
+  if (roots.length === 0 || side <= 0) return empty
 
-  const largest = Math.max(...roots.map((root) => root.size))
-  if (largest === 0) return []
-
-  const rawRadii = roots.map((root) => Math.sqrt(root.size / largest))
-  const centres = placeCircles(rawRadii, SIBLING_GAP)
-  const bound = boundingRadius(centres, rawRadii)
+  const sized = [...roots].sort((a, b) => b.size - a.size).map(sizeSubtree)
+  const radii = sized.map((root) => root.r)
+  const centres = placeCircles(radii, SIBLING_GAP)
+  const bound = boundingRadius(centres, radii)
+  if (bound === 0) return empty
 
   // A small inset keeps the outermost stroke inside the viewBox.
-  const scale = bound === 0 ? 0 : (side / 2 - 2) / bound
-  const originX = side / 2
-  const originY = side / 2
-
+  const scale = (side / 2 - 2) / bound
   const circles: PackedCircle[] = []
-  roots.forEach((root, i) => {
-    const r = rawRadii[i]! * scale
-    const x = originX + centres[i]!.x * scale
-    const y = originY + centres[i]!.y * scale
-
-    circles.push({
-      playlistId: root.playlistId,
-      name: root.name,
-      size: root.size,
-      otherContainerCount: root.otherContainerCount,
-      x,
-      y,
-      r,
-      depth: 0,
-      hasChildren: root.children.length > 0,
-    })
-    circles.push(...layoutChildren(root, x, y, r, 1))
+  sized.forEach((root, i) => {
+    const cx = side / 2 + centres[i]!.x * scale
+    const cy = side / 2 + centres[i]!.y * scale
+    emitCircles(root, cx, cy, scale, 0, circles)
   })
 
-  return circles
+  return { circles, scale }
 }

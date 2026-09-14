@@ -238,16 +238,70 @@ test.describe('containment map', () => {
     expect(titled).toContain('August')
   })
 
-  test('shows a legend saying what size encodes, and what it does not', async ({ page }) => {
+  test('shows a legend and a scale key drawn to scale', async ({ page }) => {
     await openContainment(page)
     await page.locator('.result-control-bar__view-map').click()
 
     const legend = page.locator('.containment-map__legend')
     await expect(legend).toBeVisible({ timeout: 15_000 })
-    await expect(legend).toContainText('bigger circle, more tracks')
+    await expect(legend).toContainText('every track is in the outer playlist')
     await expect(page.locator('.containment-map__scale-note')).toContainText(
-      'not across the whole map',
+      'one scale across the whole map',
     )
+    await expect(page.locator('.containment-map__key-circle').first()).toBeVisible()
+    await expect(page.locator('.containment-map__key')).toContainText('tracks')
+  })
+
+  test('renders the key at the same pixel scale as the map, not just the same units', async ({
+    page,
+  }) => {
+    await openContainment(page)
+    await page.locator('.result-control-bar__view-map').click()
+    await expect(page.locator('.containment-map__circle')).toHaveCount(5, { timeout: 15_000 })
+
+    // Both SVGs are laid out by the browser, so this compares drawn pixels rather than viewBox
+    // numbers: a key that is honest in user units but shrunk by CSS would fail here.
+    const measured = await page.evaluate(() => {
+      const width = (selector: string) =>
+        document.querySelector(selector)!.getBoundingClientRect().width
+      const keyCircle = document.querySelector('.containment-map__key-circle')!
+      const keyValue = Number(
+        document.querySelector('.containment-map__key-label')!.textContent!.replace(/\D/g, ''),
+      )
+      // January is a leaf, so its radius is purely its track count: containers can be widened to
+      // fit their contents and would not test the scale.
+      const january = [...document.querySelectorAll('.containment-map__circle')].find((c) =>
+        c.querySelector('title')!.textContent!.startsWith('January '),
+      )!
+      return {
+        mapPxPerUnit: width('.containment-map__svg') / 480,
+        keyPxPerUnit: width('.containment-map__key') / 480,
+        radiusRatio: Number(january.getAttribute('r')) / Number(keyCircle.getAttribute('r')),
+        expectedRatio: Math.sqrt(3 / keyValue),
+      }
+    })
+
+    // Same pixels per user unit in both SVGs, so a viewBox-honest key is also a drawn-honest one.
+    expect(measured.keyPxPerUnit).toBeCloseTo(measured.mapPxPerUnit, 3)
+    expect(measured.radiusRatio).toBeCloseTo(measured.expectedRatio, 4)
+  })
+
+  test('sizes two equally large playlists alike, however deep they sit', async ({ page }) => {
+    await openContainment(page)
+    await page.locator('.result-control-bar__view-map').click()
+    await expect(page.locator('.containment-map__circle')).toHaveCount(5, { timeout: 15_000 })
+
+    // January and August both hold 3 tracks, but January is a leaf under the year and August is a
+    // container one level further in. Under the old per-parent rescaling they drew differently.
+    const radii = await page.evaluate(() => {
+      const out: Record<string, number> = {}
+      for (const circle of document.querySelectorAll('.containment-map__circle')) {
+        const name = circle.querySelector('title')!.textContent!.split(' — ')[0]!
+        out[name] = Number(circle.getAttribute('r'))
+      }
+      return out
+    })
+    expect(radii['January']!).toBeCloseTo(radii['August']!, 4)
   })
 
   test('returns to the table when the preset stops reading containment', async ({ page }) => {
@@ -350,17 +404,18 @@ test.describe('containment map, densely packed', () => {
         const cx = Number(circle.getAttribute('cx'))
         const cy = Number(circle.getAttribute('cy'))
         const r = Number(circle.getAttribute('r'))
-        // Every corner of the text box must sit within the circle.
-        for (const [x, y] of [
-          [box.x, box.y],
-          [box.x + box.width, box.y],
-          [box.x, box.y + box.height],
-          [box.x + box.width, box.y + box.height],
-        ]) {
-          if (Math.hypot(x! - cx, y! - cy) > r + 1) {
-            bad.push(label.textContent!.trim())
-            break
-          }
+        // Every corner of the text box must sit within the circle. The report carries how far
+        // out the worst corner fell, which is what tells a budget bug from a placement one.
+        const worst = Math.max(
+          ...[
+            [box.x, box.y],
+            [box.x + box.width, box.y],
+            [box.x, box.y + box.height],
+            [box.x + box.width, box.y + box.height],
+          ].map(([x, y]) => Math.hypot(x! - cx, y! - cy)),
+        )
+        if (worst > r + 1) {
+          bad.push(`${label.textContent!.trim()} out by ${(worst - r).toFixed(1)} of r=${r.toFixed(1)}, box ${box.width.toFixed(1)}x${box.height.toFixed(1)}`)
         }
       }
       return bad

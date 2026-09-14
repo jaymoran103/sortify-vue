@@ -73,12 +73,12 @@ describe('placeCircles', () => {
 
 describe('packCluster', () => {
   it('returns nothing for an empty cluster or a zero viewport', () => {
-    expect(packCluster([], 400)).toEqual([])
-    expect(packCluster([node(1, 'A', 10)], 0)).toEqual([])
+    expect(packCluster([], 400)).toEqual({ circles: [], scale: 0 })
+    expect(packCluster([node(1, 'A', 10)], 0)).toEqual({ circles: [], scale: 0 })
   })
 
   it('centres a lone root in the viewport', () => {
-    const [circle] = packCluster([node(1, 'Year', 100)], 400)
+    const [circle] = packCluster([node(1, 'Year', 100)], 400).circles
     expect(circle!.x).toBeCloseTo(200, 6)
     expect(circle!.y).toBeCloseTo(200, 6)
     expect(circle!.depth).toBe(0)
@@ -88,7 +88,7 @@ describe('packCluster', () => {
     const circles = packCluster(
       [node(1, 'Year', 100, [node(2, 'Jan', 30), node(3, 'Feb', 30), node(4, 'Mar', 20)])],
       400,
-    )
+    ).circles
     for (const c of circles) {
       expect(c.x - c.r).toBeGreaterThanOrEqual(-1e-6)
       expect(c.y - c.r).toBeGreaterThanOrEqual(-1e-6)
@@ -98,7 +98,7 @@ describe('packCluster', () => {
   })
 
   it('emits outermost first, so a painter render nests correctly', () => {
-    const circles = packCluster([node(1, 'Year', 100, [node(2, 'Jan', 30)])], 400)
+    const circles = packCluster([node(1, 'Year', 100, [node(2, 'Jan', 30)])], 400).circles
     expect(circles.map((c) => c.depth)).toEqual([0, 1])
   })
 
@@ -106,7 +106,7 @@ describe('packCluster', () => {
     const circles = packCluster(
       [node(1, 'Year', 100, [node(2, 'Jan', 40), node(3, 'Feb', 30)])],
       400,
-    )
+    ).circles
     const parent = circles.find((c) => c.name === 'Year')!
     for (const child of circles.filter((c) => c.depth === 1)) {
       const distance = Math.hypot(child.x - parent.x, child.y - parent.y)
@@ -127,7 +127,7 @@ describe('packCluster', () => {
         ]),
       ],
       400,
-    )
+    ).circles
     expect(noOverlaps(circles.filter((c) => c.depth === 1))).toBe(true)
   })
 
@@ -135,7 +135,7 @@ describe('packCluster', () => {
     const circles = packCluster(
       [node(1, 'Year', 392, [node(2, 'August', 20, [node(3, 'High_Shit', 3)])])],
       400,
-    )
+    ).circles
     expect(circles.map((c) => c.depth)).toEqual([0, 1, 2])
 
     const [year, august, high] = circles
@@ -148,7 +148,7 @@ describe('packCluster', () => {
   })
 
   it('gives a bigger playlist a bigger circle', () => {
-    const circles = packCluster([node(1, 'Year', 100, [node(2, 'Big', 50), node(3, 'Small', 5)])], 400)
+    const circles = packCluster([node(1, 'Year', 100, [node(2, 'Big', 50), node(3, 'Small', 5)])], 400).circles
     const big = circles.find((c) => c.name === 'Big')!
     const small = circles.find((c) => c.name === 'Small')!
     expect(big.r).toBeGreaterThan(small.r)
@@ -162,12 +162,12 @@ describe('packCluster', () => {
       children: [],
       otherContainerCount: 2,
     }
-    const circles = packCluster([node(1, 'Year', 50, [child])], 400)
+    const circles = packCluster([node(1, 'Year', 50, [child])], 400).circles
     expect(circles.find((c) => c.name === 'Shared')!.otherContainerCount).toBe(2)
   })
 
   it('places several roots side by side without overlapping', () => {
-    const circles = packCluster([node(1, 'A', 50), node(2, 'B', 40), node(3, 'C', 30)], 400)
+    const circles = packCluster([node(1, 'A', 50), node(2, 'B', 40), node(3, 'C', 30)], 400).circles
     expect(circles.filter((c) => c.depth === 0)).toHaveLength(3)
     expect(noOverlaps(circles)).toBe(true)
   })
@@ -180,7 +180,7 @@ describe('packCluster', () => {
 
 describe('packCluster hasChildren', () => {
   it('marks a container and leaves a leaf unmarked', () => {
-    const circles = packCluster([node(1, 'Year', 100, [node(2, 'Jan', 30)])], 400)
+    const circles = packCluster([node(1, 'Year', 100, [node(2, 'Jan', 30)])], 400).circles
     expect(circles.find((c) => c.name === 'Year')!.hasChildren).toBe(true)
     expect(circles.find((c) => c.name === 'Jan')!.hasChildren).toBe(false)
   })
@@ -189,7 +189,7 @@ describe('packCluster hasChildren', () => {
     const circles = packCluster(
       [node(1, 'Year', 100, [node(2, 'August', 20, [node(3, 'High', 3)])])],
       400,
-    )
+    ).circles
     const august = circles.find((c) => c.name === 'August')!
     expect(august.depth).toBe(1)
     expect(august.hasChildren).toBe(true)
@@ -197,6 +197,79 @@ describe('packCluster hasChildren', () => {
   })
 
   it('marks a childless root unmarked', () => {
-    expect(packCluster([node(1, 'Lonely', 10)], 400)[0]!.hasChildren).toBe(false)
+    expect(packCluster([node(1, 'Lonely', 10)], 400).circles[0]!.hasChildren).toBe(false)
+  })
+})
+
+describe('packCluster scale', () => {
+  it('reports a scale that predicts any circle it drew', () => {
+    const { circles, scale } = packCluster(
+      [node(1, 'Year', 400, [node(2, 'Jan', 30), node(3, 'Feb', 12)])],
+      400,
+    )
+    for (const circle of circles) {
+      expect(circle.trueR).toBeCloseTo(scale * Math.sqrt(circle.size), 6)
+    }
+  })
+
+  it('draws equal playlists at equal size, however deep they sit', () => {
+    // Two 20-track playlists: one directly under the root, one three levels down. If the packer
+    // rescaled each sibling group to fit its parent, these would differ, and no two circles on the
+    // map could be compared.
+    const { circles } = packCluster(
+      [
+        node(1, 'Left', 500, [
+          node(2, 'Shallow', 20),
+          node(3, 'Middle', 300, [node(4, 'Inner', 120, [node(5, 'Deep', 20)])]),
+        ]),
+      ],
+      400,
+    )
+    const shallow = circles.find((c) => c.name === 'Shallow')!
+    const deep = circles.find((c) => c.name === 'Deep')!
+    expect(deep.r).toBeCloseTo(shallow.r, 6)
+  })
+
+  it('draws equal playlists at equal size across separate roots', () => {
+    const { circles } = packCluster(
+      [node(1, 'A', 200, [node(2, 'X', 40)]), node(3, 'B', 90, [node(4, 'Y', 40)])],
+      400,
+    )
+    expect(circles.find((c) => c.name === 'Y')!.r).toBeCloseTo(
+      circles.find((c) => c.name === 'X')!.r,
+      6,
+    )
+  })
+
+  it('makes area track count, not radius', () => {
+    // Four times the tracks is twice the radius. Radius-linear sizing would make it four times.
+    const { circles } = packCluster([node(1, 'Year', 500, [node(2, 'Big', 40), node(3, 'Small', 10)])], 400)
+    const big = circles.find((c) => c.name === 'Big')!
+    const small = circles.find((c) => c.name === 'Small')!
+    expect(big.r / small.r).toBeCloseTo(2, 6)
+  })
+})
+
+describe('packCluster inflation', () => {
+  it('leaves a roomy container at its true size', () => {
+    const { circles } = packCluster([node(1, 'Year', 400, [node(2, 'Jan', 20)])], 400)
+    const year = circles.find((c) => c.name === 'Year')!
+    expect(year.inflated).toBe(false)
+    expect(year.r).toBeCloseTo(year.trueR, 6)
+  })
+
+  it('widens a container its contents cannot fit inside, and says so', () => {
+    // Twelve months covering 360 of the year's 370 tracks. Circles cannot tile a circle, so the
+    // year cannot hold them and still be drawn at its own area.
+    const months = Array.from({ length: 12 }, (_, i) => node(10 + i, `M${i}`, 30))
+    const { circles } = packCluster([node(1, 'Year', 370, months)], 400)
+    const year = circles.find((c) => c.name === 'Year')!
+    expect(year.inflated).toBe(true)
+    expect(year.trueR).toBeLessThan(year.r)
+  })
+
+  it('never marks a leaf as inflated, since nothing pushes on it', () => {
+    const { circles } = packCluster([node(1, 'Year', 400, [node(2, 'Jan', 30)])], 400)
+    expect(circles.find((c) => c.name === 'Jan')!.inflated).toBe(false)
   })
 })

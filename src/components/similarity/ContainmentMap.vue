@@ -40,14 +40,32 @@ const LEAF_WIDTH = 1.5
 /** A label shorter than this is not worth drawing; the hover title carries the name instead. */
 const MIN_LABEL_CHARS = 4
 
-/** Height of the label's box above its baseline, in user units. Its top corners bound the fit. */
-const LABEL_ASCENT = 9
+/**
+ * Height of the label's box above its baseline, in user units. Its top corners bound the fit.
+ *
+ * Measured from a drawn box rather than taken from the font size: an 11px face reports a 13.4-unit
+ * box, most of it above the baseline, and assuming 9 put the root's label exactly 1 unit outside
+ * its own circle.
+ */
+const LABEL_ASCENT = 11
 
 const selected = computed(
   () => props.clusters.find((cluster) => cluster.key === props.selectedKey) ?? props.clusters[0],
 )
 
-const circles = computed(() => (selected.value ? packCluster(selected.value.roots, SIDE) : []))
+const packed = computed(() =>
+  selected.value ? packCluster(selected.value.roots, SIDE) : { circles: [], scale: 0 },
+)
+
+const circles = computed(() => packed.value.circles)
+
+/**
+ * Containers drawn wider than their track count, painted as a layer above every node.
+ *
+ * Their true edge falls inside their own children, so a ring drawn with the node itself would be
+ * hidden under whatever is nested there. Drawing the whole set last is what makes it visible.
+ */
+const inflated = computed(() => circles.value.filter((circle) => circle.inflated))
 
 const clusterOptions = computed({
   get: () => selected.value?.key ?? '',
@@ -155,12 +173,79 @@ function labelWidth(circle: { name: string; size: number; r: number; hasChildren
  * Where a circle's label sits.
  *
  * A container's interior belongs to its children, so its label goes in the ring between its own
- * edge and theirs. Children occupy 86% of the radius, so the ring is 14% deep; the label is
- * centred in it and clamped so it never rides the stroke itself. Leaves keep their middle.
+ * edge and theirs. How deep that ring is now varies: a container with room to spare has a wide
+ * one, and a container packed to its limit has only the margin the packer reserved. The label is
+ * placed against the edge rather than centred in the ring for that reason, and the width budget,
+ * not the ring, is what keeps it inside. Leaves keep their middle.
  */
 function labelY(circle: { y: number; r: number; hasChildren: boolean }): number {
   if (!circle.hasChildren) return circle.y + 4
   return circle.y - circle.r * RIM_OFFSET
+}
+
+// ── Scale key ────────────────────────────────────────────────────────────────
+
+/** Largest a key circle may be drawn, as a fraction of the map's own largest circle. */
+const KEY_MAX_FRACTION = 0.22
+
+/** Below this a key circle is too small to compare anything against, so it is dropped. */
+const KEY_MIN_RADIUS = 7
+
+/** Padding around the key drawing, in the same user units as the map. */
+const KEY_INSET = 8
+
+/** Room reserved to the right of the key circles for their leader lines and numbers. */
+const KEY_LABEL_GAP = 10
+
+/**
+ * Largest round number at or below a limit, on the 1-2-5 ladder.
+ *
+ * The key is only useful if its reference is a number a reader can hold in mind, so it steps
+ * 1, 2, 5, 10, 20, 50 rather than landing on whatever the geometry happened to allow.
+ */
+function roundedDown(limit: number): number {
+  if (limit < 1) return 1
+  const decade = 10 ** Math.floor(Math.log10(limit))
+  for (const step of [5, 2, 1]) {
+    const value = step * decade
+    if (value <= limit) return value
+  }
+  return decade
+}
+
+/**
+ * Reference circles for the key, drawn at exactly the scale the map uses.
+ *
+ * Two of them, an order apart, so a reader can bracket a circle rather than only compare it
+ * against one. Both are real: hold either up to any circle on the map and the areas mean the same
+ * thing, which is the whole point of packing at a single scale.
+ */
+const keyCircles = computed(() => {
+  const { scale } = packed.value
+  const largest = circles.value[0]
+  if (scale <= 0 || !largest) return []
+
+  const top = roundedDown((largest.r * KEY_MAX_FRACTION / scale) ** 2)
+  const values = [top]
+
+  const lower = roundedDown(top / 4)
+  if (lower < top && scale * Math.sqrt(lower) >= KEY_MIN_RADIUS) values.push(lower)
+
+  return values.map((value) => ({ value, r: scale * Math.sqrt(value) }))
+})
+
+const keyRadius = computed(() => keyCircles.value[0]?.r ?? 0)
+
+/** Tall enough for the largest reference circle plus its number, which sits at the top of it. */
+const keyHeight = computed(() => keyRadius.value * 2 + KEY_INSET * 2)
+
+const keyCentreX = computed(() => KEY_INSET + keyRadius.value)
+
+const keyLabelX = computed(() => KEY_INSET + keyRadius.value * 2 + KEY_LABEL_GAP)
+
+/** Reference circles share a bottom tangent, so their tops are what a reader compares. */
+function keyTopY(r: number): number {
+  return keyHeight.value - KEY_INSET - r * 2
 }
 </script>
 
@@ -226,21 +311,60 @@ function labelY(circle: { y: number; r: number; hasChildren: boolean }): number 
               dy="13"
             >{{ circle.size }}</tspan></text>
         </g>
+
+        <!--
+          Where a container had to be drawn wider than its own track count, because circles cannot
+          tile a circle and its children needed the room. The true edge falls inside its children,
+          so these are painted last: drawn with the node they belong to, they would be buried.
+        -->
+        <circle
+          v-for="circle in inflated"
+          :key="`true-${circle.playlistId}`"
+          class="containment-map__true"
+          :cx="circle.x"
+          :cy="circle.y"
+          :r="circle.trueR"
+        />
       </svg>
 
       <!--
-        The legend states what size means and, just as importantly, what it does not. Siblings are
-        scaled to fit their parent, so area is comparable within a container but not across the
-        whole drawing; the numbers on the circles and the coverage line are the authority.
+        The key is drawn in its own SVG at the same user-unit width as the map above, so both
+        render at one pixel scale and a reference circle can be compared to any circle on the map
+        by eye. Sizing it in CSS instead would break exactly the claim it is making.
+      -->
+      <svg
+        v-if="keyCircles.length > 0"
+        class="containment-map__key"
+        :viewBox="`0 0 ${SIDE} ${keyHeight}`"
+        role="img"
+        aria-label="Scale key: reference circles drawn at the same scale as the map"
+      >
+        <g v-for="(reference, i) in keyCircles" :key="reference.value">
+          <circle
+            class="containment-map__key-circle"
+            :cx="keyCentreX"
+            :cy="keyTopY(reference.r) + reference.r"
+            :r="reference.r"
+          />
+          <line
+            class="containment-map__key-leader"
+            :x1="keyCentreX"
+            :y1="keyTopY(reference.r)"
+            :x2="keyLabelX - 4"
+            :y2="keyTopY(reference.r)"
+          />
+          <text class="containment-map__key-label" :x="keyLabelX" :y="keyTopY(reference.r) + 4">
+            {{ i === 0 ? `${reference.value} tracks` : reference.value }}
+          </text>
+        </g>
+      </svg>
+
+      <!--
+        Size is explained by the key above, which is drawn to scale rather than described. What is
+        left for the legend is what the drawing encodes besides size, and the one place where size
+        is not the whole truth.
       -->
       <div class="containment-map__legend text-muted text-xs">
-        <span class="containment-map__legend-item">
-          <svg class="containment-map__swatch" viewBox="0 0 40 18" aria-hidden="true">
-            <circle cx="7" cy="9" r="4" />
-            <circle cx="24" cy="9" r="8" />
-          </svg>
-          bigger circle, more tracks
-        </span>
         <span class="containment-map__legend-item">
           <svg class="containment-map__swatch" viewBox="0 0 22 18" aria-hidden="true">
             <circle cx="11" cy="9" r="8" />
@@ -254,11 +378,18 @@ function labelY(circle: { y: number; r: number; hasChildren: boolean }): number 
           </svg>
           dashed: also inside another container
         </span>
+        <span v-if="inflated.length > 0" class="containment-map__legend-item">
+          <svg class="containment-map__swatch" viewBox="0 0 22 18" aria-hidden="true">
+            <circle cx="11" cy="9" r="8" />
+            <circle class="containment-map__swatch-true" cx="11" cy="9" r="5.5" />
+          </svg>
+          dotted: this container's own track count, widened to fit what is inside it
+        </span>
       </div>
 
       <p class="containment-map__scale-note text-muted text-xs">
-        Sizes are comparable within a container, not across the whole map — each group is scaled to
-        fit its parent. The number on each circle is its track count.
+        Circle area is track count, at one scale across the whole map: two circles of the same size
+        hold the same number of tracks, wherever they sit.
       </p>
 
       <p v-if="simplified" class="containment-map__note text-muted text-xs">{{ simplified }}</p>
@@ -314,6 +445,43 @@ function labelY(circle: { y: number; r: number; hasChildren: boolean }): number 
   stroke-dasharray: 4 3;
 }
 
+/* ── True size ── */
+
+/* Where a container's edge would be if its contents had not needed the room. */
+.containment-map__true {
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 1 3;
+  pointer-events: none;
+}
+
+/* ── Scale key ── */
+
+.containment-map__key {
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  align-self: center;
+}
+
+.containment-map__key-circle {
+  fill: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  stroke: var(--color-accent);
+  stroke-width: 1;
+}
+
+.containment-map__key-leader {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.containment-map__key-label {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+  font-family: var(--font-family);
+}
+
 .containment-map__label {
   fill: var(--color-text);
   font-size: 11px;
@@ -360,6 +528,12 @@ function labelY(circle: { y: number; r: number; hasChildren: boolean }): number 
 
 .containment-map__swatch-dashed {
   stroke-dasharray: 4 3;
+}
+
+.containment-map__swatch-true {
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-dasharray: 1 3;
 }
 
 .containment-map__scale-note {

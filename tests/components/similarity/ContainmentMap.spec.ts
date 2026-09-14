@@ -195,11 +195,38 @@ describe('ContainmentMap labels', () => {
   })
 })
 
-describe('ContainmentMap legend', () => {
-  it('explains what circle size means', () => {
-    expect(factory().find('.containment-map__legend').text()).toContain('bigger circle, more tracks')
+describe('ContainmentMap scale key', () => {
+  it('draws reference circles rather than describing size in words', () => {
+    expect(factory().findAll('.containment-map__key-circle').length).toBeGreaterThan(0)
   })
 
+  it('names the unit on its largest reference', () => {
+    expect(factory().find('.containment-map__key').text()).toContain('tracks')
+  })
+
+  it('draws the key at exactly the scale the map used, so the two can be compared', () => {
+    const wrapper = factory()
+    // The key SVG shares the map's user-unit width, so one viewBox unit is one pixel in both.
+    expect(wrapper.find('.containment-map__key').attributes('viewBox')).toMatch(/^0 0 480 /)
+
+    const key = wrapper.find('.containment-map__key-circle')
+    const value = Number(wrapper.find('.containment-map__key-label').text().replace(/\D/g, ''))
+    const keyR = Number(key.attributes('r'))
+
+    // A 392-track root against the key's own value: radii must be in sqrt proportion.
+    const root = wrapper
+      .findAll('.containment-map__node')
+      .find((g) => g.find('title').text().startsWith("'18_ "))!
+    const rootR = Number(root.find('circle').attributes('r'))
+    expect(rootR / keyR).toBeCloseTo(Math.sqrt(392 / value), 4)
+  })
+
+  it('shows no key when there is nothing drawn', () => {
+    expect(factory([]).find('.containment-map__key').exists()).toBe(false)
+  })
+})
+
+describe('ContainmentMap legend', () => {
   it('explains what nesting means', () => {
     expect(factory().find('.containment-map__legend').text()).toContain(
       'every track is in the outer playlist',
@@ -210,12 +237,57 @@ describe('ContainmentMap legend', () => {
     expect(factory().find('.containment-map__legend').text()).toContain('also inside another')
   })
 
-  it('states the limit of the encoding rather than overclaiming', () => {
+  it('claims one scale across the map, now that there is one', () => {
     const note = factory().find('.containment-map__scale-note').text()
-    expect(note).toContain('comparable within a container, not across the whole map')
+    expect(note).toContain('one scale across the whole map')
   })
 
   it('shows no legend when there is nothing drawn', () => {
     expect(factory([]).find('.containment-map__legend').exists()).toBe(false)
+  })
+})
+
+describe('ContainmentMap true size', () => {
+  // Twelve months covering nearly all of the year: the year cannot hold them and still be drawn
+  // at its own area, so it is widened, and the widening is shown rather than hidden.
+  const DENSE: ContainmentCluster = {
+    key: 'cluster-dense',
+    roots: [
+      node(
+        1,
+        'Year',
+        370,
+        Array.from({ length: 12 }, (_, i) => node(10 + i, `Month_${i}`, 30)),
+      ),
+    ],
+    playlistCount: 13,
+    depth: 2,
+    multiParentCount: 0,
+    coveredTracks: 360,
+    totalTracks: 370,
+  }
+
+  it('marks a widened container with its true edge', () => {
+    const wrapper = factory([DENSE], DENSE.key)
+    const rings = wrapper.findAll('.containment-map__true')
+    expect(rings).toHaveLength(1)
+
+    const year = wrapper
+      .findAll('.containment-map__node')
+      .find((g) => g.find('title').text().startsWith('Year '))!
+    expect(Number(rings[0]!.attributes('r'))).toBeLessThan(
+      Number(year.find('circle').attributes('r')),
+    )
+  })
+
+  it('explains the true edge in the legend, but only when one is drawn', () => {
+    expect(factory([DENSE], DENSE.key).find('.containment-map__legend').text()).toContain(
+      "this container's own track count",
+    )
+    expect(factory().find('.containment-map__legend').text()).not.toContain('dotted')
+  })
+
+  it('draws nothing extra when every container fits its contents', () => {
+    expect(factory().findAll('.containment-map__true')).toHaveLength(0)
   })
 })
