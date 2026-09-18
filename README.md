@@ -1,7 +1,5 @@
 # Sortify
 
-# Sortify
-
 A browser-based playlist manager for music libraries. Import from Spotify or CSV/JSON, rearrange tracks across a multi-playlist grid, then save back to Spotify or as local files.
 
 [Try it here](https://jaymoran103.github.io/sortify-vue/#/) — no signup, no install, nothing leaves your browser.

@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import SpotifyPlaylistPickerModal, { resetPlaylistCache } from '@/components/dashboard/SpotifyPlaylistPickerModal.vue'
 import { useActivityStore } from '@/stores/activity'
+import { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 
 const testState = vi.hoisted(() => ({
   mockApiGet: vi.fn(),
@@ -46,7 +47,7 @@ vi.mock('@/composables/useSpotifyAuth', async () => {
 })
 
 const ScrollableListStub = {
-  props: ['items'],
+  props: ['items', 'keyField', 'estimateSize'],
   template: `
     <div>
       <template v-if="items.length === 0">
@@ -247,4 +248,74 @@ describe('SpotifyPlaylistPickerModal', () => {
       itemLabel: 'Morning Mix',
     })
   })
+
+  it('measures Select All against the filtered list, not the whole one', async () => {
+    testState.mockApiGet.mockResolvedValue({
+      items: [
+        {
+          id: 'pl-1',
+          name: 'Morning Mix',
+          tracks: { total: 12 },
+          owner: { display_name: 'Alice' },
+          images: [],
+        },
+        {
+          id: 'pl-2',
+          name: 'Evening Chill',
+          tracks: { total: 8 },
+          owner: { display_name: 'Alice' },
+          images: [],
+        },
+      ],
+      total: 2,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+
+    const wrapper = mountModal()
+    await flushPromises()
+
+    const selectAll = () =>
+      wrapper.findAll('button').find((b) => /elect All$/.test(b.text()))!
+
+    // Filter down to one row, then select it. Every visible row is now selected,
+    // so the button must offer to undo that.
+    vi.useFakeTimers()
+    await wrapper.find('input[type="search"]').setValue('Morning')
+    vi.advanceTimersByTime(200)
+    vi.useRealTimers()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Evening Chill')
+
+    await selectAll().trigger('click')
+    expect(selectAll().text()).toContain('Deselect All')
+  })
+
+
+  it('gives ScrollableList the height SelectableItem renders at', async () => {
+    testState.mockApiGet.mockResolvedValue({
+      items: [
+        {
+          id: 'pl-1',
+          name: 'Morning Mix',
+          tracks: { total: 12 },
+          owner: { display_name: 'Alice' },
+          images: [],
+        },
+      ],
+      total: 1,
+      next: null,
+      offset: 0,
+      limit: 50,
+    })
+
+    const wrapper = mountModal()
+    await flushPromises()
+
+    const list = wrapper.findComponent(ScrollableListStub)
+    expect(list.props('estimateSize')).toBe(SELECTABLE_ITEM_HEIGHT)
+  })
+
 })
