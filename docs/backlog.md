@@ -63,23 +63,6 @@ tests. Worth doing if the double-open is ever seen in practice.
 
 ## Tooling
 
-### `pnpm ci` is shadowed by pnpm's built-in
-**Size:** XS
-
-`package.json` names the verification script `ci`, but pnpm has a built-in `ci`
-that takes precedence and exits `ERR_PNPM_CI_NOT_IMPLEMENTED`. `pnpm run ci`
-works. Renaming the script to `verify` removes the collision rather than
-documenting around it, and `package.json` already carries a `typecheck` alias
-for `type-check`, so aliasing fits the existing style.
-
-### Two Prettier configs, and they disagree
-**Size:** XS
-
-`.prettierrc` and `.prettierrc.json` both exist. Only the former sets
-`trailingComma: "all"`. Prettier resolves `.prettierrc` first, so the `.json`
-is dead — and it is the one carrying the `$schema` an editor points at. Delete
-it.
-
 ### The e2e suite never runs in CI
 **Size:** XS
 
@@ -87,11 +70,3 @@ it.
 invoked, so a green badge implies coverage that did not execute. Either add a
 `test:e2e` step with a browser cache, or remove the harness. Either beats the
 ambiguity, which actively misleads anyone reading CI status.
-
-### `.gitignore` swallows dash-prefixed paths
-**Size:** XS
-
-Line 42 is the bare pattern `-*`. It excludes any path beginning with a dash,
-with no warning. A conventions file named `.github/-copilot-instructions.md`
-was invisible to git for months because of it. Narrow the rule to explicit
-paths, or scope it.

@@ -12,13 +12,12 @@ Read these before writing code:
 ## Verify
 
 ```
-pnpm run ci      lint + typecheck + test + build
+pnpm run verify  lint + typecheck + test + build
 pnpm test        vitest run, no e2e
 pnpm test:e2e    playwright, not run in CI
 ```
 
-Run `pnpm run ci` before calling work done. Not `pnpm ci` — pnpm has a built-in
-`ci` that shadows the script and fails outright. A green CI does not mean e2e
+Run `pnpm run verify` before calling work done. A green CI does not mean e2e
 passed; `ci.yml` runs `pnpm test`, which is vitest only.
 
 ## Rules
@@ -27,5 +26,3 @@ passed; `ci.yml` runs `pnpm test`, which is vitest only.
 - No `any`. Prefer `unknown` with a type guard. `docs/conventions.md` carries
   the one standing exception.
 - Do not add dependencies without approval.
-- `.gitignore` carries `-*`, which swallows any dash-prefixed path with no
-  error. Do not name files that way.
