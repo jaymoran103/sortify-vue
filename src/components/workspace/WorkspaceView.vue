@@ -14,6 +14,7 @@ import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import PromptModal from '@/components/modals/PromptModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
 import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
+import AppTopBar from '@/components/common/AppTopBar.vue'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
@@ -661,34 +662,15 @@ useKeyboardShortcuts({
   <!-- no-text-select covers the whole view, not just the rows: the sticky table header and
        the control bar are just as easy to catch on a drag that starts over the list. -->
   <div class="workspace no-text-select">
-    <!-- Header -->
-    <header class="workspace__header">
+    <AppTopBar />
 
-      <button class="btn btn--secondary" @click="goBack">Back to Dashboard</button>
+    <!-- Page heading. Save lives with the list it acts on, in the control bar below. -->
+    <div class="workspace__heading">
       <h1 class="workspace__title">{{ workspaceStore.sessionName || 'Workspace' }}</h1>
-
-      <!-- Stats display, not crucial -->
       <span class="workspace__meta text-muted">
         {{ workspaceStore.playlists.length }} playlists · {{ workspaceStore.trackList.length }} tracks
       </span>
-      <!-- Save section. Content actions live in the control bar, beside the list they act on. -->
-      <div class="workspace__header-actions">
-        <!-- Unsaved indicator or last-saved time, never both. -->
-        <span v-if="workspaceStore.hasUnsavedChanges" class="workspace__unsaved-indicator">
-          Unsaved changes
-        </span>
-        <span v-else-if="lastSavedTime" class="workspace__saved-indicator text-muted">
-          Saved at {{ lastSavedTime }}
-        </span>
-        <button
-          class="btn btn--primary"
-          :disabled="!workspaceStore.hasUnsavedChanges"
-          @click="handleSave"
-        >
-          Save
-        </button>
-      </div>
-    </header>
+    </div>
 
     <!-- Error Display -->
     <div v-if="workspaceStore.error" class="workspace__error">
@@ -723,6 +705,20 @@ useKeyboardShortcuts({
         <template #actions>
           <button class="btn btn--secondary workspace__add-btn" @click="handleAddContent">
             + Add
+          </button>
+          <!-- Unsaved indicator or last-saved time, never both. -->
+          <span v-if="workspaceStore.hasUnsavedChanges" class="workspace__unsaved-indicator">
+            Unsaved changes
+          </span>
+          <span v-else-if="lastSavedTime" class="workspace__saved-indicator text-muted">
+            Saved at {{ lastSavedTime }}
+          </span>
+          <button
+            class="btn btn--primary"
+            :disabled="!workspaceStore.hasUnsavedChanges"
+            @click="handleSave"
+          >
+            Save
           </button>
         </template>
       </ControlBar>
@@ -784,28 +780,16 @@ useKeyboardShortcuts({
   height: 100vh;
 }
 
-.workspace__header {
-  position: sticky;
-  top: 0;
+.workspace__heading {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-subtle);
-  z-index: 10;
+  padding: var(--space-4) var(--space-5) var(--space-3);
 }
 
 .workspace__title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
-  flex: 1;
-}
-
-.workspace__header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
 }
 
 .workspace__unsaved-indicator {

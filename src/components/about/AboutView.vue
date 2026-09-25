@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppTopBar from '@/components/common/AppTopBar.vue'
 import TabbedDiveSection from './TabbedDiveSection.vue'
 import WorkspaceMock from './WorkspaceMock.vue'
 import SimilarityMock from './SimilarityMock.vue'
@@ -49,6 +50,7 @@ const featureCards = [
 </script>
 
 <template>
+  <AppTopBar />
   <div class="about-page">
 
     <!-- SECTION: HERO -->

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppTopBar from '@/components/common/AppTopBar.vue'
 import IOCard from './IOCard.vue'
 import LibraryCard from './LibraryCard.vue'
 import WorkspaceCard from './WorkspaceCard.vue'
@@ -6,10 +7,11 @@ import WorkspaceCard from './WorkspaceCard.vue'
 </script>
 
 <template>
+  <AppTopBar />
   <div class="dashboard">
+    <!-- About is reached from the top bar now, so the heading carries the title alone. -->
     <div class="dashboard__header">
       <h1 class="dashboard__title">Dashboard</h1>
-      <button class="about-btn" @click="$router.push({ name: 'about' })">About Sortify</button>
     </div>
 
     <!-- Main Dashboard Section -->
@@ -53,19 +55,6 @@ import WorkspaceCard from './WorkspaceCard.vue'
   margin: 0;
 }
 
-.dashboard .about-btn {
-  color: var(--color-text-muted);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-size-sm);
-    
-  border: 2px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-.dashboard .about-btn:hover {
-  border-color: var(--color-accent);
-  background: var(--color-surface);
-}
 
 .dashboard__grid {
   display: grid;

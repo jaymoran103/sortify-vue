@@ -127,6 +127,9 @@ const router = createRouter({
   routes: [
     { path: '/', component: { template: '<div />' } },
     { path: '/dashboard', name: 'dashboard', component: { template: '<div />' } },
+    // AppTopBar links to every peer route, so each must resolve.
+    { path: '/library', name: 'library', component: { template: '<div />' } },
+    { path: '/about', name: 'about', component: { template: '<div />' } },
     // Renders the real component so onBeforeRouteLeave guards fire in mountViaRouter().
     { path: '/workspace', name: 'workspace', component: WorkspaceView },
   ],
@@ -279,13 +282,10 @@ describe('WorkspaceView', () => {
     expect(wrapper.find('.workspace__error button').exists()).toBe(true)
   })
 
-  it('clicking Back to Dashboard navigates to the dashboard route', async () => {
+  // The header's Back button gave way to the shared top bar, whose wordmark goes home.
+  it('links back to the dashboard from the top bar', () => {
     const wrapper = mountWorkspace()
-    const pushSpy = vi.spyOn(router, 'push')
-    const btn = wrapper.find('button.btn--secondary')
-    await btn.trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith({ name: 'dashboard' })
-    pushSpy.mockRestore()
+    expect(wrapper.find('.topbar__brand').attributes('href')).toBe('#/dashboard')
   })
 
   it('renders the track table when data is loaded', () => {
@@ -1267,7 +1267,7 @@ describe('WorkspaceView', () => {
         mockWorkspaceStore.hasUnsavedChanges = false
         return true
       })
-      await wrapper.find('.workspace__header-actions .btn--primary').trigger('click')
+      await wrapper.find('.control-bar__actions .btn--primary').trigger('click')
       await nextTick()
       await nextTick()
 
