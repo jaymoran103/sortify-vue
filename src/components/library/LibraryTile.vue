@@ -3,6 +3,7 @@
 // differ only in the cover treatment and what a click means, so both render through this
 // rather than through two near-identical components. The parent decides what `open` does.
 import { computed, ref, watch } from 'vue'
+import { initialsOf } from '@/utils/initials'
 
 const props = withDefaults(defineProps<{
   title: string
@@ -39,16 +40,7 @@ const hue = computed(() => {
   return hash
 })
 
-// Words split on spaces, underscores and dashes, since exported names often use them. Words
-// that start with a letter are preferred, so "2014_clock_radio" reads CR rather than 2.
-const initials = computed(() => {
-  const words = props.title.split(/[\s_-]+/).filter(Boolean)
-  const lettered = words.filter((word) => /^\p{L}/u.test(word))
-  return (lettered.length > 0 ? lettered : words)
-    .slice(0, 2)
-    .map((word) => word[0]!.toUpperCase())
-    .join('')
-})
+const initials = computed(() => initialsOf(props.title))
 </script>
 
 <template>
@@ -96,8 +88,10 @@ const initials = computed(() => {
   flex-direction: column;
   gap: var(--space-2);
   width: 100%;
-  /* Without this a long title's min-content width sets the card's size. */
+  /* Without these a long title's min-content width sets, or spills past, the card's size.
+     Safari lays a <button>'s flex children out wider than the button without the clip. */
   min-width: 0;
+  overflow: hidden;
   scroll-snap-align: start;
   padding: var(--space-2);
   text-align: left;
@@ -136,8 +130,8 @@ const initials = computed(() => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  /* 4:3 over two lines of text keeps the whole card close to square. */
-  aspect-ratio: 4 / 3;
+  /* The cover is always square. The card's width is set by its row, never by its content. */
+  aspect-ratio: 1;
   overflow: hidden;
   border-radius: var(--radius-md);
   background: hsl(var(--tile-hue) 30% 28%);
@@ -202,11 +196,14 @@ const initials = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  width: 100%;
   min-width: 0;
   padding-right: var(--space-4);
 }
 
 .tile__title {
+  display: block;
+  max-width: 100%;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   overflow: hidden;
@@ -215,6 +212,8 @@ const initials = computed(() => {
 }
 
 .tile__subtitle {
+  display: block;
+  max-width: 100%;
   font-size: var(--font-size-xs);
   overflow: hidden;
   text-overflow: ellipsis;
