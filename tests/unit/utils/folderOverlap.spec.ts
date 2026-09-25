@@ -5,7 +5,7 @@ import {
   folderMembers,
   folderPath,
   homeOf,
-  unfiledPlaylistIds,
+  uncategorizedPlaylistIds,
 } from '@/utils/folderOverlap'
 import type { Folder } from '@/types/models'
 import type { FolderSnapshot } from '@/types/ui'
@@ -65,7 +65,7 @@ describe('folderMembers', () => {
     expect(member).toMatchObject({ borrowed: true, canonicalFolderId: 'b', canonicalFolderName: 'B' })
   })
 
-  it('reports no home for a borrowed member that is otherwise unfiled', () => {
+  it('reports no home for a borrowed member that is otherwise uncategorized', () => {
     const snap = makeSnapshot([makeFolder('a', null, [1])])
     expect(folderMembers(snap, 'a')[0]).toMatchObject({ borrowed: true, canonicalFolderId: null })
   })
@@ -126,17 +126,17 @@ describe('folderPath', () => {
   })
 })
 
-// ─── unfiledPlaylistIds ──────────────────────────────────────────────────────
+// ─── uncategorizedPlaylistIds ──────────────────────────────────────────────────────
 
-describe('unfiledPlaylistIds', () => {
+describe('uncategorizedPlaylistIds', () => {
   it('returns live playlists with no home, in name order', () => {
     const snap = makeSnapshot([makeFolder('a')], { 2: 'a' })
-    expect(unfiledPlaylistIds(snap)).toEqual([1, 3, 4])
+    expect(uncategorizedPlaylistIds(snap)).toEqual([1, 3, 4])
   })
 
-  it('counts a playlist whose home was deleted as unfiled', () => {
+  it('counts a playlist whose home was deleted as uncategorized', () => {
     const snap = makeSnapshot([], { 1: 'gone' }, { 1: 'Alpha' })
-    expect(unfiledPlaylistIds(snap)).toEqual([1])
+    expect(uncategorizedPlaylistIds(snap)).toEqual([1])
   })
 })
 
@@ -165,6 +165,6 @@ describe('collectFolderOverlaps', () => {
       [makeFolder('a', null, [2, 3]), makeFolder('b')],
       { 1: 'a', 2: 'b' },
     )
-    expect(collectFolderOverlaps(snap)[0]?.message).toBe('2 of 3 here live in "B" and "Unfiled".')
+    expect(collectFolderOverlaps(snap)[0]?.message).toBe('2 of 3 here live in "B" and "Uncategorized".')
   })
 })

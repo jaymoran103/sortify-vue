@@ -51,7 +51,7 @@ describe('Folder Store', () => {
     expect(store.getFolder(id)?.name).toBe('New')
   })
 
-  it('deleteFolder reparents children and unfiles playlists that lived there', () => {
+  it('deleteFolder reparents children and uncategorizes playlists that lived there', () => {
     const store = useFolderStore()
     const top = store.createFolder('Top')
     const mid = store.createFolder('Mid', top)
@@ -74,7 +74,7 @@ describe('Folder Store', () => {
     expect(store.getFolder(a)?.borrowedPlaylistIds).toEqual([])
   })
 
-  it('setCanonicalHome with null unfiles the playlist', () => {
+  it('setCanonicalHome with null uncategorizes the playlist', () => {
     const store = useFolderStore()
     const a = store.createFolder('A')
     store.setCanonicalHome(1, a)

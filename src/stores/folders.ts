@@ -13,7 +13,7 @@ import type { FolderSnapshot } from '@/types/ui'
  * key and the library is exactly as it was.
  *
  * The store holds state and mutations only. Every derived answer (members, overlaps, paths,
- * Unfiled) comes from utils/folderOverlap.ts, fed by `snapshot`.
+ * Uncategorized) comes from utils/folderOverlap.ts, fed by `snapshot`.
  */
 
 // v2: proto-library-0901 owns v1, with a different shape.
@@ -92,7 +92,7 @@ export const useFolderStore = defineStore('folders', () => {
 
   /**
    * Removes a folder. Its children move up to its parent rather than being orphaned. Playlists
-   * that called it home become unfiled; its borrows simply go with it. Nothing leaves the library.
+   * that called it home become uncategorized; its borrows simply go with it. Nothing leaves the library.
    */
   function deleteFolder(id: string): void {
     const folder = getFolder(id)
@@ -122,7 +122,7 @@ export const useFolderStore = defineStore('folders', () => {
 
   /**
    * Makes `playlistIds` exactly the set that calls this folder home. Playlists newly listed move
-   * here from wherever they lived; playlists no longer listed become unfiled.
+   * here from wherever they lived; playlists no longer listed become uncategorized.
    */
   function setFolderHomes(folderId: string, playlistIds: number[]): void {
     const incoming = new Set(playlistIds)

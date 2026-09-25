@@ -18,7 +18,7 @@ import { formatNameList } from '@/utils/workspaceIssues'
  * The folder a playlist calls home, or null when it has none.
  *
  * A home id that no longer resolves to a folder counts as none, so a deleted folder cannot
- * strand a playlist outside both its old home and Unfiled.
+ * strand a playlist outside both its old home and Uncategorized.
  */
 export function homeOf(snapshot: FolderSnapshot, playlistId: number): Folder | null {
   const homeId = snapshot.canonicalFolderIds.get(playlistId)
@@ -97,8 +97,8 @@ export function folderPath(snapshot: FolderSnapshot, folderId: string): Folder[]
   return path
 }
 
-/** Live playlists with no canonical home, in name order. These make up the Unfiled row. */
-export function unfiledPlaylistIds(snapshot: FolderSnapshot): number[] {
+/** Live playlists with no canonical home, in name order. These make up the Uncategorized row. */
+export function uncategorizedPlaylistIds(snapshot: FolderSnapshot): number[] {
   return [...snapshot.playlistNames.keys()]
     .filter((id) => homeOf(snapshot, id) === null)
     .sort(byName(snapshot))
@@ -118,7 +118,7 @@ export function collectFolderOverlaps(snapshot: FolderSnapshot): FolderOverlap[]
     const borrowed = members.filter((m) => m.borrowed)
     if (borrowed.length === 0) continue
 
-    const homes = [...new Set(borrowed.map((m) => m.canonicalFolderName ?? 'Unfiled'))]
+    const homes = [...new Set(borrowed.map((m) => m.canonicalFolderName ?? 'Uncategorized'))]
     overlaps.push({
       code: 'borrowed-members',
       folderId: folder.id,
