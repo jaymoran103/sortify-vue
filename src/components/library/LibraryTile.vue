@@ -39,14 +39,16 @@ const hue = computed(() => {
   return hash
 })
 
-const initials = computed(() =>
-  props.title
-    .split(/\s+/)
-    .filter(Boolean)
+// Words split on spaces, underscores and dashes, since exported names often use them. Words
+// that start with a letter are preferred, so "2014_clock_radio" reads CR rather than 2.
+const initials = computed(() => {
+  const words = props.title.split(/[\s_-]+/).filter(Boolean)
+  const lettered = words.filter((word) => /^\p{L}/u.test(word))
+  return (lettered.length > 0 ? lettered : words)
     .slice(0, 2)
     .map((word) => word[0]!.toUpperCase())
-    .join(''),
-)
+    .join('')
+})
 </script>
 
 <template>
@@ -94,6 +96,9 @@ const initials = computed(() =>
   flex-direction: column;
   gap: var(--space-2);
   width: 100%;
+  /* Without this a long title's min-content width sets the card's size. */
+  min-width: 0;
+  scroll-snap-align: start;
   padding: var(--space-2);
   text-align: left;
   background: var(--color-surface);
@@ -131,7 +136,8 @@ const initials = computed(() =>
   align-items: center;
   justify-content: center;
   width: 100%;
-  aspect-ratio: 1;
+  /* 4:3 over two lines of text keeps the whole card close to square. */
+  aspect-ratio: 4 / 3;
   overflow: hidden;
   border-radius: var(--radius-md);
   background: hsl(var(--tile-hue) 30% 28%);

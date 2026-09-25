@@ -3,8 +3,8 @@
  * Library View (PROTOTYPE)
  *
  * A browsing surface where folder structure reads at a glance and every item is one click
- * away. The root is a short stack of titled rows, one per top-level folder and then Unfiled.
- * Each row scrolls sideways, collapses to its header, or expands into a grid in place.
+ * away. The root is a short stack of titled rows, one per top-level folder and then Uncategorized.
+ * Rows scroll sideways or wrap as a grid, by one page-wide toggle, and each collapses to its header.
  * Clicking a folder drills into it; the drilled folder is a place, held in the route query.
  *
  * Playlist cards select rather than open. Several selected playlists open together as one
@@ -24,23 +24,29 @@ import { useSessionStore } from '@/stores/sessions'
 import { useModal } from '@/composables/useModal'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
+import { useListFilter } from '@/composables/useListFilter'
+import { useListSort } from '@/composables/useListSort'
+import { useDebounce } from '@/composables/useDebounce'
 import {
   childFolders,
   collectFolderOverlaps,
   folderMembers,
   folderPath,
   homeOf,
-  unfiledPlaylistIds,
+  uncategorizedPlaylistIds,
 } from '@/utils/folderOverlap'
 import { openSpotifyURI } from '@/utils/spotifyLinks'
 import AppTopBar from '@/components/common/AppTopBar.vue'
+import ControlBar from '@/components/common/ControlBar.vue'
+import SearchBar from '@/components/common/SearchBar.vue'
+import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import PromptModal from '@/components/modals/PromptModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
 import FolderRow from './FolderRow.vue'
 import LibraryTile from './LibraryTile.vue'
 import type { Folder, Playlist } from '@/types/models'
-import type { FolderMember, FolderOverlap, MenuEntry } from '@/types/ui'
+import type { FolderMember, FolderOverlap, MenuEntry, SortOption } from '@/types/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,10 +62,40 @@ const playlistsById = computed(
   () => new Map((playlistStore.playlists ?? []).filter((p) => p.id !== undefined).map((p) => [p.id!, p])),
 )
 
+// ── Search and sort ──────────────────────────────────────────────────────────
+// The same chain the workspace runs: source -> useListFilter -> useListSort. The library is
+// cut into rows afterwards, so both apply inside every row at once rather than per row.
+const allPlaylists = computed((): Playlist[] => playlistStore.playlists ?? [])
+
+const sortOptions: SortOption<Playlist>[] = [
+  { key: 'name', label: 'Name', compareFn: (a, b) => a.name.localeCompare(b.name) },
+  { key: 'track-count', label: 'Track Count', compareFn: (a, b) => b.trackIDs.length - a.trackIDs.length },
+  { key: 'last-modified', label: 'Last Modified', compareFn: (a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0) },
+]
+
+const { query, filtered } = useListFilter<Playlist>(allPlaylists, (p, q) =>
+  p.name.toLowerCase().includes(q.toLowerCase()),
+)
+const { currentSort, sorted } = useListSort<Playlist>(filtered, sortOptions)
+
+// playlistId -> position in the filtered, sorted list. Absent means filtered out.
+const rank = computed(() => new Map(sorted.value.map((p, i) => [p.id!, i])))
+
+// "Searching" is read from the result, not from `query`: the query ref updates at once while
+// useListFilter debounces, and the rows must agree with what the filter actually applied.
+const isFiltering = computed(() => filtered.value.length < allPlaylists.value.length)
+
+// Folder cards match on their own name, on the same debounce as the playlist filter.
+const debouncedQuery = useDebounce(query, 200)
+function folderMatches(folder: Folder): boolean {
+  const q = debouncedQuery.value.trim().toLowerCase()
+  return !q || folder.name.toLowerCase().includes(q)
+}
+
 // ── Navigation ───────────────────────────────────────────────────────────────
 // Drill-in is a place, so it lives in the URL: back, reload and a shared link all hold. Row
-// collapse, expansion and the borrowed filter are a transient glance, so they are local refs;
-// in the URL the back button would start undoing chevron clicks.
+// collapse and the borrowed filter are a transient glance, so they are local refs; in the URL
+// the back button would start undoing chevron clicks.
 const openFolder = computed<Folder | null>(() => {
   const id = route.query.folder
   return typeof id === 'string' ? (folderStore.getFolder(id) ?? null) : null
@@ -74,19 +110,39 @@ function navigate(folderId: string | null): void {
 }
 
 const collapsed = ref<Set<string>>(new Set())
-const expanded = ref<Set<string>>(new Set())
 const borrowedOnly = ref<Set<string>>(new Set())
 
-// A drilled folder's own contents open as a grid: one strip alone on a page is a waste of it.
 watch(
   () => openFolder.value?.id ?? null,
-  (id) => {
+  () => {
     collapsed.value = new Set()
-    expanded.value = new Set(id ? [`own-${id}`] : [])
     borrowedOnly.value = new Set()
   },
-  { immediate: true },
 )
+
+// How every row lays out its cards: a sideways strip, or a wrapping grid. A per-viewer
+// preference, so it is remembered in localStorage and survives a failed read as 'strip'.
+type RowLayout = 'strip' | 'grid'
+const LAYOUT_KEY = 'sortify.library.layout'
+function loadLayout(): RowLayout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === 'grid' ? 'grid' : 'strip'
+  } catch {
+    return 'strip'
+  }
+}
+const layout = ref<RowLayout>(loadLayout())
+watch(layout, (value) => {
+  try {
+    localStorage.setItem(LAYOUT_KEY, value)
+  } catch {
+    // Private mode or quota: the choice still holds for this visit.
+  }
+})
+const layoutOptions: Array<{ key: RowLayout; label: string }> = [
+  { key: 'strip', label: 'Rows' },
+  { key: 'grid', label: 'Grid' },
+]
 
 function toggleIn(set: typeof collapsed, key: string): void {
   const next = new Set(set.value)
@@ -96,20 +152,19 @@ function toggleIn(set: typeof collapsed, key: string): void {
 
 // Named wrappers, because the template unwraps refs and would hand toggleIn a bare Set.
 const toggleCollapsed = (key: string): void => toggleIn(collapsed, key)
-const toggleExpanded = (key: string): void => toggleIn(expanded, key)
 const toggleBorrowedOnly = (key: string): void => toggleIn(borrowedOnly, key)
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
 interface LibraryRow {
   key: string
   title: string
-  /** The folder this row shows, or null for Unfiled. */
+  /** The folder this row shows, or null for Uncategorized. */
   folder: Folder | null
   /** Subfolder cards, shown ahead of playlists. */
   subfolders: Folder[]
   members: FolderMember[]
   overlap: FolderOverlap | null
-  /** Header drills into the folder. False for the drilled folder's own row and for Unfiled. */
+  /** Header drills into the folder. False for the drilled folder's own row and for Uncategorized. */
   openable: boolean
 }
 
@@ -139,31 +194,55 @@ const rows = computed<LibraryRow[]>(() => {
   }
 
   const top = childFolders(snapshot.value, null).map((f) => folderRow(f))
-  const unfiled: FolderMember[] = unfiledPlaylistIds(snapshot.value).map((playlistId) => ({
+  const uncategorized: FolderMember[] = uncategorizedPlaylistIds(snapshot.value).map((playlistId) => ({
     playlistId,
     borrowed: false,
     canonicalFolderId: null,
     canonicalFolderName: null,
   }))
-  const unfiledRow: LibraryRow = {
-    key: 'unfiled',
-    title: 'Unfiled',
+  const uncategorizedRow: LibraryRow = {
+    key: 'uncategorized',
+    title: 'Uncategorized',
     folder: null,
     subfolders: [],
-    members: unfiled,
+    members: uncategorized,
     overlap: null,
     openable: false,
   }
-  return unfiled.length > 0 ? [...top, unfiledRow] : top
+  return uncategorized.length > 0 ? [...top, uncategorizedRow] : top
 })
 
+/**
+ * A row's members after search and sort, before the borrowed-only filter. Home members stay
+ * ahead of borrowed ones; within each tier the chosen sort decides the order.
+ */
+function searchedMembers(row: LibraryRow): FolderMember[] {
+  const order = rank.value
+  const byRank = (a: FolderMember, b: FolderMember): number =>
+    order.get(a.playlistId)! - order.get(b.playlistId)!
+  const kept = row.members.filter((m) => order.has(m.playlistId))
+  return [...kept.filter((m) => !m.borrowed).sort(byRank), ...kept.filter((m) => m.borrowed).sort(byRank)]
+}
+
 function visibleMembers(row: LibraryRow): FolderMember[] {
-  return borrowedOnly.value.has(row.key) ? row.members.filter((m) => m.borrowed) : row.members
+  const members = searchedMembers(row)
+  return borrowedOnly.value.has(row.key) ? members.filter((m) => m.borrowed) : members
+}
+
+function visibleSubfolders(row: LibraryRow): Folder[] {
+  return borrowedOnly.value.has(row.key) ? [] : row.subfolders.filter(folderMatches)
 }
 
 function isRowEmpty(row: LibraryRow): boolean {
   return row.subfolders.length === 0 && row.members.length === 0
 }
+
+// While searching, a row with nothing matching drops out rather than showing an empty strip.
+const shownRows = computed(() =>
+  isFiltering.value || debouncedQuery.value.trim()
+    ? rows.value.filter((row) => searchedMembers(row).length > 0 || row.subfolders.some(folderMatches))
+    : rows.value,
+)
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`
@@ -264,7 +343,7 @@ async function renameFolder(folder: Folder): Promise<void> {
 async function deleteFolder(folder: Folder): Promise<void> {
   const homes = folderMembers(snapshot.value, folder.id).filter((m) => !m.borrowed).length
   const children = childFolders(snapshot.value, folder.id).length
-  const parts = [`${plural(homes, 'playlist')} that live here become unfiled.`]
+  const parts = [`${plural(homes, 'playlist')} that live here become uncategorized.`]
   if (children > 0) parts.push(`${plural(children, 'subfolder')} move up a level.`)
   const confirmed = await modal.open<true>(ConfirmModal, {
     title: 'Delete Folder',
@@ -280,14 +359,14 @@ async function deleteFolder(folder: Folder): Promise<void> {
 
 /**
  * Takes a playlist out of its home, behind a confirmation. This is the destructive reading of
- * "remove": the playlist becomes unfiled, and there is no undo. Borrows elsewhere stay.
+ * "remove": the playlist becomes uncategorized, and there is no undo. Borrows elsewhere stay.
  */
-async function unfilePlaylist(playlist: Playlist, folder: Folder): Promise<void> {
+async function uncategorizePlaylist(playlist: Playlist, folder: Folder): Promise<void> {
   const borrowedIn = folderStore.folders.filter((f) => f.borrowedPlaylistIds.includes(playlist.id!)).length
   const stays = borrowedIn > 0 ? ` It stays borrowed in ${plural(borrowedIn, 'folder')}.` : ''
   const confirmed = await modal.open<true>(ConfirmModal, {
     title: 'Move Out of Folder',
-    message: `"${playlist.name}" will leave "${folder.name}" and become unfiled.${stays}`,
+    message: `"${playlist.name}" will leave "${folder.name}" and become uncategorized.${stays}`,
     confirmLabel: 'Move out',
     danger: true,
   })
@@ -306,7 +385,7 @@ function pathLabel(folder: Folder): string {
 /**
  * Assemble the menu for one playlist card, as seen from the row showing it.
  *
- * `rowFolder` is the folder whose row the card sits in, or null for Unfiled. The removal
+ * `rowFolder` is the folder whose row the card sits in, or null for Uncategorized. The removal
  * entry is labelled from the member itself so the two meanings of "remove" never collide:
  * dropping a borrow is quiet, taking a playlist out of its home confirms.
  */
@@ -350,11 +429,11 @@ function playlistMenu(member: FolderMember, rowFolder: Folder | null): MenuEntry
         action: () => folderStore.setCanonicalHome(id, rowFolder.id),
       })
       items.push({
-        label: `Remove from "${rowFolder.name}" (stays in "${member.canonicalFolderName ?? 'Unfiled'}")`,
+        label: `Remove from "${rowFolder.name}" (stays in "${member.canonicalFolderName ?? 'Uncategorized'}")`,
         action: () => folderStore.removeBorrow(rowFolder.id, id),
       })
     } else {
-      items.push({ label: `Move out of "${rowFolder.name}"…`, action: () => void unfilePlaylist(playlist, rowFolder) })
+      items.push({ label: `Move out of "${rowFolder.name}"…`, action: () => void uncategorizePlaylist(playlist, rowFolder) })
     }
   }
   return items
@@ -397,36 +476,60 @@ const totals = computed(() => `${plural(playlistsById.value.size, 'playlist')} �
   <div class="library">
     <AppTopBar />
 
-    <div class="library__body">
-      <!-- Page heading: breadcrumb as title, then this page's own actions. -->
-      <div class="library__heading">
-        <h1 class="library__title">
-          <template v-if="openFolder">
-            <button class="library__crumb" @click="navigate(null)">Library</button>
-            <template v-for="(crumb, i) in breadcrumb" :key="crumb.id">
-              <span class="library__crumb-sep">/</span>
-              <button v-if="i < breadcrumb.length - 1" class="library__crumb" @click="navigate(crumb.id)">
-                {{ crumb.name }}
-              </button>
-              <span v-else>{{ crumb.name }}</span>
-            </template>
+    <!-- Page heading: breadcrumb as title, then this page's own actions. -->
+    <div class="library__heading">
+      <h1 class="library__title">
+        <template v-if="openFolder">
+          <button class="library__crumb" @click="navigate(null)">Library</button>
+          <template v-for="(crumb, i) in breadcrumb" :key="crumb.id">
+            <span class="library__crumb-sep">/</span>
+            <button v-if="i < breadcrumb.length - 1" class="library__crumb" @click="navigate(crumb.id)">
+              {{ crumb.name }}
+            </button>
+            <span v-else>{{ crumb.name }}</span>
           </template>
-          <span v-else>Library</span>
-        </h1>
-        <span class="library__meta text-muted text-sm">{{ totals }}</span>
-        <span class="library__spacer" />
-        <button
-          v-if="openFolder"
-          class="btn btn--ghost"
-          @click="showFolderMenu(openFolder, $event)"
-        >
-          Folder actions ⋯
-        </button>
-        <button v-if="hasPlaylists" class="btn btn--secondary" @click="createFolder()">
-          + {{ openFolder ? 'New Subfolder' : 'New Folder' }}
-        </button>
-      </div>
+        </template>
+        <span v-else>Library</span>
+      </h1>
+      <span class="library__meta text-muted text-sm">{{ totals }}</span>
+      <span class="library__spacer" />
+      <button
+        v-if="openFolder"
+        class="btn btn--ghost"
+        @click="showFolderMenu(openFolder, $event)"
+      >
+        Folder actions ⋯
+      </button>
+      <button v-if="hasPlaylists" class="btn btn--secondary" @click="createFolder()">
+        + {{ openFolder ? 'New Subfolder' : 'New Folder' }}
+      </button>
+    </div>
 
+    <!-- Search and sort, the same controls the workspace uses. -->
+    <ControlBar v-if="hasPlaylists" class="library__controls">
+      <SearchBar v-model="query" placeholder="Search playlists…" />
+      <SelectDropdown v-model="currentSort" :options="sortOptions" title="Order within each row" />
+      <span class="text-muted text-sm">
+        {{ filtered.length }}{{ isFiltering ? ` of ${allPlaylists.length}` : '' }} playlists
+      </span>
+
+      <template #actions>
+        <div class="library__layout" role="group" aria-label="Row layout">
+          <button
+            v-for="option in layoutOptions"
+            :key="option.key"
+            class="library__layout-btn"
+            :class="{ 'library__layout-btn--active': layout === option.key }"
+            :aria-pressed="layout === option.key"
+            @click="layout = option.key"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+      </template>
+    </ControlBar>
+
+    <div class="library__body">
       <!-- No playlists at all: nothing to group yet. -->
       <div v-if="!hasPlaylists" class="library__empty">
         <p>Your library is empty.</p>
@@ -436,7 +539,7 @@ const totals = computed(() => `${plural(playlistsById.value.size, 'playlist')} �
       </div>
 
       <template v-else>
-        <!-- Playlists but no folders: the normal first run. Unfiled still shows below. -->
+        <!-- Playlists but no folders: the normal first run. Uncategorized still shows below. -->
         <div v-if="!openFolder && !hasFolders" class="library__hint">
           <p class="text-muted">
             Folders group playlists into rows. A playlist lives in one folder and can be borrowed
@@ -445,27 +548,26 @@ const totals = computed(() => `${plural(playlistsById.value.size, 'playlist')} �
         </div>
 
         <FolderRow
-          v-for="row in rows"
+          v-for="row in shownRows"
           :key="row.key"
           :title="row.openable || !row.folder ? row.title : 'In this folder'"
-          :canonical-count="row.members.length - (row.overlap?.borrowedCount ?? 0)"
-          :borrowed-count="row.overlap?.borrowedCount ?? 0"
-          :folder-count="row.subfolders.length"
+          :canonical-count="searchedMembers(row).filter((m) => !m.borrowed).length"
+          :borrowed-count="searchedMembers(row).filter((m) => m.borrowed).length"
+          :folder-count="visibleSubfolders(row).length"
           :collapsed="collapsed.has(row.key)"
-          :expanded="expanded.has(row.key)"
+          :layout="layout"
           :borrowed-only="borrowedOnly.has(row.key)"
           :openable="row.openable"
           :has-menu="row.openable && !!row.folder"
           :overlap-message="row.overlap?.message ?? ''"
           :empty="isRowEmpty(row)"
           @toggle="toggleCollapsed(row.key)"
-          @expand="toggleExpanded(row.key)"
           @drill="row.folder && navigate(row.folder.id)"
           @filter-borrowed="toggleBorrowedOnly(row.key)"
           @menu="row.folder && showFolderMenu(row.folder, $event)"
         >
           <LibraryTile
-            v-for="sub in borrowedOnly.has(row.key) ? [] : row.subfolders"
+            v-for="sub in visibleSubfolders(row)"
             :key="`f-${sub.id}`"
             kind="folder"
             :title="sub.name"
@@ -480,7 +582,7 @@ const totals = computed(() => `${plural(playlistsById.value.size, 'playlist')} �
             :title="playlistsById.get(member.playlistId)!.name"
             :subtitle="playlistSubtitle(playlistsById.get(member.playlistId)!)"
             :image-url="playlistsById.get(member.playlistId)!.imageUrl"
-            :borrowed-from="member.borrowed ? (member.canonicalFolderName ?? 'Unfiled') : null"
+            :borrowed-from="member.borrowed ? (member.canonicalFolderName ?? 'Uncategorized') : null"
             :selected="selected.has(member.playlistId)"
             @open="onPlaylistClick(member.playlistId)"
             @menu="showPlaylistMenu(member, row.folder, $event)"
@@ -493,6 +595,10 @@ const totals = computed(() => `${plural(playlistsById.value.size, 'playlist')} �
             </button>
           </template>
         </FolderRow>
+
+        <p v-if="shownRows.length === 0 && query" class="library__no-match text-muted">
+          No playlists or folders match "{{ query }}".
+        </p>
       </template>
     </div>
 
@@ -527,7 +633,23 @@ const totals = computed(() => `${plural(playlistsById.value.size, 'playlist')} �
   display: flex;
   align-items: baseline;
   gap: var(--space-3);
-  padding: var(--space-5) 0 var(--space-4);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+/* Matches the workspace control bar: full width, ruled below, fixed above the scroll area. */
+.library__controls {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+/* The control bar already rules off the top of the list. */
+.library__body > :first-child {
+  border-top: none;
+}
+
+.library__no-match {
+  padding: var(--space-6) 0;
 }
 
 .library__title {
@@ -555,6 +677,31 @@ const totals = computed(() => `${plural(playlistsById.value.size, 'playlist')} �
 
 .library__spacer {
   flex: 1;
+}
+
+.library__layout {
+  display: flex;
+  align-self: center;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* Same segmented toggle as the dashboard library card's Playlists / Tracks switch. */
+.library__layout-btn {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  transition: background var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default);
+}
+
+.library__layout-btn + .library__layout-btn {
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.library__layout-btn--active {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
 }
 
 .library__hint,

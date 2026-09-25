@@ -12,11 +12,11 @@ const props = withDefaults(defineProps<{
   folderCount?: number
   /** Hidden to its header. The chevron's state. */
   collapsed?: boolean
-  /** Strip swapped for a wrapping grid, in place. */
-  expanded?: boolean
+  /** Sideways strip, one card tall, or a wrapping grid. Chosen once for the whole page. */
+  layout?: 'strip' | 'grid'
   /** Only the borrowed cards are showing. */
   borrowedOnly?: boolean
-  /** Header links into a full-page view of this folder. False for derived rows like Unfiled. */
+  /** Header links into a full-page view of this folder. False for derived rows like Uncategorized. */
   openable?: boolean
   /** Shows the header menu button. */
   hasMenu?: boolean
@@ -28,7 +28,7 @@ const props = withDefaults(defineProps<{
   borrowedCount: 0,
   folderCount: 0,
   collapsed: false,
-  expanded: false,
+  layout: 'strip',
   borrowedOnly: false,
   openable: false,
   hasMenu: false,
@@ -38,7 +38,6 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   toggle: []
-  expand: []
   drill: []
   filterBorrowed: []
   menu: [event: MouseEvent]
@@ -92,13 +91,6 @@ function pluralize(n: number, word: string): string {
 
       <span class="folder-row__spacer" />
 
-      <button
-        v-if="!props.collapsed && !props.empty"
-        class="btn btn--ghost btn--sm"
-        @click="emit('expand')"
-      >
-        {{ props.expanded ? 'Show less' : 'Show all' }}
-      </button>
       <button v-if="props.openable" class="btn btn--ghost btn--sm" @click="emit('drill')">Open →</button>
       <button
         v-if="props.hasMenu"
@@ -117,7 +109,7 @@ function pluralize(n: number, word: string): string {
       <div
         v-else
         class="folder-row__cards no-text-select"
-        :class="props.expanded ? 'folder-row__cards--grid' : 'folder-row__cards--strip'"
+        :class="`folder-row__cards--${props.layout}`"
       >
         <slot />
       </div>
@@ -129,6 +121,7 @@ function pluralize(n: number, word: string): string {
 /* Rows are divided by a rule, not only by whitespace, so it stays clear which cards belong
    to which header. */
 .folder-row {
+  --library-card-width: 148px;
   padding: var(--space-4) 0;
   border-top: 1px solid var(--color-border);
 }
@@ -218,25 +211,21 @@ function pluralize(n: number, word: string): string {
   color: var(--color-text);
 }
 
-/* One card tall, overflow scrolls sideways. Fixed basis, not 1fr: a row of two cards must not
-   stretch them across the page. */
+/* Both layouts are CSS grid with one fixed card width, so a card's size never depends on its
+   title. The strip lays cards out in columns and scrolls sideways; the grid wraps them. */
 .folder-row__cards--strip {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--library-card-width);
   gap: var(--space-3);
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding-bottom: var(--space-2);
 }
 
-.folder-row__cards--strip > :slotted(*) {
-  flex: 0 0 140px;
-  scroll-snap-align: start;
-}
-
-/* The expanded peek is a one-class change, not a second component. */
 .folder-row__cards--grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--library-card-width), 1fr));
   gap: var(--space-3);
 }
 
