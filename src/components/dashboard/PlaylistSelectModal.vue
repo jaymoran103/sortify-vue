@@ -13,8 +13,17 @@ import type { SortOption } from '@/types/ui'
 
 const props = withDefaults(defineProps<{
   mode?: 'workspace' | 'export' | 'delete'
+  /** Overrides the heading when the caller's flow is not "pick playlists to open". */
+  title?: string
+  /** Overrides the confirm label. `mode` still decides the button's danger styling. */
+  confirmLabel?: string
+  /** Ids checked when the modal opens — for edit flows that show current membership. */
+  preselectedIds?: number[]
 }>(), {
   mode: 'workspace',
+  title: 'Select Playlists',
+  confirmLabel: '',
+  preselectedIds: () => [],
 })
 
 const emit = defineEmits<{
@@ -52,6 +61,17 @@ const {
   sortOptions,
 })
 
+// Seed the checked set from the caller. Assigned rather than toggled one id at a time:
+// useListSelection prunes ids absent from `items`, so a stale id drops itself on the next read.
+if (props.preselectedIds.length > 0) {
+  selectedIds.value = new Set(props.preselectedIds.map(String))
+}
+
+// Falls back to the mode's own verb when the caller does not name one.
+const resolvedConfirmLabel = computed(
+  () => props.confirmLabel || (props.mode === 'delete' ? 'Delete' : 'Open'),
+)
+
 // Emit confirm with selected playlist IDs when user confirms selection.
 function confirmSelection(): void {
   const ids = [...selectedIds.value].map(Number)
@@ -61,7 +81,7 @@ function confirmSelection(): void {
 
 <template>
   <div class="selection-modal">
-    <h2 class="selection-modal__title">Select Playlists</h2>
+    <h2 class="selection-modal__title">{{ props.title }}</h2>
 
     <!-- Control bar with search and sort options -->
     <div class="selection-modal__body">
@@ -98,10 +118,10 @@ function confirmSelection(): void {
         <button
           class="btn"
           :class="props.mode === 'delete' ? 'btn--danger' : 'btn--primary'"
-          :disabled="selectedCount === 0"
+          :disabled="selectedCount === 0 && props.preselectedIds.length === 0"
           @click="confirmSelection"
         >
-          {{ props.mode === 'delete' ? 'Delete' : 'Open' }} ({{ selectedCount }})
+          {{ resolvedConfirmLabel }} ({{ selectedCount }})
         </button>
       </div>
     </div>
