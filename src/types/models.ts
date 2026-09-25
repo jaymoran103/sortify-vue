@@ -24,8 +24,23 @@ export interface Playlist {
   name: string
   trackIDs: string[]
   playlistURI?: string
+  imageUrl?: string         // cover art from the source, when it had one. Unindexed, so no version bump
   timeAdded?: number        // Date.now() when track was added to playlist
   lastModified?: number     // Date.now() when playlist was last modified (tracks added/removed)
+}
+
+/**
+ * A library grouping. PROTOTYPE: lives in the folder store (localStorage), never in Dexie.
+ * Membership is two-tier: each playlist has at most one canonical home, held by the store,
+ * and a folder may additionally show playlists whose home is elsewhere. See stores/folders.ts.
+ */
+export interface Folder {
+  id: string
+  name: string
+  /** null = top level. Top-level folders are the library root's rows. */
+  parentId: string | null
+  /** Playlists shown here whose canonical home is a different folder, or none. */
+  borrowedPlaylistIds: number[]
 }
 
 export type PlaylistId = number | string

@@ -160,6 +160,7 @@ export const spotifyImportAdapter: ImportAdapter<SpotifyImportOptions> = {
           name: playlist.name,
           trackIDs: playlistTrackIds,
           playlistURI: `spotify:playlist:${playlist.id}`,
+          imageUrl: playlist.images?.[0]?.url,
           timeAdded: Date.now(),
           lastModified: Date.now(),
         })

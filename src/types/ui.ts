@@ -1,5 +1,5 @@
 import type { Component } from 'vue'
-import type { PlaylistId, Track, WorkspacePlaylist } from '@/types/models'
+import type { Folder, PlaylistId, Track, WorkspacePlaylist } from '@/types/models'
 
 /** Generic filter function — consumers define domain-specific matching logic */
 export type FilterFn<T> = (item: T, query: string) => boolean
@@ -59,6 +59,35 @@ export interface WorkspaceSnapshot {
   modifiedIds: Set<PlaylistId>
   stableOrder: string[]
   tracks: Map<string, Track>
+}
+
+/** Plain state the folder rules read — no store, same contract as WorkspaceSnapshot */
+export interface FolderSnapshot {
+  folders: Folder[]
+  /** playlistId → its canonical home folder id */
+  canonicalFolderIds: Map<number, string>
+  /** Live library playlists, id → name. An id absent here is a deleted playlist. */
+  playlistNames: Map<number, string>
+}
+
+/** One playlist as shown inside one folder */
+export interface FolderMember {
+  playlistId: number
+  /** true when this folder is not the playlist's home */
+  borrowed: boolean
+  canonicalFolderId: string | null
+  canonicalFolderName: string | null
+}
+
+/** A folder displaying at least one borrowed member. See utils/folderOverlap.ts */
+export interface FolderOverlap {
+  code: 'borrowed-members'
+  folderId: string
+  canonicalCount: number
+  borrowedCount: number
+  message: string
+  /** Borrowed playlist ids as strings, matching WorkspaceIssue */
+  ids: string[]
 }
 
 /** Notification/toast for non-blocking feedback */
