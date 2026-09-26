@@ -19,6 +19,7 @@ import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import TrackRow from './TrackRow.vue'
+import WorkspaceMinimap from './WorkspaceMinimap.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
 import AddContentModal from './AddContentModal.vue'
 import LeaveWorkspaceModal from './LeaveWorkspaceModal.vue'
@@ -184,12 +185,13 @@ const columnTemplate = computed(() => {
 
 // Configure virtualizer: use displayTracks count, scroll container, and estimated row height.
 // Set overscan to 10 rows for now to balance performance and smoothness during scrolling.
+const ROW_HEIGHT = 48
 const scrollContainer = ref<HTMLElement | null>(null)
 const virtualizer = useVirtualizer(
   computed(() => ({
     count: displayTracks.value.length,
     getScrollElement: () => scrollContainer.value,
-    estimateSize: () => 48,
+    estimateSize: () => ROW_HEIGHT,
     overscan: 10,
   })),
 )
@@ -723,51 +725,60 @@ useKeyboardShortcuts({
         </template>
       </ControlBar>
 
-      <!-- Scroll container for the virtualized table -->
-      <div ref="scrollContainer" class="workspace__body">
+      <!-- Scroll container beside the minimap, which stays put while the table scrolls -->
+      <div class="workspace__body-wrap">
+        <div ref="scrollContainer" class="workspace__body">
 
-        <!-- Table with CSS-variable-driven column template shared by header and rows -->
-        <div class="workspace__table" :style="{ '--ws-col-template': columnTemplate }">
+          <!-- Table with CSS-variable-driven column template shared by header and rows -->
+          <div class="workspace__table" :style="{ '--ws-col-template': columnTemplate }">
 
-          <!-- Workspace Table Header: Titles for info columns and playlist titles  -->
-          <div class="workspace__table-header">
-            <div class="workspace__th workspace__th--index">#</div>
-            <div class="workspace__th workspace__th--track">Track</div>
+            <!-- Workspace Table Header: Titles for info columns and playlist titles  -->
+            <div class="workspace__table-header">
+              <div class="workspace__th workspace__th--index">#</div>
+              <div class="workspace__th workspace__th--track">Track</div>
 
-            <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
-            <PlaylistColumnHeader
-              v-for="pl in workspaceStore.playlists"
-              :key="pl.id"
-              :playlist="pl"
-              @request-menu="buildColumnMenu"
-            />
+              <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
+              <PlaylistColumnHeader
+                v-for="pl in workspaceStore.playlists"
+                :key="pl.id"
+                :playlist="pl"
+                @request-menu="buildColumnMenu"
+              />
+            </div>
+
+            <!-- Workspace Table Body: virtualized list of TrackRow components, one per track in displayTracks -->
+            <!-- FUTURE: Key field can facilitate column specific styling/actions like row coloring and locking-->
+            <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
+              <TrackRow
+                v-for="row in virtualizer.getVirtualItems()"
+                :key="trackAt(row.index).trackID"
+                :track="trackAt(row.index)"
+                :index="row.index"
+                :playlists="workspaceStore.playlists"
+                :selected="rowSelection.isSelected(trackAt(row.index).trackID)"
+                :style="{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${row.size}px`,
+                  transform: `translateY(${row.start}px)`,
+                }"
+                @toggle-track="workspaceStore.toggleTrack"
+                @select="handleRowSelect"
+                @context-menu="handleTrackContextMenu"
+              />
+            </div>
+
           </div>
-
-          <!-- Workspace Table Body: virtualized list of TrackRow components, one per track in displayTracks -->
-          <!-- FUTURE: Key field can facilitate column specific styling/actions like row coloring and locking-->
-          <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-            <TrackRow
-              v-for="row in virtualizer.getVirtualItems()"
-              :key="trackAt(row.index).trackID"
-              :track="trackAt(row.index)"
-              :index="row.index"
-              :playlists="workspaceStore.playlists"
-              :selected="rowSelection.isSelected(trackAt(row.index).trackID)"
-              :style="{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: `${row.size}px`,
-                transform: `translateY(${row.start}px)`,
-              }"
-              @toggle-track="workspaceStore.toggleTrack"
-              @select="handleRowSelect"
-              @context-menu="handleTrackContextMenu"
-            />
-          </div>
-
         </div>
+
+        <WorkspaceMinimap
+          :tracks="displayTracks"
+          :playlists="workspaceStore.playlists"
+          :scroll-el="scrollContainer"
+          :row-height="ROW_HEIGHT"
+        />
       </div>
     </div>
   </div>
@@ -824,8 +835,15 @@ useKeyboardShortcuts({
   border-bottom: 1px solid var(--color-border-subtle);
 }
 
+.workspace__body-wrap {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
 .workspace__body {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   position: relative;
 }
