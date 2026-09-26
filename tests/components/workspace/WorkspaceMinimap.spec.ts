@@ -30,18 +30,19 @@ function makeScrollEl(scrollHeight: number, clientHeight: number): HTMLElement {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('WorkspaceMinimap', () => {
-  it('gives each playlist a stripe and caps the width', () => {
+  // jsdom measures no height, so tiles sit at their 2px minimum side.
+  it('gives each playlist one square tile of width', () => {
     const tracks = makeTracks(3)
-    const narrow = mount(WorkspaceMinimap, {
+    const two = mount(WorkspaceMinimap, {
       props: { tracks, playlists: [makePlaylist(1, []), makePlaylist(2, [])], scrollEl: null, rowHeight: 48 },
     })
-    expect(narrow.attributes('style')).toContain('width: 22px')
+    expect(two.attributes('style')).toContain('width: 4px')
 
     const many = Array.from({ length: 30 }, (_, i) => makePlaylist(i, []))
-    const wide = mount(WorkspaceMinimap, {
+    const thirty = mount(WorkspaceMinimap, {
       props: { tracks, playlists: many, scrollEl: null, rowHeight: 48 },
     })
-    expect(wide.attributes('style')).toContain('width: 120px')
+    expect(thirty.attributes('style')).toContain('width: 60px')
   })
 
   it('hides the viewport box when every track fits on screen', () => {

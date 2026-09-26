@@ -2,9 +2,10 @@
 import { ref, computed, watch, watchEffect, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { Track, WorkspacePlaylist } from '@/types/models'
 
-// Experiment: a VS Code style overview of the whole workspace. One stripe per playlist,
-// one line per track, accent where the track is in the playlist. The full track list is
-// squeezed into the minimap's height, so it always shows the entire shape at once.
+// Experiment: a VS Code style overview of the whole workspace. One square tile per track
+// per playlist, accent where the track is in the playlist. Tiles shrink until the whole
+// list fits the minimap's height. Past MIN_SIDE they stop shrinking, and the map scrolls
+// in step with the table instead, as VS Code's does.
 
 const props = defineProps<{
   tracks: Track[]
@@ -13,9 +14,11 @@ const props = defineProps<{
   rowHeight: number
 }>()
 
-const COLUMN_WIDTH = 10
-const COLUMN_GAP = 2
+const MIN_SIDE = 2
+const MAX_SIDE = 16
 const MAX_WIDTH = 120
+// Tiles at least this big get a 1px gap, so each reads as its own square.
+const GAP_FROM = 5
 // How long the minimap stays bright after the last scroll event.
 const ACTIVE_MS = 1200
 
@@ -23,10 +26,15 @@ const root = ref<HTMLElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 const height = ref(0)
 
-const width = computed(() => {
-  const n = props.playlists.length
-  return Math.min(MAX_WIDTH, Math.max(COLUMN_WIDTH, n * (COLUMN_WIDTH + COLUMN_GAP) - COLUMN_GAP))
+// Side of one tile. Fit the full height if possible, never wider than MAX_WIDTH overall.
+const side = computed(() => {
+  const n = Math.max(1, props.playlists.length)
+  const fit = props.tracks.length ? height.value / props.tracks.length : MAX_SIDE
+  return Math.max(MIN_SIDE, Math.min(fit, MAX_WIDTH / n, MAX_SIDE))
 })
+const width = computed(() => Math.max(1, props.playlists.length) * side.value)
+const contentHeight = computed(() => props.tracks.length * side.value)
+const mapHeight = computed(() => Math.min(contentHeight.value, height.value))
 
 // Track scroll position as plain refs so the viewport box reacts to it.
 const scrollTop = ref(0)
@@ -72,14 +80,21 @@ watch(
 const headerHeight = computed(() =>
   Math.max(0, scrollHeight.value - props.tracks.length * props.rowHeight),
 )
-const lineHeight = computed(() => (props.tracks.length ? height.value / props.tracks.length : 0))
+
+// When the map is taller than its box, slide it by the table's scroll fraction so the
+// top and bottom of both line up.
+const offset = computed(() => {
+  const overflow = contentHeight.value - mapHeight.value
+  const range = scrollHeight.value - clientHeight.value
+  return overflow > 0 && range > 0 ? (scrollTop.value / range) * overflow : 0
+})
 
 const viewport = computed(() => {
   const firstRow = scrollTop.value / props.rowHeight
   const visibleRows = Math.max(0, clientHeight.value - headerHeight.value) / props.rowHeight
-  const top = firstRow * lineHeight.value
-  const h = Math.min(height.value - top, visibleRows * lineHeight.value)
-  return { top, height: Math.max(h, 4) }
+  const h = Math.max(4, Math.min(mapHeight.value, visibleRows * side.value))
+  const top = Math.min(Math.max(0, firstRow * side.value - offset.value), mapHeight.value - h)
+  return { top, height: h }
 })
 
 const showsAll = computed(() => scrollHeight.value <= clientHeight.value)
@@ -100,11 +115,11 @@ onBeforeUnmount(() => {
   clearTimeout(idleTimer)
 })
 
-// Redraw whenever size, tracks or membership change. Reading trackIdSet.has inside the
-// effect is what subscribes it to toggles.
+// Redraw whenever size, scroll, tracks or membership change. Reading trackIdSet.has inside
+// the effect is what subscribes it to toggles.
 watchEffect(() => {
   const w = width.value
-  const h = height.value
+  const h = mapHeight.value
   const el = canvas.value
   // Nothing to draw before the first measure, which also keeps jsdom off getContext.
   if (!el || !h) return
@@ -117,35 +132,29 @@ watchEffect(() => {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
 
-  const n = props.playlists.length
-  if (!n || !props.tracks.length) return
-
-  const colW = (w - COLUMN_GAP * (n - 1)) / n
-  const line = lineHeight.value
+  const s = side.value
+  const tile = s >= GAP_FROM ? s - 1 : s
+  const top = offset.value
+  // Only rows inside the box get drawn.
+  const first = Math.floor(top / s)
+  const last = Math.min(props.tracks.length, Math.ceil((top + h) / s))
   ctx.fillStyle = getComputedStyle(el).getPropertyValue('--color-accent').trim() || 'green'
 
-  props.playlists.forEach((pl, col) => {
-    const x = col * (colW + COLUMN_GAP)
-    // Merge consecutive members into one rect: fewer draws and no seams between lines.
-    let runStart = -1
-    props.tracks.forEach((t, i) => {
-      const member = pl.trackIdSet.has(t.trackID)
-      if (member && runStart < 0) runStart = i
-      if (!member && runStart >= 0) {
-        ctx.fillRect(x, runStart * line, colW, (i - runStart) * line)
-        runStart = -1
-      }
+  for (let i = first; i < last; i++) {
+    const id = props.tracks[i]!.trackID
+    const y = i * s - top
+    props.playlists.forEach((pl, col) => {
+      if (pl.trackIdSet.has(id)) ctx.fillRect(col * s, y, tile, tile)
     })
-    if (runStart >= 0) ctx.fillRect(x, runStart * line, colW, (props.tracks.length - runStart) * line)
-  })
+  }
 })
 
 // Click or drag centres the table on the track under the pointer.
 function scrollToPointer(e: PointerEvent) {
   const el = props.scrollEl
-  if (!el || !root.value || !lineHeight.value) return
+  if (!el || !root.value || !side.value) return
   const y = e.clientY - root.value.getBoundingClientRect().top
-  const row = y / lineHeight.value
+  const row = (y + offset.value) / side.value
   const visibleRows = Math.max(0, el.clientHeight - headerHeight.value) / props.rowHeight
   el.scrollTop = (row - visibleRows / 2) * props.rowHeight
 }
@@ -177,7 +186,7 @@ function onPointerUp() {
     @pointerup="onPointerUp"
     @pointercancel="onPointerUp"
   >
-    <canvas ref="canvas" class="minimap__canvas" :style="{ width: `${width}px`, height: `${height}px` }" />
+    <canvas ref="canvas" class="minimap__canvas" :style="{ width: `${width}px`, height: `${mapHeight}px` }" />
     <div
       v-if="!showsAll && tracks.length"
       class="minimap__viewport"
