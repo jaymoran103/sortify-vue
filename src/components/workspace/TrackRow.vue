@@ -14,6 +14,10 @@ defineEmits<{
   select: [trackId: string, event: MouseEvent]
   contextMenu: [trackId: string, event: MouseEvent]
 }>()
+
+// Experiment: a checked cell fills with the accent colour in place of a native checkbox.
+// Set to false to restore the native input for comparison.
+const FILL_CELLS = true
 </script>
 
 <template>
@@ -57,10 +61,15 @@ defineEmits<{
       v-for="pl in playlists"
       :key="pl.id"
       class="track-row__checkbox"
+      :class="{
+        'track-row__checkbox--fill': FILL_CELLS,
+        'track-row__checkbox--checked': pl.trackIdSet.has(track.trackID),
+      }"
       @click.stop="$emit('toggleTrack', pl.id!, track.trackID)"
     >
       <input
         type="checkbox"
+        :class="{ 'sr-only': FILL_CELLS }"
         :checked="pl.trackIdSet.has(track.trackID)"
         @change="$emit('toggleTrack', pl.id!, track.trackID)"
         @click.stop
@@ -189,5 +198,69 @@ defineEmits<{
 
 .track-row__checkbox:hover {
   background: var(--color-cell-checkbox-hover);
+}
+
+/* Fill variant: the whole cell is the checkbox. The native input stays for keyboard and
+   screen readers, visually hidden. The fill sits on ::before, inset so adjacent checked
+   cells read as separate tiles rather than one bar. */
+.track-row__checkbox--fill {
+  position: relative;
+}
+
+.track-row__checkbox--fill:hover {
+  background: none;
+}
+
+.track-row__checkbox--fill::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s, box-shadow 0.1s, transform 0.1s;
+}
+
+.track-row__checkbox--fill::after {
+  content: '✓';
+  position: relative;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-accent);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+/* Unchecked hover: preview the fill as an outlined tint and a ghost tick. */
+.track-row__checkbox--fill:hover::before {
+  background: var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.track-row__checkbox--fill:hover::after {
+  color: var(--color-accent);
+  opacity: 0.6;
+}
+
+.track-row__checkbox--checked::before {
+  background: var(--color-accent);
+}
+
+.track-row__checkbox--checked::after {
+  opacity: 1;
+}
+
+/* Checked hover: lighten and shrink the fill, and fade the tick to hint the click clears it. */
+.track-row__checkbox--checked:hover::before {
+  background: var(--color-accent-hover);
+  box-shadow: none;
+  transform: scale(0.9);
+}
+
+.track-row__checkbox--checked:hover::after {
+  color: var(--color-text-on-accent);
+  opacity: 0.4;
+}
+
+.track-row__checkbox--fill:has(input:focus-visible)::before {
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 </style>
