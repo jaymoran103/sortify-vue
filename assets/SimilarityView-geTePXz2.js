@@ -1,0 +1,1 @@
+import{A as r}from"./AppTopBar-BbQwpncW.js";import{Y as t,a2 as i,e as o,a3 as a,F as s,$ as m}from"./pendingIntent-C07aHAgL.js";import"./index-B39XwwqF.js";const _=t({__name:"SimilarityView",setup(n){return(l,e)=>(m(),i(s,null,[o(r),e[0]||(e[0]=a("div",{class:"similarity-view"},[a("h1",null,"Similarity")],-1))],64))}});export{_ as default};
