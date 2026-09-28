@@ -20,6 +20,8 @@ import SelectDropdown from '@/components/common/SelectDropdown.vue'
 import TrackRow from './TrackRow.vue'
 import WorkspaceMinimap from './WorkspaceMinimap.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
+import TrackColumnPicker from './TrackColumnPicker.vue'
+import { TRACK_COLUMNS, type TrackColumnKey } from './trackColumns'
 import AddContentModal from './AddContentModal.vue'
 import LeaveWorkspaceModal from './LeaveWorkspaceModal.vue'
 import type { Track, PlaylistId, WorkspacePlaylist } from '@/types/models'
@@ -178,6 +180,14 @@ const EXPANDED_COLUMN_PX = 140
 const EXPANDED_COLUMN_WIDTH = `${EXPANDED_COLUMN_PX}px`
 const INDEX_COLUMN_PX = 60
 const TRACK_COLUMN_MIN_PX = 200
+// Optional track columns picked from the control bar. Page state: none show after a reload.
+const shownTrackColumnKeys = ref(new Set<TrackColumnKey>())
+const shownTrackColumns = computed(() =>
+  TRACK_COLUMNS.filter((col) => shownTrackColumnKeys.value.has(col.key)),
+)
+function toggleTrackColumn(key: TrackColumnKey): void {
+  if (!shownTrackColumnKeys.value.delete(key)) shownTrackColumnKeys.value.add(key)
+}
 const expandedIds = ref(new Set<PlaylistId>())
 function toggleColumn(playlistId: PlaylistId): void {
   if (!expandedIds.value.delete(playlistId)) expandedIds.value.add(playlistId)
@@ -195,7 +205,8 @@ function fitColumnsToScreen(): void {
   const playlists = workspaceStore.playlists
   // The line closing the last column takes the trailing track's last 2px.
   const available =
-    (scrollContainer.value?.clientWidth ?? 0) - INDEX_COLUMN_PX - TRACK_COLUMN_MIN_PX - 2
+    (scrollContainer.value?.clientWidth ?? 0) - INDEX_COLUMN_PX - TRACK_COLUMN_MIN_PX - 2 -
+    shownTrackColumns.value.reduce((sum, col) => sum + col.widthPx, 0)
   const spare = available - playlists.length * ROW_HEIGHT
   const count = Math.max(0, Math.min(playlists.length, Math.floor(spare / (EXPANDED_COLUMN_PX - ROW_HEIGHT))))
   expandedIds.value = new Set(playlists.slice(0, count).map((pl) => pl.id))
@@ -213,6 +224,7 @@ const columnTemplate = computed(() => {
   return [
     `${INDEX_COLUMN_PX}px`,
     `minmax(${TRACK_COLUMN_MIN_PX}px, ${TRACK_COLUMN_MAX_PX}px)`,
+    ...shownTrackColumns.value.map((col) => `${col.widthPx}px`),
     ...playlistCols,
     '1fr',
   ].join(' ')
@@ -747,6 +759,11 @@ useKeyboardShortcuts({
       <ControlBar class="workspace__control-bar">
         <SearchBar v-model="query" placeholder="Search tracks…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
+        <TrackColumnPicker
+          :columns="TRACK_COLUMNS"
+          :shown="shownTrackColumnKeys"
+          @toggle="toggleTrackColumn"
+        />
 
         <!-- Track Count: shown tracks, qualified by the unfiltered total while searching -->
         <span class="text-muted text-sm">
@@ -781,6 +798,14 @@ useKeyboardShortcuts({
             <div class="workspace__table-header">
               <div class="workspace__th workspace__th--index">#</div>
               <div class="workspace__th workspace__th--track">Track</div>
+              <div
+                v-for="col in shownTrackColumns"
+                :key="col.key"
+                class="workspace__th workspace__th--field"
+                :class="`workspace__th--${col.key}`"
+              >
+                {{ col.label }}
+              </div>
 
               <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
               <PlaylistColumnHeader
@@ -812,6 +837,7 @@ useKeyboardShortcuts({
                 :playlists="workspaceStore.playlists"
                 :selected="rowSelection.isSelected(trackAt(row.index).trackID)"
                 :hovered-playlist-id="hoveredPlaylistId"
+                :track-columns="shownTrackColumns"
                 :style="{
                   position: 'absolute',
                   top: 0,
@@ -956,6 +982,16 @@ useKeyboardShortcuts({
 
 .workspace__th--track {
   min-width: 0;
+}
+
+.workspace__th--field {
+  min-width: 0;
+  padding: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.workspace__th--duration {
+  text-align: right;
 }
 
 .workspace__column-controls {

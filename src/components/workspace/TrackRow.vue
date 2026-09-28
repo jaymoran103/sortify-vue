@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import type { Track } from '@/types/models'
 import type { WorkspacePlaylist } from '@/types/models'
+import type { TrackColumn } from './trackColumns'
 
-const props = defineProps<{
-  track: Track
-  index: number
-  playlists: WorkspacePlaylist[]
-  selected: boolean
-  // The playlist column under the pointer, from any row. Its cells take the row hover colour.
-  hoveredPlaylistId?: number | string | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    track: Track
+    index: number
+    playlists: WorkspacePlaylist[]
+    selected: boolean
+    // The playlist column under the pointer, from any row. Its cells take the row hover colour.
+    hoveredPlaylistId?: number | string | null
+    // Optional track columns shown after the Track column. Artist or album shown here
+    // drops out of the line under the title.
+    trackColumns?: readonly TrackColumn[]
+  }>(),
+  { hoveredPlaylistId: null, trackColumns: () => [] },
+)
 
 const emit = defineEmits<{
   toggleTrack: [playlistId: number | string, trackId: string]
@@ -17,6 +24,9 @@ const emit = defineEmits<{
   contextMenu: [trackId: string, event: MouseEvent]
   hoverColumn: [playlistId: number | string | null]
 }>()
+
+const hasColumn = (key: TrackColumn['key']): boolean =>
+  props.trackColumns.some((col) => col.key === key)
 
 function toggle(playlistId: number | string): void {
   emit('toggleTrack', playlistId, props.track.trackID)
@@ -40,9 +50,9 @@ function toggle(playlistId: number | string): void {
     <div class="track-row__info">
       <div class="track-row__info-content">
         <span class="track-row__title">{{ track.title }}</span>
-        <div class="track-row__meta">
-          <span class="track-row__artist text-muted">{{ track.artist }}</span>
-          <span class="track-row__album text-muted">{{ track.album }}</span>
+        <div v-if="!hasColumn('artist') || !hasColumn('album')" class="track-row__meta">
+          <span v-if="!hasColumn('artist')" class="track-row__artist text-muted">{{ track.artist }}</span>
+          <span v-if="!hasColumn('album')" class="track-row__album text-muted">{{ track.album }}</span>
         </div>
       </div>
       <button
@@ -53,6 +63,16 @@ function toggle(playlistId: number | string): void {
       >
         ⋮
       </button>
+    </div>
+
+    <!-- Optional track columns, picked from the control bar. -->
+    <div
+      v-for="col in trackColumns"
+      :key="col.key"
+      class="track-row__field text-muted"
+      :class="`track-row__field--${col.key}`"
+    >
+      {{ col.value(track) }}
     </div>
 
     <!-- Playlist Checkbox Cells: one rendered per playlist column, reflecting membership. -->
@@ -183,8 +203,23 @@ function toggle(playlistId: number | string): void {
   min-width: 0;
 }
 
-.track-row__album::before {
+/* The dot only separates. With artist in its own column, album leads without one. */
+.track-row__artist + .track-row__album::before {
   content: '\A0\B7\A0';
+}
+
+.track-row__field {
+  min-width: 0;
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-row__field--duration {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .track-row__meta {

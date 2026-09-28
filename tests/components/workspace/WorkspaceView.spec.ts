@@ -389,7 +389,7 @@ describe('WorkspaceView', () => {
     })
 
     const wrapper = mountWorkspace()
-    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    const checkboxes = wrapper.findAll('.track-row input[type="checkbox"]')
     await checkboxes[2]!.trigger('change')
     await nextTick()
 
@@ -409,7 +409,7 @@ describe('WorkspaceView', () => {
     ]
 
     const wrapper = mountWorkspace()
-    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    const checkboxes = wrapper.findAll('.track-row input[type="checkbox"]')
 
     const checkbox0 = checkboxes[0]
     const checkbox1 = checkboxes[1]
@@ -426,7 +426,7 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
     mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist 1')]
     const wrapper = mountWorkspace()
-    const checkbox = wrapper.find('input[type="checkbox"]')
+    const checkbox = wrapper.find('.track-row input[type="checkbox"]')
     expect((checkbox.element as HTMLInputElement).disabled).toBe(false)
   })
 
@@ -463,7 +463,7 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist 1')]
     const wrapper = mountWorkspace()
 
-    await wrapper.find('input[type="checkbox"]').trigger('change')
+    await wrapper.find('.track-row input[type="checkbox"]').trigger('change')
 
     expect(mockWorkspaceStore.toggleTrack).toHaveBeenCalledWith(1, 't1')
   })
@@ -582,6 +582,36 @@ describe('WorkspaceView', () => {
       const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
       await fit.trigger('click')
       expect(template(wrapper)).toContain('480px) 48px 48px 48px 48px')
+    })
+
+    it('adds a picked track column after Track, in its fixed order', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      const option = (label: string) =>
+        wrapper.findAll('.column-picker__option').find((o) => o.text() === label)!.find('input')
+      await option('Length').trigger('change')
+      await option('Artist').trigger('change')
+      expect(template(wrapper)).toContain('480px) 160px 64px 48px')
+      const heads = wrapper.findAll('.workspace__th--field').map((h) => h.text())
+      expect(heads).toEqual(['Artist', 'Length'])
+      await option('Artist').trigger('change')
+      expect(template(wrapper)).toContain('480px) 64px 48px')
+    })
+
+    // 60 index + 200 track + 160 artist + 2 closing line + 4 × 48 collapsed = 614. 750 leaves
+    // 136 spare: one column opens (+92), a second would need 184.
+    it('counts picked track columns when fitting to screen', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const wrapper = mountWorkspace()
+      await wrapper
+        .findAll('.column-picker__option')
+        .find((o) => o.text() === 'Artist')!
+        .find('input')
+        .trigger('change')
+      Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 750 })
+      const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
+      await fit.trigger('click')
+      expect(template(wrapper)).toContain('160px 140px 48px 48px 48px')
     })
 
     it('collapses an open column when its header is clicked again', async () => {
