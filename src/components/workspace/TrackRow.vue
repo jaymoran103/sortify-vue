@@ -83,6 +83,8 @@ function toggle(playlistId: number | string): void {
         :aria-label="`${track.title} in ${pl.name}`"
       />
     </div>
+    <!-- Sits in the trailing grid track, only to draw the line after the last tile. -->
+    <div v-if="playlists.length" class="track-row__edge" aria-hidden="true" />
   </div>
 </template>
 
@@ -202,10 +204,16 @@ function toggle(playlistId: number | string): void {
   cursor: pointer;
 }
 
-/* Neighbouring tiles are split by a line as thin as the row border. The line sits inside
-   the column width, so the grid does not shift. */
-.track-row__checkbox + .track-row__checkbox {
+/* Every tile has a line on its left, as thick as the row border, and the edge after the
+   last tile closes the block. The line sits inside the column width, so each tile is a
+   46px square and the grid does not shift. */
+.track-row__checkbox,
+.track-row__edge {
   border-left: 2px solid var(--color-border-subtle);
+}
+
+.track-row__edge {
+  align-self: stretch;
 }
 
 /* A hovered column lifts like a hovered row. A selected row keeps its own colour, and a

@@ -205,8 +205,9 @@ function onMenu(event: MouseEvent): void {
   background: var(--color-border-subtle);
 }
 
-/* Neighbouring headers are split like the cells below them. */
-.playlist-col-header + .playlist-col-header {
+/* Every header has a line on its left, like the cells below it. WorkspaceView draws the
+   line after the last one. */
+.playlist-col-header {
   border-left: 2px solid var(--color-border-subtle);
 }
 

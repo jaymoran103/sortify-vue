@@ -193,7 +193,9 @@ function collapseAllColumns(): void {
 // re-run when the window resizes.
 function fitColumnsToScreen(): void {
   const playlists = workspaceStore.playlists
-  const available = (scrollContainer.value?.clientWidth ?? 0) - INDEX_COLUMN_PX - TRACK_COLUMN_MIN_PX
+  // The line closing the last column takes the trailing track's last 2px.
+  const available =
+    (scrollContainer.value?.clientWidth ?? 0) - INDEX_COLUMN_PX - TRACK_COLUMN_MIN_PX - 2
   const spare = available - playlists.length * ROW_HEIGHT
   const count = Math.max(0, Math.min(playlists.length, Math.floor(spare / (EXPANDED_COLUMN_PX - ROW_HEIGHT))))
   expandedIds.value = new Set(playlists.slice(0, count).map((pl) => pl.id))
@@ -791,6 +793,12 @@ useKeyboardShortcuts({
                 @move="workspaceStore.movePlaylist"
                 @drag-end="workspaceStore.persistPlaylistOrder()"
               />
+              <!-- Sits in the trailing grid track, only to draw the line after the last header. -->
+              <div
+                v-if="workspaceStore.playlists.length"
+                class="workspace__th-edge"
+                aria-hidden="true"
+              />
             </div>
 
             <!-- Workspace Table Body: virtualized list of TrackRow components, one per track in displayTracks -->
@@ -848,7 +856,7 @@ useKeyboardShortcuts({
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 2px solid var(--color-border-subtle);
   z-index: 10;
 }
 
@@ -891,9 +899,10 @@ useKeyboardShortcuts({
   overflow: hidden;
 }
 
+/* Every major block of the view is split by the same 2px line as the grid. */
 .workspace__control-bar {
   flex-shrink: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 2px solid var(--color-border-subtle);
 }
 
 .workspace__body-wrap {
@@ -907,6 +916,7 @@ useKeyboardShortcuts({
   min-width: 0;
   overflow: auto;
   position: relative;
+  border-right: 2px solid var(--color-border-subtle);
 }
 
 /* CSS variable scope: --ws-col-template is set inline on this element */
@@ -923,6 +933,11 @@ useKeyboardShortcuts({
   background: var(--color-surface);
   border-bottom: 2px solid var(--color-border-subtle);
   z-index: 5;
+}
+
+.workspace__th-edge {
+  align-self: stretch;
+  border-left: 2px solid var(--color-border-subtle);
 }
 
 .workspace__th {
