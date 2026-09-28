@@ -21,6 +21,7 @@ import TrackRow from './TrackRow.vue'
 import WorkspaceMinimap from './WorkspaceMinimap.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
 import TrackColumnPicker from './TrackColumnPicker.vue'
+import TrackColumnHeader from './TrackColumnHeader.vue'
 import { TRACK_COLUMNS, type TrackColumnKey } from './trackColumns'
 import AddContentModal from './AddContentModal.vue'
 import LeaveWorkspaceModal from './LeaveWorkspaceModal.vue'
@@ -53,6 +54,13 @@ const staticSortOptions: SortOption<Track>[] = [
   { key: 'title', label: 'Title', compareFn: (a, b) => a.title.localeCompare(b.title) },
   { key: 'artist', label: 'Artist', compareFn: (a, b) => a.artist.localeCompare(b.artist) },
   { key: 'album', label: 'Album', compareFn: (a, b) => a.album.localeCompare(b.album) },
+  // A track with no length sorts last.
+  {
+    key: 'duration',
+    label: 'Length',
+    compareFn: (a, b) => (a.duration ?? Number.MAX_VALUE) - (b.duration ?? Number.MAX_VALUE),
+  },
+  { key: 'source', label: 'Source', compareFn: (a, b) => a.source.localeCompare(b.source) },
   {
     key: 'most-playlists',
     label: 'Most Playlists',
@@ -125,7 +133,7 @@ const sortOptions = computed<SortOption<Track>[]>(() => {
   ]
 })
 
-// Chain: trackList -> filtered -> sorted -> displayTracks
+// Chain: trackList -> filtered -> sorted -> (reversed) -> displayTracks
 const { query, filtered } = useListFilter<Track>(
   computed(() => workspaceStore.trackList),
   (track, q) => {
@@ -137,15 +145,26 @@ const { query, filtered } = useListFilter<Track>(
     )
   },
 )
-const { currentSort, sorted: displayTracks } = useListSort<Track>(filtered, sortOptions)
+const { currentSort, sorted } = useListSort<Track>(filtered, sortOptions)
+// A second click on a track column header reverses its sort. Any change of sort key, from
+// the dropdown or a header, starts ascending again.
+const sortDescending = ref(false)
+const displayTracks = computed(() => (sortDescending.value ? [...sorted.value].reverse() : sorted.value))
 
 // Retire the dynamic playlist option as soon as the user picks a static sort, so a stale
 // "Playlist: X" entry does not linger in the dropdown.
 watch(currentSort, (key) => {
+  sortDescending.value = false
   if (playlistSortTarget.value !== null && key !== PLAYLIST_SORT_KEY) {
     playlistSortTarget.value = null
   }
 })
+
+// Header click: sort by that column, or reverse it if it already drives the sort.
+function sortByTrackColumn(key: TrackColumnKey): void {
+  if (currentSort.value === key) sortDescending.value = !sortDescending.value
+  else currentSort.value = key
+}
 
 /**
  * Activate the playlist-order sort for one column, adding its dynamic option and selecting it.
@@ -182,9 +201,17 @@ const INDEX_COLUMN_PX = 60
 const TRACK_COLUMN_MIN_PX = 200
 // Optional track columns picked from the control bar. Page state: none show after a reload.
 const shownTrackColumnKeys = ref(new Set<TrackColumnKey>())
+// Widths the user dragged to, by column. Page state too. A column not dragged keeps its default.
+const trackColumnWidths = ref(new Map<TrackColumnKey, number>())
 const shownTrackColumns = computed(() =>
-  TRACK_COLUMNS.filter((col) => shownTrackColumnKeys.value.has(col.key)),
+  TRACK_COLUMNS.filter((col) => shownTrackColumnKeys.value.has(col.key)).map((col) => ({
+    ...col,
+    widthPx: trackColumnWidths.value.get(col.key) ?? col.widthPx,
+  })),
 )
+function resizeTrackColumn(key: TrackColumnKey, widthPx: number): void {
+  trackColumnWidths.value.set(key, widthPx)
+}
 function toggleTrackColumn(key: TrackColumnKey): void {
   if (!shownTrackColumnKeys.value.delete(key)) shownTrackColumnKeys.value.add(key)
 }
@@ -798,14 +825,14 @@ useKeyboardShortcuts({
             <div class="workspace__table-header">
               <div class="workspace__th workspace__th--index">#</div>
               <div class="workspace__th workspace__th--track">Track</div>
-              <div
+              <TrackColumnHeader
                 v-for="col in shownTrackColumns"
                 :key="col.key"
-                class="workspace__th workspace__th--field"
-                :class="`workspace__th--${col.key}`"
-              >
-                <span class="truncate">{{ col.label }}</span>
-              </div>
+                :column="col"
+                :sort="currentSort !== col.key ? null : sortDescending ? 'desc' : 'asc'"
+                @sort="sortByTrackColumn"
+                @resize="resizeTrackColumn"
+              />
 
               <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
               <PlaylistColumnHeader
@@ -982,21 +1009,6 @@ useKeyboardShortcuts({
 
 .workspace__th--track {
   min-width: 0;
-}
-
-/* Split like the playlist headers: a 2px line on the left, full header height. */
-.workspace__th--field {
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  border-left: 2px solid var(--color-border-subtle);
-  min-width: 0;
-  padding: var(--space-2);
-  color: var(--color-text-muted);
-}
-
-.workspace__th--duration {
-  justify-content: flex-end;
 }
 
 .workspace__column-controls {

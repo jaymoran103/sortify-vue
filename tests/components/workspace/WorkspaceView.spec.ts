@@ -592,10 +592,51 @@ describe('WorkspaceView', () => {
       await option('Length').trigger('change')
       await option('Artist').trigger('change')
       expect(template(wrapper)).toContain('480px) 160px 64px 48px')
-      const heads = wrapper.findAll('.workspace__th--field').map((h) => h.text())
+      const heads = wrapper.findAll('.track-col-header').map((h) => h.text())
       expect(heads).toEqual(['Artist', 'Length'])
       await option('Artist').trigger('change')
       expect(template(wrapper)).toContain('480px) 64px 48px')
+    })
+
+    it('sorts by a track column on header click, and reverses on a second click', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'One', 'Bravo'),
+        makeTrack('t2', 'Two', 'Alpha'),
+        makeTrack('t3', 'Three', 'Charlie'),
+      ]
+      const wrapper = mountWorkspace()
+      await wrapper
+        .findAll('.column-picker__option')
+        .find((o) => o.text() === 'Artist')!
+        .find('input')
+        .trigger('change')
+      const titles = () => wrapper.findAll('.track-row__title').map((n) => n.text())
+      await wrapper.get('.track-col-header__sort').trigger('click')
+      expect(titles()).toEqual(['Two', 'One', 'Three'])
+      expect(wrapper.get('.track-col-header').attributes('aria-sort')).toBe('ascending')
+      await wrapper.get('.track-col-header__sort').trigger('click')
+      expect(titles()).toEqual(['Three', 'One', 'Two'])
+      expect(wrapper.get('.track-col-header').attributes('aria-sort')).toBe('descending')
+    })
+
+    it('resizes a track column by dragging its edge, within limits', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      await wrapper
+        .findAll('.column-picker__option')
+        .find((o) => o.text() === 'Artist')!
+        .find('input')
+        .trigger('change')
+      const handle = wrapper.get('.track-col-header__resize').element
+      handle.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 500, bubbles: true }))
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 540 }))
+      await wrapper.vm.$nextTick()
+      expect(template(wrapper)).toContain('480px) 200px 48px')
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 0 }))
+      await wrapper.vm.$nextTick()
+      expect(template(wrapper)).toContain('480px) 48px 48px')
+      window.dispatchEvent(new MouseEvent('pointerup', { clientX: 0 }))
     })
 
     // 60 index + 200 track + 160 artist + 2 closing line + 4 × 48 collapsed = 614. 750 leaves
