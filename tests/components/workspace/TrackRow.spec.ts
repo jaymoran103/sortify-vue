@@ -85,6 +85,23 @@ describe('TrackRow', () => {
     expect(wrapper.find('input[type="checkbox"]').classes()).toContain('sr-only')
   })
 
+  it('reports the hovered column on cell enter and clears it on leave', async () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [makePlaylist(7, 'PL1', [])])
+    const cell = wrapper.find('.track-row__checkbox')
+    await cell.trigger('mouseenter')
+    await cell.trigger('mouseleave')
+    expect(wrapper.emitted('hoverColumn')).toEqual([[7], [null]])
+  })
+
+  it('marks only the cell in the hovered column', async () => {
+    const playlists = [makePlaylist(1, 'PL1', []), makePlaylist(2, 'PL2', [])]
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, playlists)
+    await wrapper.setProps({ hoveredPlaylistId: 2 })
+    const cells = wrapper.findAll('.track-row__checkbox')
+    expect(cells[0]!.classes()).not.toContain('track-row__checkbox--column-hover')
+    expect(cells[1]!.classes()).toContain('track-row__checkbox--column-hover')
+  })
+
   it('checkbox checked state uses trackIdSet not trackIDs array', () => {
     const pl = makePlaylist(1, 'PL1', ['t1'])
     // Override trackIdSet so it disagrees with trackIDs

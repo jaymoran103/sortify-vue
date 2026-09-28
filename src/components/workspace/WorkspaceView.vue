@@ -198,6 +198,8 @@ function fitColumnsToScreen(): void {
   const count = Math.max(0, Math.min(playlists.length, Math.floor(spare / (EXPANDED_COLUMN_PX - ROW_HEIGHT))))
   expandedIds.value = new Set(playlists.slice(0, count).map((pl) => pl.id))
 }
+// The playlist column under the pointer. Every row lifts its cell in that column.
+const hoveredPlaylistId = ref<PlaylistId | null>(null)
 // The track column is capped and a trailing 1fr track absorbs the slack past the last
 // playlist, so a checkbox stays put however many playlists come and go. The trailing
 // track holds no element, and it collapses to 0 once the columns overflow and scroll.
@@ -799,6 +801,7 @@ useKeyboardShortcuts({
                 :index="row.index"
                 :playlists="workspaceStore.playlists"
                 :selected="rowSelection.isSelected(trackAt(row.index).trackID)"
+                :hovered-playlist-id="hoveredPlaylistId"
                 :style="{
                   position: 'absolute',
                   top: 0,
@@ -810,6 +813,7 @@ useKeyboardShortcuts({
                 @toggle-track="workspaceStore.toggleTrack"
                 @select="handleRowSelect"
                 @context-menu="handleTrackContextMenu"
+                @hover-column="hoveredPlaylistId = $event"
               />
             </div>
 

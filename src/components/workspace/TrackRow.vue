@@ -7,12 +7,15 @@ const props = defineProps<{
   index: number
   playlists: WorkspacePlaylist[]
   selected: boolean
+  // The playlist column under the pointer, from any row. Its cells take the row hover colour.
+  hoveredPlaylistId?: number | string | null
 }>()
 
 const emit = defineEmits<{
   toggleTrack: [playlistId: number | string, trackId: string]
   select: [trackId: string, event: MouseEvent]
   contextMenu: [trackId: string, event: MouseEvent]
+  hoverColumn: [playlistId: number | string | null]
 }>()
 
 function toggle(playlistId: number | string): void {
@@ -62,8 +65,13 @@ function toggle(playlistId: number | string): void {
       v-for="pl in playlists"
       :key="pl.id"
       class="track-row__checkbox"
-      :class="{ 'track-row__checkbox--checked': pl.trackIdSet.has(track.trackID) }"
+      :class="{
+        'track-row__checkbox--checked': pl.trackIdSet.has(track.trackID),
+        'track-row__checkbox--column-hover': pl.id === hoveredPlaylistId,
+      }"
       @click.stop="toggle(pl.id!)"
+      @mouseenter="emit('hoverColumn', pl.id!)"
+      @mouseleave="emit('hoverColumn', null)"
     >
       <!-- Visually hidden, but kept for keyboard focus and screen readers. -->
       <input
@@ -198,6 +206,12 @@ function toggle(playlistId: number | string): void {
    the column width, so the grid does not shift. */
 .track-row__checkbox + .track-row__checkbox {
   border-left: 1px solid var(--color-border-subtle);
+}
+
+/* A hovered column lifts like a hovered row. A selected row keeps its own colour, and a
+   checked cell stays accent. */
+.track-row:not(.track-row--selected) .track-row__checkbox--column-hover:not(.track-row__checkbox--checked) {
+  background: var(--color-track-row-hover);
 }
 
 /* Hover lightens a 4px inner edge rather than the whole cell, so at rest every cell is
