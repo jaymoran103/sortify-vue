@@ -804,7 +804,7 @@ useKeyboardShortcuts({
                 class="workspace__th workspace__th--field"
                 :class="`workspace__th--${col.key}`"
               >
-                {{ col.label }}
+                <span class="truncate">{{ col.label }}</span>
               </div>
 
               <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
@@ -984,14 +984,19 @@ useKeyboardShortcuts({
   min-width: 0;
 }
 
+/* Split like the playlist headers: a 2px line on the left, full header height. */
 .workspace__th--field {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  border-left: 2px solid var(--color-border-subtle);
   min-width: 0;
   padding: var(--space-2);
   color: var(--color-text-muted);
 }
 
 .workspace__th--duration {
-  text-align: right;
+  justify-content: flex-end;
 }
 
 .workspace__column-controls {

@@ -72,7 +72,7 @@ function toggle(playlistId: number | string): void {
       class="track-row__field text-muted"
       :class="`track-row__field--${col.key}`"
     >
-      {{ col.value(track) }}
+      <span class="truncate">{{ col.value(track) }}</span>
     </div>
 
     <!-- Playlist Checkbox Cells: one rendered per playlist column, reflecting membership. -->
@@ -208,17 +208,19 @@ function toggle(playlistId: number | string): void {
   content: '\A0\B7\A0';
 }
 
+/* Optional columns are split like the tiles: a 2px line on the left, full row height. */
 .track-row__field {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  border-left: 2px solid var(--color-border-subtle);
   min-width: 0;
   padding: 0 var(--space-2);
   font-size: var(--font-size-xs);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .track-row__field--duration {
-  text-align: right;
+  justify-content: flex-end;
   font-variant-numeric: tabular-nums;
 }
 
