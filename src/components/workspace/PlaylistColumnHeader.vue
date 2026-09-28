@@ -189,7 +189,9 @@ function onMenu(event: MouseEvent): void {
   width: 100%;
   /* Fills the header row's height, so the lines between headers run top to bottom. */
   align-self: stretch;
-  overflow: hidden;
+  /* Not overflow: hidden. The label clips itself, and the drag chevrons stick out past
+     the edge. */
+  min-width: 0;
   cursor: pointer;
   transition: background 0.1s;
   /* Tall enough for name over count in both states, so opening a column does not push
@@ -208,10 +210,15 @@ function onMenu(event: MouseEvent): void {
   border-left: 2px solid var(--color-border-subtle);
 }
 
+/* Each chevron is centred on the 2px line it can cross, so it pokes past the header edge
+   into the neighbour. The dragged header sits above its neighbours to keep them showing. */
+.playlist-col-header--dragging {
+  z-index: 1;
+}
+
 .playlist-col-header__chevron {
   position: absolute;
   top: 50%;
-  transform: translateY(-50%);
   color: var(--color-accent);
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
@@ -220,11 +227,13 @@ function onMenu(event: MouseEvent): void {
 }
 
 .playlist-col-header__chevron--left {
-  left: 2px;
+  left: -1px;
+  transform: translate(-50%, -50%);
 }
 
 .playlist-col-header__chevron--right {
-  right: 2px;
+  right: -1px;
+  transform: translate(50%, -50%);
 }
 
 .playlist-col-header--dragging,
