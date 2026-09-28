@@ -34,10 +34,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <details ref="root" class="column-picker">
-    <summary class="btn btn--ghost btn--sm">Columns</summary>
-    <div class="column-picker__menu" role="group" aria-label="Track columns">
-      <label v-for="col in columns" :key="col.key" class="column-picker__option">
+  <!-- The trigger reuses the sort dropdown's look, and the panel reuses the context menu's,
+       so the control bar reads as one set. -->
+  <details ref="root" class="column-picker dropdown-wrapper">
+    <summary class="dropdown">Columns</summary>
+    <div class="column-picker__menu menu-panel" role="group" aria-label="Track columns">
+      <label v-for="col in columns" :key="col.key" class="column-picker__option menu-item">
         <input type="checkbox" :checked="shown.has(col.key)" @change="emit('toggle', col.key)" />
         {{ col.label }}
       </label>
@@ -46,11 +48,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.column-picker {
-  position: relative;
-}
-
+/* Looks come from .dropdown-wrapper, .dropdown, .menu-panel and .menu-item in
+   utilities.css. Only the details-specific parts and placement live here. */
 .column-picker summary {
+  display: block;
   list-style: none;
 }
 
@@ -62,22 +63,9 @@ onBeforeUnmount(() => {
   position: absolute;
   top: calc(100% + var(--space-1));
   left: 0;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 140px;
-  padding: var(--space-2);
-  background: var(--color-surface);
-  border: 2px solid var(--color-border-subtle);
 }
 
 .column-picker__option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
   white-space: nowrap;
 }
 </style>
