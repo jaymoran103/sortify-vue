@@ -185,4 +185,94 @@ describe('PlaylistColumnHeader', () => {
       expect(wrapper.emitted('requestMenu')).toBeDefined()
     })
   })
+
+  // ─── Drag to reorder ───────────────────────────────────────────────────────
+  // The header hops one column each time the pointer passes a neighbour's midpoint.
+
+  describe('drag to reorder', () => {
+    // Mounts the header between two fake neighbour headers, each 48px wide: prev at
+    // 0-48, this one at 48-96, next at 96-144. jsdom lays nothing out, so rects are stubbed.
+    function mountBetweenNeighbours() {
+      const row = document.createElement('div')
+      document.body.appendChild(row)
+      const wrapper = mount(PlaylistColumnHeader, {
+        props: { playlist: makePlaylist(7, 'PL'), expanded: false },
+        attachTo: row,
+      })
+      // The template's leading comments make the root a fragment, so find the header.
+      const header = wrapper.find('.playlist-col-header')
+      const parent = header.element.parentElement!
+      parent.insertBefore(neighbour(0), header.element)
+      parent.appendChild(neighbour(96))
+      return { wrapper, header }
+    }
+
+    function neighbour(left: number): HTMLElement {
+      const el = document.createElement('div')
+      el.className = 'playlist-col-header'
+      el.getBoundingClientRect = () => ({ left, width: 48 }) as DOMRect
+      return el
+    }
+
+    // trigger() cannot set a MouseEvent's button, so the press is dispatched by hand.
+    function press(el: Element, button: number): void {
+      el.dispatchEvent(new MouseEvent('pointerdown', { button, clientX: 72, bubbles: true }))
+    }
+
+    function pointer(type: string, clientX: number): void {
+      window.dispatchEvent(new MouseEvent(type, { clientX }))
+    }
+
+    it('moves right once the pointer passes the next header’s midpoint', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 0)
+      pointer('pointermove', 110)
+      expect(wrapper.emitted('move')).toBeUndefined()
+      pointer('pointermove', 125)
+      expect(wrapper.emitted('move')).toEqual([[7, 1]])
+      pointer('pointerup', 125)
+      expect(wrapper.emitted('dragEnd')).toEqual([[7]])
+      wrapper.unmount()
+    })
+
+    it('moves left once the pointer passes the previous header’s midpoint', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 0)
+      pointer('pointermove', 20)
+      expect(wrapper.emitted('move')).toEqual([[7, -1]])
+      pointer('pointerup', 20)
+      wrapper.unmount()
+    })
+
+    it('treats a press that barely moves as a click', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 0)
+      pointer('pointermove', 74)
+      pointer('pointerup', 74)
+      await header.trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toEqual([[7]])
+      expect(wrapper.emitted('dragEnd')).toBeUndefined()
+      wrapper.unmount()
+    })
+
+    it('does not toggle the column on the click that ends a drag', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 0)
+      pointer('pointermove', 80)
+      pointer('pointerup', 80)
+      await header.trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toBeUndefined()
+      await header.trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toEqual([[7]])
+      wrapper.unmount()
+    })
+
+    it('ignores a right-button press', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 2)
+      pointer('pointermove', 125)
+      expect(wrapper.emitted('move')).toBeUndefined()
+      wrapper.unmount()
+    })
+  })
 })

@@ -788,6 +788,8 @@ useKeyboardShortcuts({
                 :expanded="expandedIds.has(pl.id)"
                 @request-menu="buildColumnMenu"
                 @toggle-expand="toggleColumn"
+                @move="workspaceStore.movePlaylist"
+                @drag-end="workspaceStore.persistPlaylistOrder()"
               />
             </div>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, ref } from 'vue'
 import { initials } from '@/utils/initials'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 
@@ -14,7 +15,74 @@ const props = defineProps<{
 const emit = defineEmits<{
   requestMenu: [playlistId: PlaylistId, event: MouseEvent]
   toggleExpand: [playlistId: PlaylistId]
+  move: [playlistId: PlaylistId, direction: -1 | 1]
+  dragEnd: [playlistId: PlaylistId]
 }>()
+
+// Drag to reorder. A press becomes a drag only past DRAG_THRESHOLD_PX, so a plain click
+// still toggles the column. Listeners sit on window, not pointer capture, because the
+// header's element moves in the DOM each time the column hops.
+const DRAG_THRESHOLD_PX = 4
+const root = ref<HTMLElement | null>(null)
+const dragging = ref(false)
+let startX = 0
+let pressed = false
+// The click that ends a drag must not also toggle the column.
+let suppressClick = false
+
+function onPointerDown(event: PointerEvent): void {
+  if (event.button !== 0) return
+  // A drag that ended off the header left no click to eat. Clear the flag here.
+  suppressClick = false
+  pressed = true
+  startX = event.clientX
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerUp)
+}
+
+// Hop one column once the pointer passes a neighbour's midpoint. Only playlist headers
+// count as neighbours, so the column never crosses into the track column.
+function onPointerMove(event: PointerEvent): void {
+  if (!pressed || !root.value) return
+  if (!dragging.value) {
+    if (Math.abs(event.clientX - startX) < DRAG_THRESHOLD_PX) return
+    dragging.value = true
+  }
+  const next = root.value.nextElementSibling
+  const prev = root.value.previousElementSibling
+  if (next?.classList.contains('playlist-col-header') && event.clientX > midpoint(next)) {
+    emit('move', props.playlist.id, 1)
+  } else if (prev?.classList.contains('playlist-col-header') && event.clientX < midpoint(prev)) {
+    emit('move', props.playlist.id, -1)
+  }
+}
+
+function onPointerUp(): void {
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', onPointerUp)
+  pressed = false
+  if (!dragging.value) return
+  dragging.value = false
+  suppressClick = true
+  emit('dragEnd', props.playlist.id)
+}
+
+function midpoint(el: Element): number {
+  const rect = el.getBoundingClientRect()
+  return rect.left + rect.width / 2
+}
+
+function onClick(): void {
+  if (suppressClick) {
+    suppressClick = false
+    return
+  }
+  emit('toggleExpand', props.playlist.id)
+}
+
+onBeforeUnmount(onPointerUp)
 
 /**
  * Report a menu request to the parent, passing the originating event so the parent
@@ -28,10 +96,16 @@ function onMenu(event: MouseEvent): void {
 <template>
   <!-- Right-click anywhere on the header requests the menu at the cursor position. -->
   <!-- Left-click anywhere else on it toggles the column open or closed. -->
+  <!-- Press and drag sideways to move the column. -->
   <div
+    ref="root"
     class="playlist-col-header"
-    :class="{ 'playlist-col-header--collapsed': !expanded }"
-    @click="emit('toggleExpand', playlist.id)"
+    :class="{
+      'playlist-col-header--collapsed': !expanded,
+      'playlist-col-header--dragging': dragging,
+    }"
+    @pointerdown="onPointerDown"
+    @click="onClick"
     @contextmenu.prevent="onMenu"
   >
     <!-- The toggle is a real button for keyboard users. It has no handler of its own: its
@@ -103,6 +177,19 @@ function onMenu(event: MouseEvent): void {
 
 .playlist-col-header:hover {
   background: var(--color-border-subtle);
+}
+
+.playlist-col-header--dragging,
+.playlist-col-header--dragging .playlist-col-header__toggle {
+  cursor: grabbing;
+}
+
+/* :hover here too, or the grey hover wins while the pointer sits on the dragged header.
+   No transition, so a hop does not fade the tint in and out. */
+.playlist-col-header--dragging,
+.playlist-col-header--dragging:hover {
+  background: var(--color-accent-subtle);
+  transition: none;
 }
 
 /* Safe centring: short initials sit centred, long ones start at the left edge and are
