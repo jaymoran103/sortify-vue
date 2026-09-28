@@ -221,8 +221,8 @@ function onMenu(event: MouseEvent): void {
   position: absolute;
   top: 50%;
   color: var(--color-accent);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
   line-height: 1;
   pointer-events: none;
 }
@@ -265,6 +265,22 @@ function onMenu(event: MouseEvent): void {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   white-space: nowrap;
+}
+
+/* Long initials fade out at the column edge instead of slicing a letter. The fade sits on
+   the full-width toggle, so centred short labels never reach it. */
+.playlist-col-header--collapsed .playlist-col-header__toggle {
+  mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+}
+
+/* The mask would hide the toggle's outline, so a collapsed header draws the focus ring
+   itself, inset like a focused cell's. */
+.playlist-col-header--collapsed .playlist-col-header__toggle:focus-visible {
+  outline: none;
+}
+
+.playlist-col-header--collapsed:has(.playlist-col-header__toggle:focus-visible) {
+  box-shadow: inset 0 0 0 2px var(--color-focus-ring);
 }
 
 .playlist-col-header__initials--empty {
