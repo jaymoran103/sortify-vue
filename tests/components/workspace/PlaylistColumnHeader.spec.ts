@@ -267,6 +267,20 @@ describe('PlaylistColumnHeader', () => {
       wrapper.unmount()
     })
 
+    it('shows a chevron on each side it can move to, only while dragging', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      expect(header.find('.playlist-col-header__chevron').exists()).toBe(false)
+      press(header.element, 0)
+      pointer('pointermove', 80)
+      await wrapper.vm.$nextTick()
+      expect(header.find('.playlist-col-header__chevron--left').exists()).toBe(true)
+      expect(header.find('.playlist-col-header__chevron--right').exists()).toBe(true)
+      pointer('pointerup', 80)
+      await wrapper.vm.$nextTick()
+      expect(header.find('.playlist-col-header__chevron').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
     it('ignores a right-button press', async () => {
       const { wrapper, header } = mountBetweenNeighbours()
       press(header.element, 2)

@@ -25,6 +25,8 @@ const emit = defineEmits<{
 const DRAG_THRESHOLD_PX = 4
 const root = ref<HTMLElement | null>(null)
 const dragging = ref(false)
+const canMoveLeft = ref(false)
+const canMoveRight = ref(false)
 let startX = 0
 let pressed = false
 // The click that ends a drag must not also toggle the column.
@@ -49,13 +51,20 @@ function onPointerMove(event: PointerEvent): void {
     if (Math.abs(event.clientX - startX) < DRAG_THRESHOLD_PX) return
     dragging.value = true
   }
-  const next = root.value.nextElementSibling
-  const prev = root.value.previousElementSibling
-  if (next?.classList.contains('playlist-col-header') && event.clientX > midpoint(next)) {
+  const next = playlistHeader(root.value.nextElementSibling)
+  const prev = playlistHeader(root.value.previousElementSibling)
+  // Chevrons mark the sides the column can still move to. They trail a hop by one event.
+  canMoveLeft.value = prev !== null
+  canMoveRight.value = next !== null
+  if (next && event.clientX > midpoint(next)) {
     emit('move', props.playlist.id, 1)
-  } else if (prev?.classList.contains('playlist-col-header') && event.clientX < midpoint(prev)) {
+  } else if (prev && event.clientX < midpoint(prev)) {
     emit('move', props.playlist.id, -1)
   }
+}
+
+function playlistHeader(el: Element | null): Element | null {
+  return el?.classList.contains('playlist-col-header') ? el : null
 }
 
 function onPointerUp(): void {
@@ -154,6 +163,19 @@ function onMenu(event: MouseEvent): void {
     >
       ⋮
     </button>
+    <!-- While dragging, chevrons mark the sides the column can move to. -->
+    <template v-if="dragging">
+      <span
+        v-if="canMoveLeft"
+        class="playlist-col-header__chevron playlist-col-header__chevron--left"
+        aria-hidden="true"
+      >‹</span>
+      <span
+        v-if="canMoveRight"
+        class="playlist-col-header__chevron playlist-col-header__chevron--right"
+        aria-hidden="true"
+      >›</span>
+    </template>
   </div>
 </template>
 
@@ -163,10 +185,12 @@ function onMenu(event: MouseEvent): void {
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
+  position: relative;
   width: 100%;
+  /* Fills the header row's height, so the lines between headers run top to bottom. */
+  align-self: stretch;
   overflow: hidden;
   cursor: pointer;
-  border-radius: 4px;
   transition: background 0.1s;
   /* Tall enough for name over count in both states, so opening a column does not push
      the rows down. */
@@ -177,6 +201,30 @@ function onMenu(event: MouseEvent): void {
 
 .playlist-col-header:hover {
   background: var(--color-border-subtle);
+}
+
+/* Neighbouring headers are split like the cells below them. */
+.playlist-col-header + .playlist-col-header {
+  border-left: 2px solid var(--color-border-subtle);
+}
+
+.playlist-col-header__chevron {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-accent);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.playlist-col-header__chevron--left {
+  left: 2px;
+}
+
+.playlist-col-header__chevron--right {
+  right: 2px;
 }
 
 .playlist-col-header--dragging,

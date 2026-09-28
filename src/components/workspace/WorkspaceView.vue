@@ -921,7 +921,7 @@ useKeyboardShortcuts({
   grid-template-columns: var(--ws-col-template);
   align-items: center;
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 2px solid var(--color-border-subtle);
   z-index: 5;
 }
 
