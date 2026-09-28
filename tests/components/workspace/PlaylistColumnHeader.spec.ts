@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import PlaylistColumnHeader from '@/components/workspace/PlaylistColumnHeader.vue'
 import type { WorkspacePlaylist } from '@/types/models'
 
@@ -177,6 +177,27 @@ describe('PlaylistColumnHeader', () => {
       const label = wrapper.find('.playlist-col-header__initials')
       expect(label.classes()).toContain('playlist-col-header__initials--empty')
       expect(label.find('.sr-only').text()).toBe('Morning Mix, empty')
+    })
+
+    // jsdom lays nothing out, so widths are stubbed on the prototype before mount.
+    it('fades only initials wider than the column', async () => {
+      const widths = (scroll: number) => {
+        Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => scroll })
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 38 })
+      }
+      try {
+        widths(35)
+        const fits = mountHeader(makePlaylist(1, 'Road Trip Mix'), false)
+        await flushPromises()
+        expect(fits.find('.playlist-col-header__initials--overflow').exists()).toBe(false)
+        widths(178)
+        const long = mountHeader(makePlaylist(2, 'Road Trip Mix'), false)
+        await flushPromises()
+        expect(long.find('.playlist-col-header__initials--overflow').exists()).toBe(true)
+      } finally {
+        delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth
+        delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth
+      }
     })
 
     it('still emits requestMenu on right-click', async () => {

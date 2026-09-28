@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { initials } from '@/utils/initials'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 
@@ -24,6 +24,18 @@ const emit = defineEmits<{
 // header's element moves in the DOM each time the column hops.
 const DRAG_THRESHOLD_PX = 4
 const root = ref<HTMLElement | null>(null)
+
+// Only initials wider than the column fade at its edge. Ones that fit stay crisp. A
+// collapsed column is a fixed width, so a check on mount and on rename is enough.
+const initialsEl = ref<HTMLElement | null>(null)
+const initialsOverflow = ref(false)
+async function measureInitials(): Promise<void> {
+  await nextTick()
+  const el = initialsEl.value
+  initialsOverflow.value = el !== null && el.scrollWidth > el.clientWidth
+}
+onMounted(measureInitials)
+watch(() => [props.playlist.name, props.expanded], measureInitials)
 const dragging = ref(false)
 const canMoveLeft = ref(false)
 const canMoveRight = ref(false)
@@ -124,8 +136,12 @@ function onMenu(event: MouseEvent): void {
            playlist keeps its warning here too, in colour and in words. -->
       <span
         v-if="!expanded"
+        ref="initialsEl"
         class="playlist-col-header__initials"
-        :class="{ 'playlist-col-header__initials--empty': playlist.trackIDs.length === 0 }"
+        :class="{
+          'playlist-col-header__initials--empty': playlist.trackIDs.length === 0,
+          'playlist-col-header__initials--overflow': initialsOverflow,
+        }"
         :title="playlist.name"
       >
         <span aria-hidden="true">{{ initials(playlist.name) }}</span>
@@ -267,20 +283,9 @@ function onMenu(event: MouseEvent): void {
   white-space: nowrap;
 }
 
-/* Long initials fade out at the column edge instead of slicing a letter. The fade sits on
-   the full-width toggle, so centred short labels never reach it. */
-.playlist-col-header--collapsed .playlist-col-header__toggle {
+/* Initials too wide for the column fade out at its edge instead of slicing a letter. */
+.playlist-col-header__initials--overflow {
   mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
-}
-
-/* The mask would hide the toggle's outline, so a collapsed header draws the focus ring
-   itself, inset like a focused cell's. */
-.playlist-col-header--collapsed .playlist-col-header__toggle:focus-visible {
-  outline: none;
-}
-
-.playlist-col-header--collapsed:has(.playlist-col-header__toggle:focus-visible) {
-  box-shadow: inset 0 0 0 2px var(--color-focus-ring);
 }
 
 .playlist-col-header__initials--empty {
