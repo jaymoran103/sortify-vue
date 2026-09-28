@@ -92,7 +92,7 @@ function toggle(playlistId: number | string): void {
   grid-template-columns: var(--ws-col-template);
   align-items: center;
   height: 48px;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 2px solid var(--color-border-subtle);
   cursor: default;
   /* Text selection is suppressed for the whole view by .no-text-select on the workspace root. */
 }
@@ -205,7 +205,7 @@ function toggle(playlistId: number | string): void {
 /* Neighbouring tiles are split by a line as thin as the row border. The line sits inside
    the column width, so the grid does not shift. */
 .track-row__checkbox + .track-row__checkbox {
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: 2px solid var(--color-border-subtle);
 }
 
 /* A hovered column lifts like a hovered row. A selected row keeps its own colour, and a
