@@ -120,7 +120,7 @@ onBeforeUnmount(onResizeEnd)
   color: var(--color-text);
 }
 
-/* Sits over the column's right edge, where the next column's line is drawn. */
+/* Sits inside the column's right edge, just left of the next column's line. */
 .track-col-header__resize {
   position: absolute;
   top: 0;
