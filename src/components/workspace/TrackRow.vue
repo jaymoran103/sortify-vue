@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import type { Track } from '@/types/models'
 import type { WorkspacePlaylist } from '@/types/models'
 
@@ -16,13 +15,8 @@ const emit = defineEmits<{
   contextMenu: [trackId: string, event: MouseEvent]
 }>()
 
-// Cells the user just toggled. Each one plays a short edge flash, then drops out of the
-// set when its animation ends. Only a toggle from this row flashes, never a bulk change.
-const flashing = ref(new Set<number | string>())
-
 function toggle(playlistId: number | string): void {
   emit('toggleTrack', playlistId, props.track.trackID)
-  flashing.value.add(playlistId)
 }
 </script>
 
@@ -68,12 +62,8 @@ function toggle(playlistId: number | string): void {
       v-for="pl in playlists"
       :key="pl.id"
       class="track-row__checkbox"
-      :class="{
-        'track-row__checkbox--checked': pl.trackIdSet.has(track.trackID),
-        'track-row__checkbox--flash': flashing.has(pl.id!),
-      }"
+      :class="{ 'track-row__checkbox--checked': pl.trackIdSet.has(track.trackID) }"
       @click.stop="toggle(pl.id!)"
-      @animationend="flashing.delete(pl.id!)"
     >
       <!-- Visually hidden, but kept for keyboard focus and screen readers. -->
       <input
@@ -202,32 +192,6 @@ function toggle(playlistId: number | string): void {
   align-self: stretch;
   text-align: center;
   cursor: pointer;
-  transition: background 0.1s, box-shadow 0.1s;
-  position: relative;
-}
-
-/* Toggle flash: a bright inner edge that closes in four hard steps. It sits on ::after so
-   it layers over the hover edge instead of replacing it. */
-.track-row__checkbox::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.track-row__checkbox--flash::after {
-  animation: cell-flash 420ms steps(4) both;
-}
-
-@keyframes cell-flash {
-  from { box-shadow: inset 0 0 0 13px var(--color-accent-hover); }
-  to   { box-shadow: inset 0 0 0 0 var(--color-accent-hover); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .track-row__checkbox--flash::after {
-    animation: none;
-  }
 }
 
 /* Hover lightens a 4px inner edge rather than the whole cell, so at rest every cell is

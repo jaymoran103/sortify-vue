@@ -85,16 +85,6 @@ describe('TrackRow', () => {
     expect(wrapper.find('input[type="checkbox"]').classes()).toContain('sr-only')
   })
 
-  it('flashes a cell when it is toggled, until its animation ends', async () => {
-    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [makePlaylist(1, 'PL1', [])])
-    const cell = wrapper.find('.track-row__checkbox')
-    expect(cell.classes()).not.toContain('track-row__checkbox--flash')
-    await cell.trigger('click')
-    expect(cell.classes()).toContain('track-row__checkbox--flash')
-    await cell.trigger('animationend')
-    expect(cell.classes()).not.toContain('track-row__checkbox--flash')
-  })
-
   it('checkbox checked state uses trackIdSet not trackIDs array', () => {
     const pl = makePlaylist(1, 'PL1', ['t1'])
     // Override trackIdSet so it disagrees with trackIDs
