@@ -194,6 +194,12 @@ function toggle(playlistId: number | string): void {
   cursor: pointer;
 }
 
+/* Neighbouring tiles are split by a line as thin as the row border. The line sits inside
+   the column width, so the grid does not shift. */
+.track-row__checkbox + .track-row__checkbox {
+  border-left: 1px solid var(--color-border-subtle);
+}
+
 /* Hover lightens a 4px inner edge rather than the whole cell, so at rest every cell is
    pure background or pure accent. */
 .track-row__checkbox:hover {
