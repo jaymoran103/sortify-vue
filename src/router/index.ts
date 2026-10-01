@@ -42,6 +42,12 @@ const router = createRouter({
       name: 'similarity',
       component: () => import('@/components/similarity/SimilarityView.vue'),
     },
+    // Library History: prototype charts of the library over time, from imported JSON bundle snapshots.
+    {
+      path: '/history',
+      name: 'history',
+      component: () => import('@/components/history/LibraryHistoryView.vue'),
+    },
     {
       // Catch-all: redirect unknown paths to dashboard
       path: '/:pathMatch(.*)*',

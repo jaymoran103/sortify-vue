@@ -9,7 +9,10 @@ import WorkspaceCard from './WorkspaceCard.vue'
   <div class="dashboard">
     <div class="dashboard__header">
       <h1 class="dashboard__title">Dashboard</h1>
-      <button class="about-btn" @click="$router.push({ name: 'about' })">About Sortify</button>
+      <div class="dashboard__links">
+        <button class="about-btn" @click="$router.push({ name: 'history' })">Library history</button>
+        <button class="about-btn" @click="$router.push({ name: 'about' })">About Sortify</button>
+      </div>
     </div>
 
     <!-- Main Dashboard Section -->
@@ -51,6 +54,11 @@ import WorkspaceCard from './WorkspaceCard.vue'
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
   margin: 0;
+}
+
+.dashboard__links {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .dashboard .about-btn {
