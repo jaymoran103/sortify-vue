@@ -4,11 +4,10 @@ import { createPinia } from 'pinia'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { reactive, nextTick } from 'vue'
 import WorkspaceView from '@/components/workspace/WorkspaceView.vue'
-import AddContentModal from '@/components/workspace/AddContentModal.vue'
 import LeaveWorkspaceModal from '@/components/workspace/LeaveWorkspaceModal.vue'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 import type { Track } from '@/types/models'
-import type { MenuEntry, MenuItem, AddContentChoice, WorkspaceIssue } from '@/types/ui'
+import type { MenuEntry, MenuItem, WorkspaceIssue } from '@/types/ui'
 
 // ─── Mock workspace store ────────────────────────────────────────────────────
 
@@ -186,8 +185,9 @@ function findMenuAction(label: string): (() => void) | undefined {
   return entry && 'action' in entry ? entry.action : undefined
 }
 
+// Right-click, since a collapsed column header has no ellipsis button.
 async function openColumnMenu(wrapper: ReturnType<typeof mountWorkspace>, columnIndex = 0) {
-  await wrapper.findAll('.playlist-col-header__menu-btn')[columnIndex]!.trigger('click')
+  await wrapper.findAll('.playlist-col-header')[columnIndex]!.trigger('contextmenu')
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -297,6 +297,13 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).toContain('Song A')
   })
 
+  it('renders the minimap beside the scroll container, not inside it', () => {
+    mockWorkspaceStore.playlists = [makePlaylist(1, 'Morning Mix', ['t1'])]
+    const wrapper = mountWorkspace()
+    expect(wrapper.find('.workspace__body-wrap > .minimap').exists()).toBe(true)
+    expect(wrapper.find('.workspace__body .minimap').exists()).toBe(false)
+  })
+
   it('renders one column header per playlist', () => {
     mockWorkspaceStore.playlists = [
       makePlaylist(1, 'Morning Mix', ['t1']),
@@ -304,10 +311,10 @@ describe('WorkspaceView', () => {
     ]
     mockWorkspaceStore.trackList = []
     const wrapper = mountWorkspace()
-    const headers = wrapper.findAll('.playlist-col-header__name')
+    const headers = wrapper.findAll('.playlist-col-header__initials')
     expect(headers).toHaveLength(2)
-    expect(headers[0]?.text()).toBe('Morning Mix')
-    expect(headers[1]?.text()).toBe('Evening Chill')
+    expect(headers[0]?.attributes('title')).toBe('Morning Mix')
+    expect(headers[1]?.attributes('title')).toBe('Evening Chill')
   })
 
   it('renders a row for each track in trackList', () => {
@@ -381,7 +388,7 @@ describe('WorkspaceView', () => {
     })
 
     const wrapper = mountWorkspace()
-    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    const checkboxes = wrapper.findAll('.track-row input[type="checkbox"]')
     await checkboxes[2]!.trigger('change')
     await nextTick()
 
@@ -401,7 +408,7 @@ describe('WorkspaceView', () => {
     ]
 
     const wrapper = mountWorkspace()
-    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    const checkboxes = wrapper.findAll('.track-row input[type="checkbox"]')
 
     const checkbox0 = checkboxes[0]
     const checkbox1 = checkboxes[1]
@@ -418,7 +425,7 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
     mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist 1')]
     const wrapper = mountWorkspace()
-    const checkbox = wrapper.find('input[type="checkbox"]')
+    const checkbox = wrapper.find('.track-row input[type="checkbox"]')
     expect((checkbox.element as HTMLInputElement).disabled).toBe(false)
   })
 
@@ -455,7 +462,7 @@ describe('WorkspaceView', () => {
     mockWorkspaceStore.trackList = [makeTrack('t1', 'Song A', 'Artist 1')]
     const wrapper = mountWorkspace()
 
-    await wrapper.find('input[type="checkbox"]').trigger('change')
+    await wrapper.find('.track-row input[type="checkbox"]').trigger('change')
 
     expect(mockWorkspaceStore.toggleTrack).toHaveBeenCalledWith(1, 't1')
   })
@@ -513,8 +520,6 @@ describe('WorkspaceView', () => {
     })
   })
 
-  // ─── Save timestamp (W1-G) ─────────────────────────────────────────────────
-
   describe('column widths', () => {
     beforeEach(() => {
       mockWorkspaceStore.playlists = []
@@ -525,22 +530,236 @@ describe('WorkspaceView', () => {
       return wrapper.get('.workspace__table').attributes('style') ?? ''
     }
 
+    // jsdom lays nothing out, so the scroll area's width is stubbed. Fit reads it on click.
+    function setBodyWidth(wrapper: ReturnType<typeof mountWorkspace>, px: number): void {
+      Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', {
+        value: px,
+        configurable: true,
+      })
+    }
+
+    async function layout(wrapper: ReturnType<typeof mountWorkspace>, label: string): Promise<void> {
+      await wrapper
+        .findAll('.workspace__layout-menu .menu-item')
+        .find((b) => b.text() === label)!
+        .trigger('click')
+    }
+
+    it('gives every playlist a square column as wide as a row is tall', () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 48px 48px')
+    })
+
+    it('widens a column when its header is clicked', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await wrapper.findAll('.playlist-col-header')[1]!.trigger('click')
+      expect(template(wrapper)).toContain('480px) 48px 140px')
+    })
+
+    it('lets several columns stay open at once', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
+      await wrapper.findAll('.playlist-col-header')[1]!.trigger('click')
+      expect(template(wrapper)).toContain('480px) 140px 140px')
+    })
+
+    it('opens every column with Expand all, and closes them with Collapse all', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wrapper = mountWorkspace()
+      const button = (label: string) =>
+        wrapper.findAll('.workspace__layout-menu .menu-item').find((b) => b.text() === label)!
+      await button('Expand all').trigger('click')
+      expect(template(wrapper)).toContain('480px) 140px 140px')
+      await button('Collapse all').trigger('click')
+      expect(template(wrapper)).toContain('480px) 48px 48px')
+    })
+
+    // Fit splits the room left after index (60), track at its minimum (200) and the
+    // closing line (2) evenly across the playlists. 600 wide leaves 338: 84px each for four.
+    it('gives every column one even width with Fit to screen', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const wrapper = mountWorkspace()
+      setBodyWidth(wrapper, 600)
+      await layout(wrapper, 'Fit to screen')
+      expect(template(wrapper)).toContain('480px) 84px 84px 84px 84px 1fr')
+    })
+
+    it('never fits narrower than collapsed or wider than expanded', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const narrow = mountWorkspace()
+      setBodyWidth(narrow, 300)
+      await layout(narrow, 'Fit to screen')
+      expect(template(narrow)).toContain('480px) 48px 48px 48px 48px 1fr')
+
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wide = mountWorkspace()
+      setBodyWidth(wide, 1400)
+      await layout(wide, 'Fit to screen')
+      expect(template(wide)).toContain('480px) 140px 140px 1fr')
+    })
+
+    // 338 across six is 56px each. A seventh would get 48.
+    it('resizes every column evenly when a playlist joins a fitted workspace', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const wrapper = mountWorkspace()
+      setBodyWidth(wrapper, 600)
+      await layout(wrapper, 'Fit to screen')
+      mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists, makePlaylist(5, 'PL5', []), makePlaylist(6, 'PL6', [])]
+      await flushPromises()
+      expect(template(wrapper)).toContain('480px) 56px 56px 56px 56px 56px 56px 1fr')
+      mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists, makePlaylist(7, 'PL7', [])]
+      await flushPromises()
+      expect(template(wrapper)).toContain('480px) 48px 48px 48px 48px 48px 48px 48px 1fr')
+    })
+
+    it('gives a new playlist the width of the chosen layout', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      await layout(wrapper, 'Expand all')
+      mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists, makePlaylist(2, 'B', [])]
+      await flushPromises()
+      expect(template(wrapper)).toContain('480px) 140px 140px 1fr')
+    })
+
+    it('checks the chosen layout in the Layout menu, and none once a header is clicked', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      const checked = () =>
+        wrapper
+          .findAll('.workspace__layout-menu .menu-item')
+          .filter((b) => b.attributes('aria-checked') === 'true')
+          .map((b) => b.text())
+      expect(checked()).toEqual(['Collapse all'])
+      await layout(wrapper, 'Expand all')
+      expect(checked()).toEqual(['Expand all'])
+      await wrapper.find('.playlist-col-header').trigger('click')
+      expect(checked()).toEqual([])
+    })
+
+    // A header click leaves the even layout. The other columns keep their fitted 84px, so
+    // one click never reflows the table. The clicked one showed initials, so it opens.
+    it('switches to per-column control when a header is clicked after a fit', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const wrapper = mountWorkspace()
+      setBodyWidth(wrapper, 600)
+      await layout(wrapper, 'Fit to screen')
+      await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
+      expect(template(wrapper)).toContain('480px) 140px 84px 84px 84px 1fr')
+      await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
+      expect(template(wrapper)).toContain('480px) 48px 84px 84px 84px 1fr')
+      // A playlist added in Custom mode arrives collapsed.
+      mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists, makePlaylist(5, 'PL5', [])]
+      await flushPromises()
+      expect(template(wrapper)).toContain('480px) 48px 84px 84px 84px 48px 1fr')
+    })
+
+    it('heads a fitted column with its name only when it is wide enough', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Road Trip', [])]
+      const wrapper = mountWorkspace()
+      setBodyWidth(wrapper, 1400)
+      await layout(wrapper, 'Fit to screen')
+      expect(wrapper.find('.playlist-col-header__name').exists()).toBe(true)
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      setBodyWidth(wrapper, 600)
+      await layout(wrapper, 'Fit to screen')
+      expect(wrapper.find('.playlist-col-header__name').exists()).toBe(false)
+    })
+
+    it('adds a picked track column after Track, in its fixed order', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      const option = (label: string) =>
+        wrapper.findAll('.column-picker__option').find((o) => o.text() === label)!.find('input')
+      await option('Length').trigger('change')
+      await option('Artist').trigger('change')
+      expect(template(wrapper)).toContain('480px) 160px 64px 48px')
+      const heads = wrapper.findAll('.track-col-header').map((h) => h.text())
+      expect(heads).toEqual(['Artist', 'Length'])
+      await option('Artist').trigger('change')
+      expect(template(wrapper)).toContain('480px) 64px 48px')
+    })
+
+    it('sorts by a track column on header click, and reverses on a second click', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      mockWorkspaceStore.trackList = [
+        makeTrack('t1', 'One', 'Bravo'),
+        makeTrack('t2', 'Two', 'Alpha'),
+        makeTrack('t3', 'Three', 'Charlie'),
+      ]
+      const wrapper = mountWorkspace()
+      await wrapper
+        .findAll('.column-picker__option')
+        .find((o) => o.text() === 'Artist')!
+        .find('input')
+        .trigger('change')
+      const titles = () => wrapper.findAll('.track-row__title').map((n) => n.text())
+      await wrapper.get('.track-col-header__sort').trigger('click')
+      expect(titles()).toEqual(['Two', 'One', 'Three'])
+      expect(wrapper.get('.track-col-header').attributes('aria-sort')).toBe('ascending')
+      await wrapper.get('.track-col-header__sort').trigger('click')
+      expect(titles()).toEqual(['Three', 'One', 'Two'])
+      expect(wrapper.get('.track-col-header').attributes('aria-sort')).toBe('descending')
+    })
+
+    it('resizes a track column by dragging its edge, within limits', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      await wrapper
+        .findAll('.column-picker__option')
+        .find((o) => o.text() === 'Artist')!
+        .find('input')
+        .trigger('change')
+      const handle = wrapper.get('.track-col-header__resize').element
+      handle.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 500, bubbles: true }))
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 540 }))
+      await wrapper.vm.$nextTick()
+      expect(template(wrapper)).toContain('480px) 200px 48px')
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 0 }))
+      await wrapper.vm.$nextTick()
+      expect(template(wrapper)).toContain('480px) 48px 48px')
+      window.dispatchEvent(new MouseEvent('pointerup', { clientX: 0 }))
+    })
+
+    // 750 less index, track, closing line and a 160px Artist column leaves 328: 82px each.
+    it('counts picked track columns when fitting to screen', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const wrapper = mountWorkspace()
+      await wrapper
+        .findAll('.column-picker__option')
+        .find((o) => o.text() === 'Artist')!
+        .find('input')
+        .trigger('change')
+      setBodyWidth(wrapper, 750)
+      await layout(wrapper, 'Fit to screen')
+      expect(template(wrapper)).toContain('160px 82px 82px 82px 82px 1fr')
+    })
+
+    it('collapses an open column when its header is clicked again', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      await wrapper.find('.playlist-col-header').trigger('click')
+      await wrapper.find('.playlist-col-header').trigger('click')
+      expect(template(wrapper)).toContain('480px) 48px')
+      expect(template(wrapper)).not.toContain('140px')
+    })
+
     // A 1fr track column swallowed every spare pixel, so a workspace with two playlists put
-    // a wide empty gap between the track text and the first checkbox. Fixed columns plus a
-    // trailing track park the slack past the last playlist instead, and keep a checkbox in
-    // the same place whatever the playlist count.
+    // a wide empty gap between the track text and the first checkbox. A capped track column
+    // plus a trailing track park the slack past the last playlist instead.
     it('parks leftover width past the last playlist column', () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
       const wrapper = mountWorkspace()
-      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 140px 140px 1fr')
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 48px 48px 1fr')
     })
 
-    it('gives every playlist the same width regardless of how many there are', () => {
-      mockWorkspaceStore.playlists = Array.from({ length: 5 }, (_, i) =>
-        makePlaylist(i + 1, `PL${i + 1}`, []),
-      )
+    it('keeps the trailing track when columns are expanded', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
       const wrapper = mountWorkspace()
-      expect(template(wrapper)).toContain('140px 140px 140px 140px 140px 1fr')
+      await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
+      expect(template(wrapper)).toContain('60px minmax(200px, 480px) 140px 48px 1fr')
     })
 
     it('still ends in a trailing track when the workspace holds no playlists', () => {
@@ -548,6 +767,8 @@ describe('WorkspaceView', () => {
       expect(template(wrapper)).toContain('60px minmax(200px, 480px) 1fr')
     })
   })
+
+  // ─── Save timestamp (W1-G) ─────────────────────────────────────────────────
 
   describe('save timestamp', () => {
     it('shows a saved timestamp after a successful save', async () => {
@@ -765,40 +986,37 @@ describe('WorkspaceView', () => {
   // ─── Add content flows (W1-H) ──────────────────────────────────────────────
 
   describe('add content flows', () => {
-    // One control-bar button now opens AddContentModal, and the card chosen there decides
-    // which picker follows. Every flow therefore resolves two modals: call 0 is the card
-    // grid, call 1 is the picker whose props these tests assert on.
+    // The control bar's Add menu lists every way in. Each entry opens its picker or prompt
+    // directly, so every flow resolves one modal: call 0, whose props these tests assert on.
+    type AddChoice = 'tracks' | 'playlist' | 'new'
+    const ADD_LABELS: Record<AddChoice, string> = {
+      tracks: 'Tracks from library',
+      playlist: 'Playlists from library',
+      new: 'New playlist',
+    }
     async function chooseAdd(
       wrapper: ReturnType<typeof mountWorkspace>,
-      choice: AddContentChoice,
+      choice: AddChoice,
       pickerResult: unknown = null,
     ) {
-      mockModalOpen.mockResolvedValueOnce(choice).mockResolvedValueOnce(pickerResult)
-      await wrapper.find('.workspace__add-btn').trigger('click')
+      mockModalOpen.mockResolvedValueOnce(pickerResult)
+      const entry = wrapper
+        .findAll('.workspace__add-menu .menu-item')
+        .find((b) => b.text() === ADD_LABELS[choice])!
+      await entry.trigger('click')
       await flushPromises()
     }
 
-    it('opens the add-content modal from the control bar', async () => {
+    it('lists every way to add in one menu', () => {
       const wrapper = mountWorkspace()
-      await wrapper.find('.workspace__add-btn').trigger('click')
-      const [component] = mockModalOpen.mock.calls[0] as [unknown]
-      expect(component).toBe(AddContentModal)
-    })
-
-    it('opens no picker when the add-content modal is dismissed', async () => {
-      const wrapper = mountWorkspace()
-      await chooseAdd(wrapper, 'tracks' as AddContentChoice)
-      mockModalOpen.mockClear()
-      mockModalOpen.mockResolvedValueOnce(null)
-      await wrapper.find('.workspace__add-btn').trigger('click')
-      await flushPromises()
-      expect(mockModalOpen).toHaveBeenCalledTimes(1)
+      const labels = wrapper.findAll('.workspace__add-menu .menu-item').map((b) => b.text())
+      expect(labels).toEqual(['Tracks from library', 'Playlists from library', 'New playlist'])
     })
 
     it('opens PlaylistSelectModal in export mode and adds each chosen playlist', async () => {
       const wrapper = mountWorkspace()
       await chooseAdd(wrapper, 'playlist', [4, 7])
-      const [, props] = mockModalOpen.mock.calls[1] as [unknown, { mode: string }]
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { mode: string }]
       expect(props.mode).toBe('export')
       expect(mockWorkspaceStore.addPlaylist).toHaveBeenCalledWith(4)
       expect(mockWorkspaceStore.addPlaylist).toHaveBeenCalledWith(7)
@@ -808,7 +1026,7 @@ describe('WorkspaceView', () => {
       mockWorkspaceStore.tracks = new Map([['t1', makeTrack('t1', 'Song A', 'Artist 1')]])
       const wrapper = mountWorkspace()
       await chooseAdd(wrapper, 'tracks')
-      const [, props] = mockModalOpen.mock.calls[1] as [
+      const [, props] = mockModalOpen.mock.calls[0] as [
         unknown,
         { excludeIds: string[]; confirmLabel: string; confirmVariant: string },
       ]
@@ -861,10 +1079,11 @@ describe('WorkspaceView', () => {
   // Migrated from PlaylistColumnHeader.spec.ts when D1 moved menu construction here.
 
   describe('playlist column menu', () => {
-    it('opens from the ellipsis button', async () => {
+    it('opens from the ellipsis button of an expanded column', async () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'PL1', ['t1'])]
       const wrapper = mountWorkspace()
-      await openColumnMenu(wrapper)
+      await wrapper.find('.playlist-col-header').trigger('click')
+      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
       expect(mockContextMenuShow).toHaveBeenCalledOnce()
     })
 

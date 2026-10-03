@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import PlaylistColumnHeader from '@/components/workspace/PlaylistColumnHeader.vue'
 import type { WorkspacePlaylist } from '@/types/models'
 
@@ -13,9 +13,9 @@ function makePlaylist(id: number, name: string, trackIDs: string[] = []): Worksp
   return { id, name, trackIDs, trackIdSet: new Set(trackIDs), origin: 'library' }
 }
 
-function mountHeader(playlist: WorkspacePlaylist) {
+function mountHeader(playlist: WorkspacePlaylist, expanded = true) {
   return mount(PlaylistColumnHeader, {
-    props: { playlist },
+    props: { playlist, expanded },
   })
 }
 
@@ -119,6 +119,195 @@ describe('PlaylistColumnHeader', () => {
     it('still reports the count itself', () => {
       const wrapper = mountHeader(makePlaylist(1, 'Morning Mix', []))
       expect(wrapper.find('.playlist-col-header__count').text()).toContain('0 tracks')
+    })
+  })
+
+  // ─── Expand toggle ─────────────────────────────────────────────────────────
+
+  describe('expand toggle', () => {
+    it('emits toggleExpand with the playlist id on a header click', async () => {
+      const wrapper = mountHeader(makePlaylist(7, 'PL'), false)
+      await wrapper.find('.playlist-col-header').trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toEqual([[7]])
+    })
+
+    it('emits toggleExpand once when the toggle button itself is clicked', async () => {
+      const wrapper = mountHeader(makePlaylist(7, 'PL'), false)
+      await wrapper.find('.playlist-col-header__toggle').trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toEqual([[7]])
+    })
+
+    it('does not toggle when the ellipsis button is clicked', async () => {
+      const wrapper = mountHeader(makePlaylist(7, 'PL'))
+      await wrapper.find('.playlist-col-header__menu-btn').trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toBeUndefined()
+    })
+
+    it('reports its state through aria-expanded', () => {
+      expect(
+        mountHeader(makePlaylist(1, 'PL'), true).find('.playlist-col-header__toggle').attributes('aria-expanded'),
+      ).toBe('true')
+      expect(
+        mountHeader(makePlaylist(1, 'PL'), false).find('.playlist-col-header__toggle').attributes('aria-expanded'),
+      ).toBe('false')
+    })
+  })
+
+  // ─── Collapsed ─────────────────────────────────────────────────────────────
+  // A collapsed column is one square cell wide, so only initials fit.
+
+  describe('collapsed', () => {
+    it('shows initials in place of the name, count and menu button', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Road Trip Mix', ['t1']), false)
+      expect(wrapper.find('.playlist-col-header__initials').text()).toContain('RT')
+      expect(wrapper.find('.playlist-col-header__name').exists()).toBe(false)
+      expect(wrapper.find('.playlist-col-header__count').exists()).toBe(false)
+      expect(wrapper.find('.playlist-col-header__menu-btn').exists()).toBe(false)
+    })
+
+    it('keeps the full name as a tooltip and for screen readers', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Road Trip Mix', ['t1']), false)
+      const label = wrapper.find('.playlist-col-header__initials')
+      expect(label.attributes('title')).toBe('Road Trip Mix')
+      expect(label.find('.sr-only').text()).toBe('Road Trip Mix')
+    })
+
+    it('still flags an empty playlist, in color and in words', () => {
+      const wrapper = mountHeader(makePlaylist(1, 'Morning Mix', []), false)
+      const label = wrapper.find('.playlist-col-header__initials')
+      expect(label.classes()).toContain('playlist-col-header__initials--empty')
+      expect(label.find('.sr-only').text()).toBe('Morning Mix, empty')
+    })
+
+    // jsdom lays nothing out, so widths are stubbed on the prototype before mount.
+    it('fades only initials wider than the column', async () => {
+      const widths = (scroll: number) => {
+        Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => scroll })
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 38 })
+      }
+      try {
+        widths(35)
+        const fits = mountHeader(makePlaylist(1, 'Road Trip Mix'), false)
+        await flushPromises()
+        expect(fits.find('.playlist-col-header__initials--overflow').exists()).toBe(false)
+        widths(178)
+        const long = mountHeader(makePlaylist(2, 'Road Trip Mix'), false)
+        await flushPromises()
+        expect(long.find('.playlist-col-header__initials--overflow').exists()).toBe(true)
+      } finally {
+        delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth
+        delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth
+      }
+    })
+
+    it('still emits requestMenu on right-click', async () => {
+      const wrapper = mountHeader(makePlaylist(7, 'PL'), false)
+      await wrapper.find('.playlist-col-header').trigger('contextmenu')
+      expect(wrapper.emitted('requestMenu')).toBeDefined()
+    })
+  })
+
+  // ─── Drag to reorder ───────────────────────────────────────────────────────
+  // The header hops one column each time the pointer passes a neighbour's midpoint.
+
+  describe('drag to reorder', () => {
+    // Mounts the header between two fake neighbour headers, each 48px wide: prev at
+    // 0-48, this one at 48-96, next at 96-144. jsdom lays nothing out, so rects are stubbed.
+    function mountBetweenNeighbours() {
+      const row = document.createElement('div')
+      document.body.appendChild(row)
+      const wrapper = mount(PlaylistColumnHeader, {
+        props: { playlist: makePlaylist(7, 'PL'), expanded: false },
+        attachTo: row,
+      })
+      // The template's leading comments make the root a fragment, so find the header.
+      const header = wrapper.find('.playlist-col-header')
+      const parent = header.element.parentElement!
+      parent.insertBefore(neighbour(0), header.element)
+      parent.appendChild(neighbour(96))
+      return { wrapper, header }
+    }
+
+    function neighbour(left: number): HTMLElement {
+      const el = document.createElement('div')
+      el.className = 'playlist-col-header'
+      el.getBoundingClientRect = () => ({ left, width: 48 }) as DOMRect
+      return el
+    }
+
+    // trigger() cannot set a MouseEvent's button, so the press is dispatched by hand.
+    function press(el: Element, button: number): void {
+      el.dispatchEvent(new MouseEvent('pointerdown', { button, clientX: 72, bubbles: true }))
+    }
+
+    function pointer(type: string, clientX: number): void {
+      window.dispatchEvent(new MouseEvent(type, { clientX }))
+    }
+
+    it('moves right once the pointer passes the next header’s midpoint', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 0)
+      pointer('pointermove', 110)
+      expect(wrapper.emitted('move')).toBeUndefined()
+      pointer('pointermove', 125)
+      expect(wrapper.emitted('move')).toEqual([[7, 1]])
+      pointer('pointerup', 125)
+      expect(wrapper.emitted('dragEnd')).toEqual([[7]])
+      wrapper.unmount()
+    })
+
+    it('moves left once the pointer passes the previous header’s midpoint', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 0)
+      pointer('pointermove', 20)
+      expect(wrapper.emitted('move')).toEqual([[7, -1]])
+      pointer('pointerup', 20)
+      wrapper.unmount()
+    })
+
+    it('treats a press that barely moves as a click', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 0)
+      pointer('pointermove', 74)
+      pointer('pointerup', 74)
+      await header.trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toEqual([[7]])
+      expect(wrapper.emitted('dragEnd')).toBeUndefined()
+      wrapper.unmount()
+    })
+
+    it('does not toggle the column on the click that ends a drag', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 0)
+      pointer('pointermove', 80)
+      pointer('pointerup', 80)
+      await header.trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toBeUndefined()
+      await header.trigger('click')
+      expect(wrapper.emitted('toggleExpand')).toEqual([[7]])
+      wrapper.unmount()
+    })
+
+    it('shows a chevron on each side it can move to, only while dragging', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      expect(header.find('.playlist-col-header__chevron').exists()).toBe(false)
+      press(header.element, 0)
+      pointer('pointermove', 80)
+      await wrapper.vm.$nextTick()
+      expect(header.find('.playlist-col-header__chevron--left').exists()).toBe(true)
+      expect(header.find('.playlist-col-header__chevron--right').exists()).toBe(true)
+      pointer('pointerup', 80)
+      await wrapper.vm.$nextTick()
+      expect(header.find('.playlist-col-header__chevron').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('ignores a right-button press', async () => {
+      const { wrapper, header } = mountBetweenNeighbours()
+      press(header.element, 2)
+      pointer('pointermove', 125)
+      expect(wrapper.emitted('move')).toBeUndefined()
+      wrapper.unmount()
     })
   })
 })

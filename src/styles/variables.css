@@ -1,4 +1,8 @@
 :root {
+  /* The app is dark only. This tells the browser, so native scrollbars and form controls
+     draw dark too instead of light strips against the page. */
+  color-scheme: dark;
+
   /* ── Raw Palette ── */
   --gray-900: #212121;
   --gray-850: #272727;
@@ -41,8 +45,11 @@
 
   /* ── Interactive States ── */
   --color-row-hover: var(--gray-600);
-  --color-row-selected: var(--gray-500);
-  --color-cell-checkbox-hover: var(--gray-500);
+  /* Workspace track rows: hover barely lifts off the background, so the accent tiles
+     stay the loudest thing on screen. Selection is the clearer step up. */
+  --color-track-row-hover: var(--gray-850);
+  --color-row-selected: var(--gray-600);
+  --color-cell-hover-edge: color-mix(in srgb, var(--gray-400) 60%, transparent);
 
   --color-focus-ring: var(--green-400);
 

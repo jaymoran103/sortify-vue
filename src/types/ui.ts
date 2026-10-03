@@ -16,6 +16,8 @@ export interface MenuItem {
   label: string
   action: () => void
   disabled?: boolean
+  // Marks the current choice in a set, such as the active layout. MenuDropdown shows it.
+  checked?: boolean
 }
 
 export interface MenuDivider {
@@ -30,9 +32,6 @@ export interface ModalConfig {
   props?: Record<string, unknown>
   className?: string
 }
-
-/** What AddContentModal resolves with — the card the user picked, not the work itself */
-export type AddContentChoice = 'tracks' | 'playlist' | 'new'
 
 /** What LeaveWorkspaceModal resolves with; null (dismissed) means stay */
 export type LeaveChoice = 'save' | 'leave'
