@@ -9,7 +9,7 @@ const props = withDefaults(
     index: number
     playlists: WorkspacePlaylist[]
     selected: boolean
-    // The playlist column under the pointer, from any row. Its cells take the row hover colour.
+    // The playlist column under the pointer, from any row. Its cells take the row hover color.
     hoveredPlaylistId?: number | string | null
     // Optional track columns shown after the Track column. Artist or album shown here
     // drops out of the line under the title.
@@ -253,7 +253,7 @@ function toggle(playlistId: number | string): void {
   align-self: stretch;
 }
 
-/* A hovered column lifts like a hovered row. A selected row keeps its own colour, and a
+/* A hovered column lifts like a hovered row. A selected row keeps its own color, and a
    checked cell stays accent. */
 .track-row:not(.track-row--selected) .track-row__checkbox--column-hover:not(.track-row__checkbox--checked) {
   background: var(--color-track-row-hover);

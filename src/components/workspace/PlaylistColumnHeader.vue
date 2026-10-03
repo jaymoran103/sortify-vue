@@ -133,7 +133,7 @@ function onMenu(event: MouseEvent): void {
          click bubbles to the header, which does the toggling. -->
     <button class="playlist-col-header__toggle" type="button" :aria-expanded="expanded">
       <!-- Collapsed: initials, with the full name as tooltip and for screen readers. An empty
-           playlist keeps its warning here too, in colour and in words. -->
+           playlist keeps its warning here too, in color and in words. -->
       <span
         v-if="!expanded"
         ref="initialsEl"
@@ -163,7 +163,7 @@ function onMenu(event: MouseEvent): void {
           :class="{ 'playlist-col-header__count--empty': playlist.trackIDs.length === 0 }"
         >
           <!-- Not aria-hidden: the glyph is what carries the warning to a screen reader,
-               since colour alone does not. -->
+               since color alone does not. -->
           <span v-if="playlist.trackIDs.length === 0">⚠</span>
           {{ playlist.trackIDs.length }} track{{ playlist.trackIDs.length === 1 ? '' : 's' }}
         </span>

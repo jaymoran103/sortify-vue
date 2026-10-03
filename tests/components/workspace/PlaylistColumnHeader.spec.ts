@@ -172,7 +172,7 @@ describe('PlaylistColumnHeader', () => {
       expect(label.find('.sr-only').text()).toBe('Road Trip Mix')
     })
 
-    it('still flags an empty playlist, in colour and in words', () => {
+    it('still flags an empty playlist, in color and in words', () => {
       const wrapper = mountHeader(makePlaylist(1, 'Morning Mix', []), false)
       const label = wrapper.find('.playlist-col-header__initials')
       expect(label.classes()).toContain('playlist-col-header__initials--empty')
