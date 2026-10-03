@@ -210,10 +210,10 @@ function onMenu(event: MouseEvent): void {
   min-width: 0;
   cursor: pointer;
   transition: background 0.1s;
-  /* Tall enough for name over count in both states, so opening a column does not push
-     the rows down. */
+  /* Tall enough for the tallest state, a three-line name over its count. Then no change of
+     layout, rename or fitted width ever moves the header's height and shifts the rows. */
   min-height: calc(
-    (var(--font-size-sm) + var(--font-size-xs)) * var(--line-height-normal) + 2 * var(--space-2)
+    (3 * var(--font-size-sm) + var(--font-size-xs)) * var(--line-height-normal) + 2 * var(--space-2)
   );
 }
 
@@ -293,7 +293,13 @@ function onMenu(event: MouseEvent): void {
 }
 
 /* A bare button: it exists for focus and Enter/Space, not for looks. */
+/* The header itself no longer clips, so its drag chevrons can stick out. The toggle clips
+   instead. Relative positioning makes it the box for the screen-reader name too, so long
+   initials and that name can never widen the table. Safari lays a button's flex children
+   out wider than the button, so the clip has to sit here. */
 .playlist-col-header__toggle {
+  position: relative;
+  overflow: hidden;
   flex: 1;
   min-width: 0;
   display: flex;
