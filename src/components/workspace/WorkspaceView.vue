@@ -192,11 +192,12 @@ const rowSelection = useListSelection<Track>(
 // Row height in px. The virtualizer sizes rows with it, and every row is exactly this tall.
 const ROW_HEIGHT = 48
 // A collapsed playlist column is as wide as a row is tall, so each cell is a square tile.
-const COLLAPSED_COLUMN_WIDTH = `${ROW_HEIGHT}px`
-// An expanded column is wide enough to read its header. Each header toggles its own
-// column, and any number can be open at once.
+const COLLAPSED_COLUMN_PX = ROW_HEIGHT
+// An expanded column is wide enough to read its header. It is also Fit's widest.
 const EXPANDED_COLUMN_PX = 140
-const EXPANDED_COLUMN_WIDTH = `${EXPANDED_COLUMN_PX}px`
+// A column at least this wide heads itself with the full name. Narrower ones use initials,
+// since a name squeezed into less wraps mid-word.
+const NAMED_HEADER_MIN_PX = 120
 const INDEX_COLUMN_PX = 60
 const TRACK_COLUMN_MIN_PX = 200
 // Optional track columns picked from the control bar. Page state: none show after a reload.
@@ -215,35 +216,91 @@ function resizeTrackColumn(key: TrackColumnKey, widthPx: number): void {
 function toggleTrackColumn(key: TrackColumnKey): void {
   if (!shownTrackColumnKeys.value.delete(key)) shownTrackColumnKeys.value.add(key)
 }
-const expandedIds = ref(new Set<PlaylistId>())
+// How playlist columns are sized. Every mode but Custom gives all columns one width:
+//   collapsed  each one tile wide
+//   expanded   each wide enough to read its header
+//   fit        the free width split evenly, between collapsed and expanded
+//   custom     each column sized on its own, set by header clicks
+// A playlist added later takes the mode's width, so the set stays uniform.
+type ColumnLayout = 'collapsed' | 'expanded' | 'fit' | 'custom'
+const layoutMode = ref<ColumnLayout>('collapsed')
+// Each column's width in Custom mode. Unused in the other modes. Missing means collapsed.
+const customWidths = ref(new Map<PlaylistId, number>())
+
+function setLayout(mode: Exclude<ColumnLayout, 'custom'>): void {
+  if (mode === 'fit') measureBody()
+  layoutMode.value = mode
+  customWidths.value = new Map()
+}
+
+// A header click opens or closes just that column, so the layout becomes Custom. Every
+// other column keeps the width it had, so one click never reflows the rest of the table.
+// A column showing its name collapses, and one showing initials opens.
 function toggleColumn(playlistId: PlaylistId): void {
-  if (!expandedIds.value.delete(playlistId)) expandedIds.value.add(playlistId)
+  if (layoutMode.value !== 'custom') {
+    customWidths.value = new Map(workspaceStore.playlists.map((pl) => [pl.id, columnWidth(pl.id)]))
+    layoutMode.value = 'custom'
+  }
+  const named = columnWidth(playlistId) >= NAMED_HEADER_MIN_PX
+  customWidths.value.set(playlistId, named ? COLLAPSED_COLUMN_PX : EXPANDED_COLUMN_PX)
 }
-function expandAllColumns(): void {
-  expandedIds.value = new Set(workspaceStore.playlists.map((pl) => pl.id))
+
+// The table's scroll area. The virtualizer scrolls it, and Fit measures it.
+const scrollContainer = ref<HTMLElement | null>(null)
+// Its width, kept live so Fit follows window resizes, the minimap widening, and track
+// columns coming and going. Null until measured.
+const bodyWidth = ref<number | null>(null)
+function measureBody(): void {
+  if (scrollContainer.value) bodyWidth.value = scrollContainer.value.clientWidth
 }
-function collapseAllColumns(): void {
-  expandedIds.value = new Set()
-}
-// Open as many columns as fit the visible width, left to right, with the track column at
-// its minimum, so the table needs no horizontal scroll. A one-off action: it does not
-// re-run when the window resizes.
-function fitColumnsToScreen(): void {
-  const playlists = workspaceStore.playlists
-  // The line closing the last column takes the trailing track's last 2px.
+let bodyObserver: ResizeObserver | null = null
+watch(
+  () => scrollContainer.value,
+  (el) => {
+    bodyObserver?.disconnect()
+    bodyObserver = null
+    if (!el) return
+    measureBody()
+    if (typeof ResizeObserver === 'undefined') return
+    bodyObserver = new ResizeObserver(measureBody)
+    bodyObserver.observe(el)
+  },
+)
+onBeforeUnmount(() => bodyObserver?.disconnect())
+
+// Fit's one width for every playlist column: the room left with the track column at its
+// minimum, split evenly. Whole pixels, so every column matches; the remainder goes to the
+// track column. It never goes past expanded, where the trailing space takes the rest, or
+// under collapsed, where the table scrolls. 2px is the line closing the last column.
+const fitColumnPx = computed(() => {
+  const count = workspaceStore.playlists.length
+  if (count === 0 || bodyWidth.value === null) return EXPANDED_COLUMN_PX
   const available =
-    (scrollContainer.value?.clientWidth ?? 0) - INDEX_COLUMN_PX - TRACK_COLUMN_MIN_PX - 2 -
+    bodyWidth.value - INDEX_COLUMN_PX - TRACK_COLUMN_MIN_PX - 2 -
     shownTrackColumns.value.reduce((sum, col) => sum + col.widthPx, 0)
-  const spare = available - playlists.length * ROW_HEIGHT
-  const count = Math.max(0, Math.min(playlists.length, Math.floor(spare / (EXPANDED_COLUMN_PX - ROW_HEIGHT))))
-  expandedIds.value = new Set(playlists.slice(0, count).map((pl) => pl.id))
+  const even = Math.floor(available / count)
+  return Math.max(COLLAPSED_COLUMN_PX, Math.min(EXPANDED_COLUMN_PX, even))
+})
+
+function columnWidth(playlistId: PlaylistId): number {
+  switch (layoutMode.value) {
+    case 'collapsed':
+      return COLLAPSED_COLUMN_PX
+    case 'expanded':
+      return EXPANDED_COLUMN_PX
+    case 'fit':
+      return fitColumnPx.value
+    case 'custom':
+      return customWidths.value.get(playlistId) ?? COLLAPSED_COLUMN_PX
+  }
 }
-// The Layout menu in the control bar. Each entry sets every playlist column in one go.
-const layoutEntries: MenuEntry[] = [
-  { label: 'Collapse all', action: collapseAllColumns },
-  { label: 'Expand all', action: expandAllColumns },
-  { label: 'Fit to screen', action: fitColumnsToScreen },
-]
+
+// The Layout menu in the control bar. The current mode is checked. Custom checks none.
+const layoutEntries = computed<MenuEntry[]>(() => [
+  { label: 'Collapse all', action: () => setLayout('collapsed'), checked: layoutMode.value === 'collapsed' },
+  { label: 'Expand all', action: () => setLayout('expanded'), checked: layoutMode.value === 'expanded' },
+  { label: 'Fit to screen', action: () => setLayout('fit'), checked: layoutMode.value === 'fit' },
+])
 // The playlist column under the pointer. Every row lifts its cell in that column.
 const hoveredPlaylistId = ref<PlaylistId | null>(null)
 // The track column is capped and a trailing 1fr track absorbs the slack past the last
@@ -251,9 +308,7 @@ const hoveredPlaylistId = ref<PlaylistId | null>(null)
 // track holds no element, and it collapses to 0 once the columns overflow and scroll.
 const TRACK_COLUMN_MAX_PX = 480
 const columnTemplate = computed(() => {
-  const playlistCols = workspaceStore.playlists.map((pl) =>
-    expandedIds.value.has(pl.id) ? EXPANDED_COLUMN_WIDTH : COLLAPSED_COLUMN_WIDTH,
-  )
+  const playlistCols = workspaceStore.playlists.map((pl) => `${columnWidth(pl.id)}px`)
   return [
     `${INDEX_COLUMN_PX}px`,
     `minmax(${TRACK_COLUMN_MIN_PX}px, ${TRACK_COLUMN_MAX_PX}px)`,
@@ -265,7 +320,6 @@ const columnTemplate = computed(() => {
 
 // Configure virtualizer: use displayTracks count, scroll container, and estimated row height.
 // Set overscan to 10 rows for now to balance performance and smoothness during scrolling.
-const scrollContainer = ref<HTMLElement | null>(null)
 const virtualizer = useVirtualizer(
   computed(() => ({
     count: displayTracks.value.length,
@@ -823,7 +877,7 @@ useKeyboardShortcuts({
                 v-for="pl in workspaceStore.playlists"
                 :key="pl.id"
                 :playlist="pl"
-                :expanded="expandedIds.has(pl.id)"
+                :expanded="columnWidth(pl.id) >= NAMED_HEADER_MIN_PX"
                 @request-menu="buildColumnMenu"
                 @toggle-expand="toggleColumn"
                 @move="workspaceStore.movePlaylist"

@@ -530,6 +530,21 @@ describe('WorkspaceView', () => {
       return wrapper.get('.workspace__table').attributes('style') ?? ''
     }
 
+    // jsdom lays nothing out, so the scroll area's width is stubbed. Fit reads it on click.
+    function setBodyWidth(wrapper: ReturnType<typeof mountWorkspace>, px: number): void {
+      Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', {
+        value: px,
+        configurable: true,
+      })
+    }
+
+    async function layout(wrapper: ReturnType<typeof mountWorkspace>, label: string): Promise<void> {
+      await wrapper
+        .findAll('.workspace__layout-menu .menu-item')
+        .find((b) => b.text() === label)!
+        .trigger('click')
+    }
+
     it('gives every playlist a square column as wide as a row is tall', () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
       const wrapper = mountWorkspace()
@@ -562,25 +577,95 @@ describe('WorkspaceView', () => {
       expect(template(wrapper)).toContain('480px) 48px 48px')
     })
 
-    // 60 index + 200 track + 4 × 48 collapsed = 452. 600 leaves 148 spare: one column
-    // opens (+92), a second would need 184.
-    it('opens as many columns as fit the width with Fit to screen, left to right', async () => {
+    // Fit splits the room left after index (60), track at its minimum (200) and the
+    // closing line (2) evenly across the playlists. 600 wide leaves 338: 84px each for four.
+    it('gives every column one even width with Fit to screen', async () => {
       mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
       const wrapper = mountWorkspace()
-      Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 600 })
-      const fit = wrapper.findAll('.workspace__layout-menu .menu-item').find((b) => b.text() === 'Fit to screen')!
-      await fit.trigger('click')
-      expect(template(wrapper)).toContain('480px) 140px 48px 48px 48px')
+      setBodyWidth(wrapper, 600)
+      await layout(wrapper, 'Fit to screen')
+      expect(template(wrapper)).toContain('480px) 84px 84px 84px 84px 1fr')
     })
 
-    it('opens nothing with Fit to screen when even collapsed columns overflow', async () => {
+    it('never fits narrower than collapsed or wider than expanded', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const narrow = mountWorkspace()
+      setBodyWidth(narrow, 300)
+      await layout(narrow, 'Fit to screen')
+      expect(template(narrow)).toContain('480px) 48px 48px 48px 48px 1fr')
+
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
+      const wide = mountWorkspace()
+      setBodyWidth(wide, 1400)
+      await layout(wide, 'Fit to screen')
+      expect(template(wide)).toContain('480px) 140px 140px 1fr')
+    })
+
+    // 338 across six is 56px each. A seventh would get 48.
+    it('resizes every column evenly when a playlist joins a fitted workspace', async () => {
       mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
       const wrapper = mountWorkspace()
+      setBodyWidth(wrapper, 600)
+      await layout(wrapper, 'Fit to screen')
+      mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists, makePlaylist(5, 'PL5', []), makePlaylist(6, 'PL6', [])]
+      await flushPromises()
+      expect(template(wrapper)).toContain('480px) 56px 56px 56px 56px 56px 56px 1fr')
+      mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists, makePlaylist(7, 'PL7', [])]
+      await flushPromises()
+      expect(template(wrapper)).toContain('480px) 48px 48px 48px 48px 48px 48px 48px 1fr')
+    })
+
+    it('gives a new playlist the width of the chosen layout', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      await layout(wrapper, 'Expand all')
+      mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists, makePlaylist(2, 'B', [])]
+      await flushPromises()
+      expect(template(wrapper)).toContain('480px) 140px 140px 1fr')
+    })
+
+    it('checks the chosen layout in the Layout menu, and none once a header is clicked', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'A', [])]
+      const wrapper = mountWorkspace()
+      const checked = () =>
+        wrapper
+          .findAll('.workspace__layout-menu .menu-item')
+          .filter((b) => b.attributes('aria-checked') === 'true')
+          .map((b) => b.text())
+      expect(checked()).toEqual(['Collapse all'])
+      await layout(wrapper, 'Expand all')
+      expect(checked()).toEqual(['Expand all'])
       await wrapper.find('.playlist-col-header').trigger('click')
-      Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 300 })
-      const fit = wrapper.findAll('.workspace__layout-menu .menu-item').find((b) => b.text() === 'Fit to screen')!
-      await fit.trigger('click')
-      expect(template(wrapper)).toContain('480px) 48px 48px 48px 48px')
+      expect(checked()).toEqual([])
+    })
+
+    // A header click leaves the even layout. The other columns keep their fitted 84px, so
+    // one click never reflows the table. The clicked one showed initials, so it opens.
+    it('switches to per-column control when a header is clicked after a fit', async () => {
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      const wrapper = mountWorkspace()
+      setBodyWidth(wrapper, 600)
+      await layout(wrapper, 'Fit to screen')
+      await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
+      expect(template(wrapper)).toContain('480px) 140px 84px 84px 84px 1fr')
+      await wrapper.findAll('.playlist-col-header')[0]!.trigger('click')
+      expect(template(wrapper)).toContain('480px) 48px 84px 84px 84px 1fr')
+      // A playlist added in Custom mode arrives collapsed.
+      mockWorkspaceStore.playlists = [...mockWorkspaceStore.playlists, makePlaylist(5, 'PL5', [])]
+      await flushPromises()
+      expect(template(wrapper)).toContain('480px) 48px 84px 84px 84px 48px 1fr')
+    })
+
+    it('heads a fitted column with its name only when it is wide enough', async () => {
+      mockWorkspaceStore.playlists = [makePlaylist(1, 'Road Trip', [])]
+      const wrapper = mountWorkspace()
+      setBodyWidth(wrapper, 1400)
+      await layout(wrapper, 'Fit to screen')
+      expect(wrapper.find('.playlist-col-header__name').exists()).toBe(true)
+      mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
+      setBodyWidth(wrapper, 600)
+      await layout(wrapper, 'Fit to screen')
+      expect(wrapper.find('.playlist-col-header__name').exists()).toBe(false)
     })
 
     it('adds a picked track column after Track, in its fixed order', async () => {
@@ -638,8 +723,7 @@ describe('WorkspaceView', () => {
       window.dispatchEvent(new MouseEvent('pointerup', { clientX: 0 }))
     })
 
-    // 60 index + 200 track + 160 artist + 2 closing line + 4 × 48 collapsed = 614. 750 leaves
-    // 136 spare: one column opens (+92), a second would need 184.
+    // 750 less index, track, closing line and a 160px Artist column leaves 328: 82px each.
     it('counts picked track columns when fitting to screen', async () => {
       mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
       const wrapper = mountWorkspace()
@@ -648,10 +732,9 @@ describe('WorkspaceView', () => {
         .find((o) => o.text() === 'Artist')!
         .find('input')
         .trigger('change')
-      Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 750 })
-      const fit = wrapper.findAll('.workspace__layout-menu .menu-item').find((b) => b.text() === 'Fit to screen')!
-      await fit.trigger('click')
-      expect(template(wrapper)).toContain('160px 140px 48px 48px 48px')
+      setBodyWidth(wrapper, 750)
+      await layout(wrapper, 'Fit to screen')
+      expect(template(wrapper)).toContain('160px 82px 82px 82px 82px 1fr')
     })
 
     it('collapses an open column when its header is clicked again', async () => {
