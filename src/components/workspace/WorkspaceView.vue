@@ -872,6 +872,7 @@ useKeyboardShortcuts({
           :playlists="workspaceStore.playlists"
           :scroll-el="scrollContainer"
           :row-height="ROW_HEIGHT"
+          :scale-tracks="workspaceStore.trackList.length"
         />
       </div>
     </div>

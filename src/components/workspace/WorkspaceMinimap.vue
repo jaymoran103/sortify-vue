@@ -12,6 +12,9 @@ const props = defineProps<{
   playlists: WorkspacePlaylist[]
   scrollEl: HTMLElement | null
   rowHeight: number
+  // The track count tiles are sized for. Pass the unfiltered total so a search does not
+  // resize them. Defaults to the shown tracks.
+  scaleTracks?: number
 }>()
 
 const MIN_SIDE = 2
@@ -27,9 +30,13 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const height = ref(0)
 
 // Side of one tile. Fit the full height if possible, never wider than MAX_WIDTH overall.
+// Tiles are sized for scaleTracks, every track in the workspace, not just the ones shown.
+// A search then keeps the tile size, so the minimap and the table beside it hold their
+// width. Otherwise a narrow search grows the tiles and can close a fitted column.
 const side = computed(() => {
   const n = Math.max(1, props.playlists.length)
-  const fit = props.tracks.length ? height.value / props.tracks.length : MAX_SIDE
+  const count = Math.max(props.tracks.length, props.scaleTracks ?? 0)
+  const fit = count ? height.value / count : MAX_SIDE
   return Math.max(MIN_SIDE, Math.min(fit, MAX_WIDTH / n, MAX_SIDE))
 })
 const width = computed(() => Math.max(1, props.playlists.length) * side.value)
