@@ -1,4 +1,8 @@
 :root {
+  /* The app is dark only. This tells the browser, so native scrollbars and form controls
+     draw dark too instead of light strips against the page. */
+  color-scheme: dark;
+
   /* ── Raw Palette ── */
   --gray-900: #212121;
   --gray-850: #272727;
