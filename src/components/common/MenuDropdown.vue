@@ -74,7 +74,8 @@ onBeforeUnmount(() => {
           v-else
           class="menu-item"
           type="button"
-          role="menuitem"
+          :role="entry.checked === undefined ? 'menuitem' : 'menuitemradio'"
+          :aria-checked="entry.checked"
           :disabled="entry.disabled"
           @click="pick(entry)"
         >
@@ -109,6 +110,18 @@ onBeforeUnmount(() => {
 
 .menu-dropdown__panel--right {
   right: 0;
+}
+
+/* A choice in a set keeps a slot for its check, so labels line up. Drawn in CSS so the
+   label text stays just the label. */
+.menu-item[role='menuitemradio']::before {
+  content: '';
+  width: 1em;
+  color: var(--color-accent);
+}
+
+.menu-item[aria-checked='true']::before {
+  content: '✓';
 }
 
 .menu-dropdown__divider {

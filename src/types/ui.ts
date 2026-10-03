@@ -16,6 +16,8 @@ export interface MenuItem {
   label: string
   action: () => void
   disabled?: boolean
+  // Marks the current choice in a set, such as the active layout. MenuDropdown shows it.
+  checked?: boolean
 }
 
 export interface MenuDivider {
