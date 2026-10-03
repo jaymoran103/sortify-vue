@@ -20,8 +20,20 @@ withDefaults(
 
 const root = ref<HTMLDetailsElement | null>(null)
 
+// Focus inside the menu goes back to the trigger, so a keyboard user is not dropped to the
+// page. A modal an entry opens then returns focus to the trigger too.
 function close(): void {
-  if (root.value) root.value.open = false
+  const el = root.value
+  if (!el) return
+  const hadFocus = el.contains(document.activeElement) && document.activeElement !== el.firstElementChild
+  el.open = false
+  if (hadFocus) (el.querySelector('summary') as HTMLElement | null)?.focus()
+}
+
+// Tabbing out of the menu closes it, leaving focus where the user tabbed to.
+function onFocusOut(event: FocusEvent): void {
+  const el = root.value
+  if (el?.open && !el.contains(event.relatedTarget as Node | null) && event.relatedTarget) el.open = false
 }
 
 function pick(entry: MenuItem): void {
@@ -48,7 +60,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <details ref="root" class="menu-dropdown dropdown-wrapper">
+  <details ref="root" class="menu-dropdown dropdown-wrapper" @focusout="onFocusOut">
     <summary class="dropdown">{{ label }}</summary>
     <div
       class="menu-dropdown__panel menu-panel"
