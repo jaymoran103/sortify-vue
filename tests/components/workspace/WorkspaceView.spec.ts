@@ -4,11 +4,10 @@ import { createPinia } from 'pinia'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { reactive, nextTick } from 'vue'
 import WorkspaceView from '@/components/workspace/WorkspaceView.vue'
-import AddContentModal from '@/components/workspace/AddContentModal.vue'
 import LeaveWorkspaceModal from '@/components/workspace/LeaveWorkspaceModal.vue'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 import type { Track } from '@/types/models'
-import type { MenuEntry, MenuItem, AddContentChoice, WorkspaceIssue } from '@/types/ui'
+import type { MenuEntry, MenuItem, WorkspaceIssue } from '@/types/ui'
 
 // ─── Mock workspace store ────────────────────────────────────────────────────
 
@@ -556,7 +555,7 @@ describe('WorkspaceView', () => {
       mockWorkspaceStore.playlists = [makePlaylist(1, 'A', []), makePlaylist(2, 'B', [])]
       const wrapper = mountWorkspace()
       const button = (label: string) =>
-        wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === label)!
+        wrapper.findAll('.workspace__layout-menu .menu-item').find((b) => b.text() === label)!
       await button('Expand all').trigger('click')
       expect(template(wrapper)).toContain('480px) 140px 140px')
       await button('Collapse all').trigger('click')
@@ -569,7 +568,7 @@ describe('WorkspaceView', () => {
       mockWorkspaceStore.playlists = Array.from({ length: 4 }, (_, i) => makePlaylist(i + 1, `PL${i + 1}`, []))
       const wrapper = mountWorkspace()
       Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 600 })
-      const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
+      const fit = wrapper.findAll('.workspace__layout-menu .menu-item').find((b) => b.text() === 'Fit to screen')!
       await fit.trigger('click')
       expect(template(wrapper)).toContain('480px) 140px 48px 48px 48px')
     })
@@ -579,7 +578,7 @@ describe('WorkspaceView', () => {
       const wrapper = mountWorkspace()
       await wrapper.find('.playlist-col-header').trigger('click')
       Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 300 })
-      const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
+      const fit = wrapper.findAll('.workspace__layout-menu .menu-item').find((b) => b.text() === 'Fit to screen')!
       await fit.trigger('click')
       expect(template(wrapper)).toContain('480px) 48px 48px 48px 48px')
     })
@@ -650,7 +649,7 @@ describe('WorkspaceView', () => {
         .find('input')
         .trigger('change')
       Object.defineProperty(wrapper.get('.workspace__body').element, 'clientWidth', { value: 750 })
-      const fit = wrapper.findAll('.workspace__column-controls button').find((b) => b.text() === 'Fit to screen')!
+      const fit = wrapper.findAll('.workspace__layout-menu .menu-item').find((b) => b.text() === 'Fit to screen')!
       await fit.trigger('click')
       expect(template(wrapper)).toContain('160px 140px 48px 48px 48px')
     })
@@ -904,40 +903,37 @@ describe('WorkspaceView', () => {
   // ─── Add content flows (W1-H) ──────────────────────────────────────────────
 
   describe('add content flows', () => {
-    // One control-bar button now opens AddContentModal, and the card chosen there decides
-    // which picker follows. Every flow therefore resolves two modals: call 0 is the card
-    // grid, call 1 is the picker whose props these tests assert on.
+    // The control bar's Add menu lists every way in. Each entry opens its picker or prompt
+    // directly, so every flow resolves one modal: call 0, whose props these tests assert on.
+    type AddChoice = 'tracks' | 'playlist' | 'new'
+    const ADD_LABELS: Record<AddChoice, string> = {
+      tracks: 'Tracks from library',
+      playlist: 'Playlists from library',
+      new: 'New playlist',
+    }
     async function chooseAdd(
       wrapper: ReturnType<typeof mountWorkspace>,
-      choice: AddContentChoice,
+      choice: AddChoice,
       pickerResult: unknown = null,
     ) {
-      mockModalOpen.mockResolvedValueOnce(choice).mockResolvedValueOnce(pickerResult)
-      await wrapper.find('.workspace__add-btn').trigger('click')
+      mockModalOpen.mockResolvedValueOnce(pickerResult)
+      const entry = wrapper
+        .findAll('.workspace__add-menu .menu-item')
+        .find((b) => b.text() === ADD_LABELS[choice])!
+      await entry.trigger('click')
       await flushPromises()
     }
 
-    it('opens the add-content modal from the control bar', async () => {
+    it('lists every way to add in one menu', () => {
       const wrapper = mountWorkspace()
-      await wrapper.find('.workspace__add-btn').trigger('click')
-      const [component] = mockModalOpen.mock.calls[0] as [unknown]
-      expect(component).toBe(AddContentModal)
-    })
-
-    it('opens no picker when the add-content modal is dismissed', async () => {
-      const wrapper = mountWorkspace()
-      await chooseAdd(wrapper, 'tracks' as AddContentChoice)
-      mockModalOpen.mockClear()
-      mockModalOpen.mockResolvedValueOnce(null)
-      await wrapper.find('.workspace__add-btn').trigger('click')
-      await flushPromises()
-      expect(mockModalOpen).toHaveBeenCalledTimes(1)
+      const labels = wrapper.findAll('.workspace__add-menu .menu-item').map((b) => b.text())
+      expect(labels).toEqual(['Tracks from library', 'Playlists from library', 'New playlist'])
     })
 
     it('opens PlaylistSelectModal in export mode and adds each chosen playlist', async () => {
       const wrapper = mountWorkspace()
       await chooseAdd(wrapper, 'playlist', [4, 7])
-      const [, props] = mockModalOpen.mock.calls[1] as [unknown, { mode: string }]
+      const [, props] = mockModalOpen.mock.calls[0] as [unknown, { mode: string }]
       expect(props.mode).toBe('export')
       expect(mockWorkspaceStore.addPlaylist).toHaveBeenCalledWith(4)
       expect(mockWorkspaceStore.addPlaylist).toHaveBeenCalledWith(7)
@@ -947,7 +943,7 @@ describe('WorkspaceView', () => {
       mockWorkspaceStore.tracks = new Map([['t1', makeTrack('t1', 'Song A', 'Artist 1')]])
       const wrapper = mountWorkspace()
       await chooseAdd(wrapper, 'tracks')
-      const [, props] = mockModalOpen.mock.calls[1] as [
+      const [, props] = mockModalOpen.mock.calls[0] as [
         unknown,
         { excludeIds: string[]; confirmLabel: string; confirmVariant: string },
       ]

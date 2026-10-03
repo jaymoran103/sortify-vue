@@ -17,16 +17,16 @@ import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
+import MenuDropdown from '@/components/common/MenuDropdown.vue'
 import TrackRow from './TrackRow.vue'
 import WorkspaceMinimap from './WorkspaceMinimap.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
 import TrackColumnPicker from './TrackColumnPicker.vue'
 import TrackColumnHeader from './TrackColumnHeader.vue'
 import { TRACK_COLUMNS, type TrackColumnKey } from './trackColumns'
-import AddContentModal from './AddContentModal.vue'
 import LeaveWorkspaceModal from './LeaveWorkspaceModal.vue'
 import type { Track, PlaylistId, WorkspacePlaylist } from '@/types/models'
-import type { SortOption, MenuEntry, AddContentChoice, LeaveChoice } from '@/types/ui'
+import type { SortOption, MenuEntry, LeaveChoice } from '@/types/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -238,6 +238,12 @@ function fitColumnsToScreen(): void {
   const count = Math.max(0, Math.min(playlists.length, Math.floor(spare / (EXPANDED_COLUMN_PX - ROW_HEIGHT))))
   expandedIds.value = new Set(playlists.slice(0, count).map((pl) => pl.id))
 }
+// The Layout menu in the control bar. Each entry sets every playlist column in one go.
+const layoutEntries: MenuEntry[] = [
+  { label: 'Collapse all', action: collapseAllColumns },
+  { label: 'Expand all', action: expandAllColumns },
+  { label: 'Fit to screen', action: fitColumnsToScreen },
+]
 // The playlist column under the pointer. Every row lifts its cell in that column.
 const hoveredPlaylistId = ref<PlaylistId | null>(null)
 // The track column is capped and a trailing 1fr track absorbs the slack past the last
@@ -641,31 +647,14 @@ async function handleBulkDelete(): Promise<void> {
 
 // ─── Add content flow + handlers ──────────────
 
-/**
- * Run the add-content flow behind the control bar's single Add button.
- *
- * Opens AddContentModal, then hands off to the picker for whichever card was chosen. No
- * side effects of its own — each branch below owns its own modal and store call. Resolving
- * to null (cancelled, or dismissed) ends the flow.
- *
- * Two dialogs deep by design: the card grid is step one of the same shape Import and Export
- * use, so the workspace asks the question the same way the rest of the app does.
- */
-async function handleAddContent(): Promise<void> {
-  const choice = await modal.open<AddContentChoice>(AddContentModal)
-
-  switch (choice) {
-    case 'tracks':
-      await handleAddTracks()
-      break
-    case 'playlist':
-      await handleAddPlaylistToWorkspace()
-      break
-    case 'new':
-      await handleCreatePlaylist()
-      break
-  }
-}
+// The Add menu in the control bar. Each entry opens its own picker or prompt. Order keeps
+// the two library entries together, with creating something new last.
+const addEntries: MenuEntry[] = [
+  { label: 'Tracks from library', action: () => void handleAddTracks() },
+  { label: 'Playlists from library', action: () => void handleAddPlaylistToWorkspace() },
+  { divider: true },
+  { label: 'New playlist', action: () => void handleCreatePlaylist() },
+]
 
 async function handleAddPlaylistToWorkspace(): Promise<void> {
   const result = await modal.open<number[]>(PlaylistSelectModal, { mode: 'export' })
@@ -802,15 +791,10 @@ useKeyboardShortcuts({
         </span>
 
         <template #actions>
-          <!-- Column width controls. Each header also toggles its own column. -->
-          <div class="workspace__column-controls" role="group" aria-label="Playlist columns">
-            <button class="btn btn--ghost btn--sm" @click="collapseAllColumns">Collapse all</button>
-            <button class="btn btn--ghost btn--sm" @click="expandAllColumns">Expand all</button>
-            <button class="btn btn--ghost btn--sm" @click="fitColumnsToScreen">Fit to screen</button>
-          </div>
-          <button class="btn btn--secondary workspace__add-btn" @click="handleAddContent">
-            + Add
-          </button>
+          <!-- Playlist column widths. Each header also toggles its own column. -->
+          <MenuDropdown class="workspace__layout-menu" label="Layout" :entries="layoutEntries" align="right" />
+          <!-- Every way into the workspace. A new one is a new entry in addEntries. -->
+          <MenuDropdown class="workspace__add-menu" label="+ Add" :entries="addEntries" align="right" />
         </template>
       </ControlBar>
 
@@ -1009,11 +993,6 @@ useKeyboardShortcuts({
 
 .workspace__th--track {
   min-width: 0;
-}
-
-.workspace__column-controls {
-  display: flex;
-  gap: var(--space-1);
 }
 
 .workspace__selection-count {
