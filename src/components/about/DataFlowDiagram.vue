@@ -1,75 +1,80 @@
 <script setup lang="ts">
-// Static 2x2 diagram: streaming services on the left, the user's device on the right.
-// Top row is the live connection, bottom row is files.
+// Where your music lives, as three bands: the web, your browser, your files.
+// Spotify syncs straight down and back. Apple Music reaches the browser only through an exporter.
+// The browser saves to and loads from files.
 </script>
 
 <template>
   <div class="flow">
-    <div class="flow-zone">Streaming services</div>
-    <div></div>
-    <div class="flow-zone">Your device</div>
-
-    <!-- Row 1: provider <-> browser -->
-    <div class="flow-node">
-      <div class="flow-icon">⊙</div>
-      <div class="flow-label">Providers</div>
-      <div class="flow-chips">
-        <span class="flow-chip">Spotify</span>
-        <span class="flow-chip">Apple Music</span>
-        <span class="flow-chip">others</span>
-      </div>
-      <div class="flow-desc">Where your library starts. Spotify connects directly.</div>
+    <!-- Band: the web -->
+    <div class="flow-band" style="grid-row: 1">
+      <span class="flow-band-name">The web</span>
+      <span class="flow-band-sub">Music providers and exporters</span>
     </div>
 
-    <div class="flow-edge flow-edge-h">
+    <div class="flow-node" style="grid-row: 1; grid-column: 2">
+      <div class="flow-label">Spotify</div>
+      <div class="flow-desc">Syncs both ways</div>
+    </div>
+    <div class="flow-edge flow-edge-h" style="grid-row: 1; grid-column: 3">
+      <i class="flow-head flow-head-end"></i>
+    </div>
+    <div class="flow-node flow-node-optional" style="grid-row: 1; grid-column: 4">
+      <div class="flow-label">Exportify</div>
+      <div class="flow-desc">Optional</div>
+    </div>
+    <div class="flow-node flow-node-optional flow-gap-left" style="grid-row: 1; grid-column: 5">
+      <div class="flow-label">TuneMyMusic</div>
+      <div class="flow-desc">Optional</div>
+    </div>
+    <div class="flow-edge flow-edge-h" style="grid-row: 1; grid-column: 6">
       <i class="flow-head flow-head-start"></i>
-      <span class="flow-edge-label">sync (Spotify)</span>
-      <i class="flow-head flow-head-end"></i>
+    </div>
+    <div class="flow-node" style="grid-row: 1; grid-column: 7">
+      <div class="flow-label">Apple Music</div>
+      <div class="flow-desc">Through an exporter</div>
     </div>
 
-    <div class="flow-node flow-node-accent">
-      <div class="flow-icon">⎈</div>
-      <div class="flow-label">Your browser</div>
-      <div class="flow-chips"><span class="flow-chip">IndexedDB</span></div>
-      <div class="flow-desc">Your private working copy. Every edit happens here.</div>
-    </div>
-
-    <!-- Row 2: vertical links -->
-    <div class="flow-edge flow-edge-v">
-      <span class="flow-edge-label">optional</span>
-      <i class="flow-head flow-head-end"></i>
-    </div>
-    <div></div>
-    <div class="flow-edge flow-edge-v">
+    <!-- Links: the web to the browser -->
+    <div class="flow-edge flow-edge-v" style="grid-row: 2; grid-column: 2">
       <i class="flow-head flow-head-start"></i>
-      <span class="flow-edge-label">import / export</span>
+      <span class="flow-edge-label">sync</span>
       <i class="flow-head flow-head-end"></i>
     </div>
-
-    <!-- Row 3: exporter -> files -->
-    <div class="flow-node flow-node-optional">
-      <div class="flow-icon">⇩</div>
-      <div class="flow-label">Exporters</div>
-      <div class="flow-chips">
-        <span class="flow-chip">Exportify</span>
-        <span class="flow-chip">TuneMyMusic</span>
-      </div>
-      <div class="flow-desc">Free tools that save any provider's playlists as CSV.</div>
+    <div class="flow-edge flow-edge-v" style="grid-row: 2; grid-column: 4">
+      <span class="flow-edge-label">CSV</span>
+      <i class="flow-head flow-head-end"></i>
     </div>
-
-    <div class="flow-edge flow-edge-h">
+    <div class="flow-edge flow-edge-v flow-gap-left" style="grid-row: 2; grid-column: 5">
       <span class="flow-edge-label">CSV</span>
       <i class="flow-head flow-head-end"></i>
     </div>
 
-    <div class="flow-node">
-      <div class="flow-icon">☰</div>
-      <div class="flow-label">Your files</div>
-      <div class="flow-chips">
-        <span class="flow-chip">CSV</span>
-        <span class="flow-chip">JSON</span>
-      </div>
-      <div class="flow-desc">Backups you own. Re-import on any device.</div>
+    <!-- Band: your browser -->
+    <div class="flow-band" style="grid-row: 3">
+      <span class="flow-band-name">Your browser</span>
+      <span class="flow-band-sub">Your local copy and workspace</span>
+    </div>
+    <div class="flow-node flow-node-accent flow-node-wide" style="grid-row: 3; grid-column: 2 / 8">
+      <div class="flow-label">Library and workspace</div>
+      <div class="flow-desc">Stored in IndexedDB. Private, and every edit happens here.</div>
+    </div>
+
+    <!-- Link: the browser to files -->
+    <div class="flow-edge flow-edge-v" style="grid-row: 4; grid-column: 4 / 6">
+      <i class="flow-head flow-head-start"></i>
+      <span class="flow-edge-label">save / load</span>
+      <i class="flow-head flow-head-end"></i>
+    </div>
+
+    <!-- Band: your files -->
+    <div class="flow-band" style="grid-row: 5">
+      <span class="flow-band-name">Your files</span>
+      <span class="flow-band-sub">Reliable, compact, universal</span>
+    </div>
+    <div class="flow-node" style="grid-row: 5; grid-column: 4 / 6">
+      <div class="flow-label">CSV and JSON</div>
+      <div class="flow-desc">Backups you own. Open on any device.</div>
     </div>
   </div>
 </template>
@@ -77,29 +82,33 @@
 <style scoped>
 .flow {
   display: grid;
-  grid-template-columns: 1fr 140px 1fr;
-  grid-template-rows: auto auto 64px auto;
-  max-width: 820px;
-  margin: 0 auto;
+  grid-template-columns: 170px 1.3fr 36px 1fr 1fr 36px 1.3fr;
+  grid-template-rows: auto 56px auto 56px auto;
+  column-gap: 0;
 }
+/* A little air between the two exporters */
+.flow-gap-left { margin-left: var(--space-3); }
 
-/* Zone captions over each column */
-.flow-zone {
-  font-size: var(--font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-muted);
-  text-align: center;
-  padding-bottom: var(--space-3);
+/* Band names in the left margin */
+.flow-band {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding-right: var(--space-4);
 }
+.flow-band-name { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text); }
+.flow-band-sub { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 
 /* Nodes */
 .flow-node {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4);
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-3);
   background: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
@@ -109,19 +118,10 @@
   border-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
 }
-.flow-node-optional { border-style: dashed; }
-.flow-icon { font-size: 1.5rem; line-height: 1; color: var(--color-text-muted); }
+.flow-node-wide { padding: var(--space-5); }
+.flow-node-optional { border-style: dashed; background: transparent; }
 .flow-label { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text); }
 .flow-desc { font-size: var(--font-size-sm); color: var(--color-text-muted); line-height: var(--line-height-normal); }
-.flow-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-1); }
-.flow-chip {
-  font-size: var(--font-size-xs);
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-full);
-  border: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-raised);
-  color: var(--color-text);
-}
 
 /* Edges: a line, a label, and an arrowhead at each end that has one */
 .flow-edge { position: relative; }
@@ -145,7 +145,6 @@
 
 /* Horizontal: start is left, end is right */
 .flow-edge-h::before { left: 4px; right: 4px; top: 50%; height: 2px; margin-top: -1px; }
-.flow-edge-h .flow-edge-label { left: 0; right: 0; bottom: calc(50% + 6px); text-align: center; }
 .flow-edge-h .flow-head { top: 50%; margin-top: -5px; }
 .flow-edge-h .flow-head-end { right: 0; border-left: 8px solid var(--color-text-muted); border-right-width: 0; }
 .flow-edge-h .flow-head-start { left: 0; border-right: 8px solid var(--color-text-muted); border-left-width: 0; }
