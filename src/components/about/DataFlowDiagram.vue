@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Where your music lives, as three bands: the web, your browser, your files.
-// Spotify syncs straight down and back. Apple Music reaches the browser only through an exporter.
+// Spotify syncs straight down and back, or Exportify carries it down as CSV.
 // The browser saves to and loads from files.
 </script>
 
@@ -23,17 +23,6 @@
       <div class="flow-label">Exportify</div>
       <div class="flow-desc">Optional</div>
     </div>
-    <div class="flow-node flow-node-optional flow-gap-left" style="grid-row: 1; grid-column: 5">
-      <div class="flow-label">TuneMyMusic</div>
-      <div class="flow-desc">Optional</div>
-    </div>
-    <div class="flow-edge flow-edge-h" style="grid-row: 1; grid-column: 6">
-      <i class="flow-head flow-head-start"></i>
-    </div>
-    <div class="flow-node" style="grid-row: 1; grid-column: 7">
-      <div class="flow-label">Apple Music</div>
-      <div class="flow-desc">Through an exporter</div>
-    </div>
 
     <!-- Links: the web to the browser -->
     <div class="flow-edge flow-edge-v" style="grid-row: 2; grid-column: 2">
@@ -45,23 +34,19 @@
       <span class="flow-edge-label">CSV</span>
       <i class="flow-head flow-head-end"></i>
     </div>
-    <div class="flow-edge flow-edge-v flow-gap-left" style="grid-row: 2; grid-column: 5">
-      <span class="flow-edge-label">CSV</span>
-      <i class="flow-head flow-head-end"></i>
-    </div>
 
     <!-- Band: your browser -->
     <div class="flow-band" style="grid-row: 3">
       <span class="flow-band-name">Your browser</span>
       <span class="flow-band-sub">Your local copy and workspace</span>
     </div>
-    <div class="flow-node flow-node-accent flow-node-wide" style="grid-row: 3; grid-column: 2 / 8">
+    <div class="flow-node flow-node-accent flow-node-wide" style="grid-row: 3; grid-column: 2 / 5">
       <div class="flow-label">Library and workspace</div>
       <div class="flow-desc">Stored in IndexedDB. Private, and every edit happens here.</div>
     </div>
 
     <!-- Link: the browser to files -->
-    <div class="flow-edge flow-edge-v" style="grid-row: 4; grid-column: 4 / 6">
+    <div class="flow-edge flow-edge-v" style="grid-row: 4; grid-column: 2 / 5">
       <i class="flow-head flow-head-start"></i>
       <span class="flow-edge-label">save / load</span>
       <i class="flow-head flow-head-end"></i>
@@ -72,7 +57,7 @@
       <span class="flow-band-name">Your files</span>
       <span class="flow-band-sub">Reliable, compact, universal</span>
     </div>
-    <div class="flow-node" style="grid-row: 5; grid-column: 4 / 6">
+    <div class="flow-node flow-node-files" style="grid-row: 5; grid-column: 2 / 5">
       <div class="flow-label">CSV and JSON</div>
       <div class="flow-desc">Backups you own. Open on any device.</div>
     </div>
@@ -82,12 +67,13 @@
 <style scoped>
 .flow {
   display: grid;
-  grid-template-columns: 170px 1.3fr 36px 1fr 1fr 36px 1.3fr;
+  grid-template-columns: 170px 1fr 36px 1fr;
+  max-width: 900px;
   grid-template-rows: auto 56px auto 56px auto;
   column-gap: 0;
 }
-/* A little air between the two exporters */
-.flow-gap-left { margin-left: var(--space-3); }
+/* Files sit centered under the browser */
+.flow-node-files { justify-self: center; width: 50%; }
 
 /* Band names in the left margin */
 .flow-band {
