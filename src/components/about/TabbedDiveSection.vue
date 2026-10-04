@@ -100,5 +100,4 @@ const activeTab = ref(-1)
   font-size: var(--font-size-sm);
 }
 
-.sim-mock { max-height: 320px; }
 </style>

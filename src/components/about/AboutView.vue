@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import TabbedDiveSection from './TabbedDiveSection.vue'
 import WorkspaceMock from './WorkspaceMock.vue'
-import SimilarityMock from './SimilarityMock.vue'
+import OverlapMock from './OverlapMock.vue'
+import DataFlowDiagram from './DataFlowDiagram.vue'
 import FeatureCard from './FeatureCard.vue'
 
 const workspaceTabs = [
@@ -10,10 +11,10 @@ const workspaceTabs = [
   { label: 'Save & Export', sub: 'Send back to Spotify, or download as CSV / JSON.' },
   // { label: 'Track Actions', sub: 'Toggle across multiple playlists at once, or open in Spotify' },
 ]
-const simTabs = [
-  { label: 'Overlap scan', sub: 'Search for playlists that overlap with eachother or a given set of tracks.' },
-  { label: 'Equivalents', sub: 'Review alternate versions of the same song, and consolidate across your playlists.' },
-  { label: 'Similarity Display', sub: 'Visualize playlist relationships, and decide which to tackle next.' },
+const overlapTabs = [
+  { label: 'Rank by overlap', sub: 'Pick a playlist. See how much of it every other playlist shares.' },
+  { label: 'Compare a pair', sub: 'Open any result to see what is only here, only there, and in both.' },
+  { label: 'Act on it', sub: 'Save the shared tracks as a playlist, or clear them out of one side.' },
 ]
 const featureCards = [
   {
@@ -55,26 +56,14 @@ const featureCards = [
     <section class="hero">
       <h1 class="hero-tagline">Your Library, Your Way.</h1>
       <p class="hero-sub">Sortify – a playlist manager that puts your content first.</p>
-
-      <!-- Text: Development Disclaimer -->
-      <div class="hero-dev-banner">
-        <p class="hero-dev-note">
-          This website is still in development and may contain bugs.</p>
-          <p>For a more robust version with a broader feature set (for now), try the
-          <a class="hero-dev-link" href="https://jaymoran103.github.io/sortify-feb" target="_blank" rel="noopener">Original Version</a>.
-        </p>
-      </div>
-      <!-- <div class="hero-mock-placeholder">[workspace mock]</div> -->
     </section>
-
-    
 
     <!-- SECTION: PROBLEM STATEMENT-->
     <section class="feature-cards">
       <h2 class="section-heading">The problem.</h2>
      
       <p class="section-sub">Most music platforms prioritize discovery over organization. It's much easier to find cool new content than to keep your existing library clean.</p>
-      <p class="section-sub"><b>Sortify</b> is built to solve that problem.It separates your library from all the other noise, with simple but powerful tools to sort out your music.</p>
+      <p class="section-sub"><b>Sortify</b> is built to solve that problem. It separates your library from all the other noise, with simple but powerful tools to sort out your music.</p>
             
     </section>
 
@@ -110,49 +99,16 @@ const featureCards = [
     <section class="data-model">
 
       <h2 class="section-heading">Move your data flexibly.</h2>
-      <p class="data-model-sub">Sync from Spotify once. Edit in your browser. Save to a file you own. Move data around as many times as you want.</p>
-      
-      <div class="stack-diagram">
-        <div class="stack-node">
-          <div class="stack-icon">⊙</div>
-          <div class="stack-label">Spotify</div>
-          <div class="stack-desc">Your main library playlists. Sign in and load the content you want — or skip it entirely.</div>
-        </div>
-
-        <div class="stack-arrow">
-          <div class="stack-arrow-line"></div>
-          <div class="stack-arrow-label">sync</div>
-        </div>
-
-        <div class="stack-node">
-          <!-- <div class="stack-icon">◻</div> -->
-          <div class="stack-icon">⎈</div>
-          <div class="stack-label">Your Browser</div>
-          <div class="stack-desc">This is your working copy. This data is completely private, and stays stored until you clear browser data.</div>
-        </div>
-
-        <div class="stack-arrow">
-          <div class="stack-arrow-line"></div>
-          <div class="stack-arrow-label">load</div>
-        </div>
-
-        <div class="stack-node">
-          <div class="stack-icon">☰</div>
-          <div class="stack-label">Your files</div>
-          <div class="stack-desc">Save data to your device as CSV or JSON files. Re-importable on any device. </div>
-        </div>
-      </div>
+      <p class="data-model-sub">Your browser holds the working copy. Everything else is a way in or out.</p>
+      <DataFlowDiagram />
     </section>
 
-    <!--SECTION: SIMILARITY (coming soon) -->
+    <!-- SECTION: OVERLAP (coming soon) -->
     <section class="workspace-dive">
-      <div class="coming-soon-header">
-        <h2 class="section-heading">Similarity Module <span class="coming-soon-badge">Coming soon!</span></h2>
-        <p class="coming-soon-sub">Tools for understanding how your library fits together — and cleaning up the mess.</p>
-      </div>
-      <TabbedDiveSection :tabs="simTabs" mock-class="sim-mock">
+      <h2 class="section-heading">Find the overlap <span class="coming-soon-badge">Coming soon!</span></h2>
+      <TabbedDiveSection :tabs="overlapTabs">
         <template #default="{ activeTab }">
-          <SimilarityMock :activeTab="activeTab" />
+          <OverlapMock :activeTab="activeTab" />
         </template>
       </TabbedDiveSection>
     </section>
@@ -162,34 +118,7 @@ const featureCards = [
       <h2 class="section-heading">Private, Simple, Flexible.</h2>
      
       <p class="section-sub">Sortify runs entirely in your browser. Your data is never tracked, shared, or fed to robots :)</p>
-      <p class="section-sub">Syncing from Spotify is an <i>optional</i> way to add data, but never required.</p>
-
-                    
     </section>
-
-    <!-- SECTION: ETHOS -->
-    <!-- <section class="ethos">
-      <h2 class="section-heading">Built for you, not for engagement.</h2>
-      <dl class="ethos-list">
-        <div class="ethos-item">
-          <dt>No account needed.</dt>
-          <dd>Sortify runs entirely in your browser. Spotify is an optional way to add music, never required.</dd>
-          <dd>Your data is never tracked, shared, or fed to robots :) </dd>
-        </div>
-        <div class="ethos-item">
-          <dt>Your tools, your decisions.</dt>
-          <dd>Every action is one you choose. Your playlists stay the way you organized them.</dd>
-          <dd>No autoplay, recommendations, no algorithmic suggestions cramed into your display.</dd>
-        </div>
-        <div class="ethos-item">
-          <dt>Your Library first.</dt>
-          <dd>Sortify prioritizes your existing library over new content. </dd>
-          <dd>You remain in control of what you see and hear.</dd>
-          <dd>Most streaming apps bury what you've saved to surface what they want you to stream.</dd>
-          <dd>Sortify starts with your existing collection and stays there.</dd>
-        </div>
-      </dl>
-    </section> -->
 
     <!-- 7. CTA -->
     <section class="cta">
@@ -199,6 +128,7 @@ const featureCards = [
         <a href="https://github.com/jaymoran103/sortify-vue" target="_blank" rel="noopener" class="cta-btn cta-btn-ghost">View Codebase</a>
       </div>
       <p class="cta-note">No signup. No install. Works offline.</p>
+      <p class="cta-note">Looking for the first release? The <a class="cta-link" href="https://jaymoran103.github.io/sortify-feb" target="_blank" rel="noopener">original version</a> is still up.</p>
     </section>
 
   </div>
@@ -226,31 +156,12 @@ const featureCards = [
   font-size: var(--font-size-lg);
   color: var(--color-text-muted);
   max-width: 580px;
-  margin: 0 auto var(--space-6);
+  margin: 0 auto;
 }
-.hero-dev-banner {
-  border: 1px solid var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  max-width: 600px;
-  margin: 0 auto var(--space-4);
-}
-.hero-dev-note {
-  margin: 0;
-  color: var(--color-text);
-  font-weight: var(--font-weight-semibold);
-}
-.hero-dev-link {
-  color: var(--blue-450);
-  text-decoration: underline;
-}
-
 /* ── Section baseline ── */
 .workspace-dive,
 .feature-cards,
 .data-model,
-.ethos,
 .cta {
   padding: var(--space-6) 0;
   border-top: 1px solid var(--color-border-subtle);
@@ -263,67 +174,9 @@ const featureCards = [
   margin-bottom: var(--space-5);
 }
 
-/* ── Data model ── */
+/* ── Section text ── */
 .section-sub { color: var(--color-text-muted); font-size: var(--font-size-md); line-height: var(--line-height-normal); margin-bottom: var(--space-4); }
 .data-model-sub { color: var(--color-text-muted); font-size: var(--font-size-md); max-width: 560px; margin-bottom: var(--space-6); }
-
-.stack-diagram { display: flex; align-items: center; }
-
-.stack-node {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-5);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-  text-align: center;
-}
-.stack-node-accent {
-  border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
-}
-.stack-icon { font-size: 1.75rem; line-height: 1; color: var(--color-text-muted); }
-.stack-label { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text); }
-.stack-desc { font-size: var(--font-size-sm); color: var(--color-text-muted); line-height: var(--line-height-normal); }
-
-.stack-arrow { 
-  display: flex; 
-  flex-direction: column; 
-  align-items: center; 
-  gap: var(--space-1); 
-  padding: 0 var(--space-2); 
-  flex-shrink: 0; 
-}
-.stack-arrow-line { 
-  width: 48px; 
-  height: 2px; 
-  background: var(--color-border-subtle); 
-  position: relative; 
-}
-.stack-arrow-line::after { 
-  content: '▶'; 
-  position: absolute; 
-  right: -6px; 
-  top: -7px; 
-  font-size: 10px; 
-  color: var(--color-text-muted); 
-}
-.stack-arrow-line::before { 
-  content: '◀'; 
-  position: absolute; 
-  right: 50px; 
-  top: -7px; 
-  font-size: 10px; 
-  color: var(--color-text-muted); 
-}
-.stack-arrow-label { 
-  font-size: var(--font-size-xs); 
-  color: var(--color-text-muted); 
-  /* text-transform: uppercase;  */
-}
 
 /* ── Feature cards ── */
 .cards-grid {
@@ -333,8 +186,6 @@ const featureCards = [
   margin-top: var(--space-5);
 }
 
-/* ── Similarity section ── */
-.coming-soon-header { margin-bottom: var(--space-5); }
 .coming-soon-badge {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
@@ -346,29 +197,6 @@ const featureCards = [
   vertical-align: middle;
   margin-left: var(--space-2);
 }
-.coming-soon-sub { color: var(--color-text-muted); font-size: var(--font-size-md); margin-bottom: var(--space-4); }
-
-/* ── Ethos ── */
-.ethos-list {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-6);
-  margin-top: var(--space-5);
-}
-.ethos-item { 
-  display: flex; 
-  flex-direction: column; gap: var(--space-2); }
-.ethos-item dt { 
-    font-size: var(--font-size-md); 
-    font-weight: var(--font-weight-semibold); 
-    color: var(--color-text); 
-}
-.ethos-item dd { 
-  font-size: var(--font-size-base); 
-  color: var(--color-text-muted); 
-  line-height: var(--line-height-normal); 
-}
-
 /* ── Call to action ── */
 .cta {
   padding: var(--space-8) 0;
@@ -409,4 +237,5 @@ const featureCards = [
   font-size: var(--font-size-sm); 
   color: var(--color-text-muted); 
 }
+.cta-link { color: var(--blue-450); text-decoration: underline; }
 </style>
