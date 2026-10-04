@@ -75,7 +75,7 @@ const timeOnLoad = new Date().toLocaleTimeString()
   </div>
 
   <!-- Tab 1: Display column dropdown -->
-  <div v-if="activeTab === 1" class="ws-col-dropdown">
+  <div v-if="activeTab === 1" class="ws-menu ws-col-dropdown">
     <div class="ws-dropdown-title">Blues Covers <span class="ws-meta">23 tracks</span></div>
     <div class="ws-dropdown-item">Rename</div>
     <div class="ws-dropdown-item">Duplicate</div>
@@ -160,30 +160,7 @@ const timeOnLoad = new Date().toLocaleTimeString()
   position: absolute;
   top: 68px;
   right: 100px;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-2);
-  font-size: var(--font-size-sm);
-  min-width: 180px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  z-index: 5;
 }
-.ws-dropdown-title {
-  padding: var(--space-2) var(--space-3);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
-  border-bottom: 1px solid var(--color-border-subtle);
-  margin-bottom: var(--space-1);
-}
-.ws-dropdown-item {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  cursor: default;
-}
-.ws-dropdown-item:hover { background: var(--color-surface); color: var(--color-text); }
-.ws-dropdown-danger { color: var(--color-danger); }
 
 .ws-modal-overlay {
   position: absolute;
