@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // Where your music lives, as three bands: the web, your browser, your files.
 // Spotify syncs straight down and back, or Exportify carries it down as CSV.
-// The browser saves to and loads from files.
+// The browser saves to and loads from files. Each place is drawn as the thing it is:
+// an app, a website, a browser window, a laptop.
 </script>
 
 <template>
@@ -12,16 +13,39 @@
       <span class="flow-band-sub">Music providers and exporters</span>
     </div>
 
-    <div class="flow-node" style="grid-row: 1; grid-column: 2">
-      <div class="flow-label">Spotify</div>
-      <div class="flow-desc">Syncs both ways</div>
+    <!-- Spotify, drawn as a desktop app window -->
+    <div class="flow-node flow-node-row" style="grid-row: 1; grid-column: 2">
+      <svg class="flow-icon" viewBox="0 0 40 32" aria-hidden="true">
+        <rect x="1" y="1" width="38" height="30" rx="4" />
+        <line x1="1" y1="8" x2="39" y2="8" />
+        <circle class="flow-icon-fill" cx="5" cy="4.5" r="1" />
+        <circle class="flow-icon-fill" cx="8.5" cy="4.5" r="1" />
+        <line x1="12" y1="8" x2="12" y2="31" />
+        <path d="M23 25V14l9-2v11" />
+        <circle cx="21" cy="25" r="2" />
+        <circle cx="30" cy="23" r="2" />
+      </svg>
+      <div class="flow-text">
+        <a class="flow-label flow-link" href="https://open.spotify.com" target="_blank" rel="noopener">Spotify ↗</a>
+        <div class="flow-desc">The app. Syncs both ways.</div>
+      </div>
     </div>
     <div class="flow-edge flow-edge-h" style="grid-row: 1; grid-column: 3">
       <i class="flow-head flow-head-end"></i>
     </div>
-    <div class="flow-node flow-node-optional" style="grid-row: 1; grid-column: 4">
-      <div class="flow-label">Exportify</div>
-      <div class="flow-desc">Optional</div>
+
+    <!-- Exportify, drawn as a website -->
+    <div class="flow-node flow-node-row flow-node-optional" style="grid-row: 1; grid-column: 4">
+      <svg class="flow-icon" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="14" />
+        <ellipse cx="16" cy="16" rx="6" ry="14" />
+        <line x1="2" y1="16" x2="30" y2="16" />
+        <path d="M5 9h22M5 23h22" />
+      </svg>
+      <div class="flow-text">
+        <a class="flow-label flow-link" href="https://exportify.net" target="_blank" rel="noopener">Exportify ↗</a>
+        <div class="flow-desc">A website. Optional.</div>
+      </div>
     </div>
 
     <!-- Links: the web to the browser -->
@@ -35,14 +59,22 @@
       <i class="flow-head flow-head-end"></i>
     </div>
 
-    <!-- Band: your browser -->
+    <!-- Band: your browser, drawn as a browser window -->
     <div class="flow-band" style="grid-row: 3">
       <span class="flow-band-name">Your browser</span>
       <span class="flow-band-sub">Your local copy and workspace</span>
     </div>
-    <div class="flow-node flow-node-accent flow-node-wide" style="grid-row: 3; grid-column: 2 / 5">
-      <div class="flow-label">Library and workspace</div>
-      <div class="flow-desc">Stored in IndexedDB. Private, and every edit happens here.</div>
+    <div class="flow-browser" style="grid-row: 3; grid-column: 2 / 5">
+      <div class="flow-browser-bar">
+        <i class="flow-browser-dot"></i>
+        <i class="flow-browser-dot"></i>
+        <i class="flow-browser-dot"></i>
+        <span class="flow-browser-url">Sortify</span>
+      </div>
+      <div class="flow-browser-body">
+        <div class="flow-label">Library and workspace</div>
+        <div class="flow-desc">Stored in IndexedDB. Private, and every edit happens here.</div>
+      </div>
     </div>
 
     <!-- Link: the browser to files -->
@@ -52,14 +84,30 @@
       <i class="flow-head flow-head-end"></i>
     </div>
 
-    <!-- Band: your files -->
+    <!-- Band: your files, drawn as a laptop holding them -->
     <div class="flow-band" style="grid-row: 5">
       <span class="flow-band-name">Your files</span>
       <span class="flow-band-sub">Reliable, compact, universal</span>
     </div>
-    <div class="flow-node flow-node-files" style="grid-row: 5; grid-column: 2 / 5">
-      <div class="flow-label">CSV and JSON</div>
-      <div class="flow-desc">Backups you own. Open on any device.</div>
+    <div class="flow-machine" style="grid-row: 5; grid-column: 2 / 5">
+      <svg class="flow-laptop" viewBox="0 0 160 92" aria-hidden="true">
+        <rect x="14" y="2" width="132" height="78" rx="5" />
+        <path d="M2 84h156l-6 6H8z" />
+        <g class="flow-file">
+          <path d="M44 18h22l8 8v36H44z" />
+          <path d="M66 18v8h8" />
+          <text x="59" y="48">CSV</text>
+        </g>
+        <g class="flow-file">
+          <path d="M86 18h22l8 8v36H86z" />
+          <path d="M108 18v8h8" />
+          <text x="101" y="48">JSON</text>
+        </g>
+      </svg>
+      <div class="flow-text">
+        <div class="flow-label">Your computer</div>
+        <div class="flow-desc">Backups you own. Open them on any device.</div>
+      </div>
     </div>
   </div>
 </template>
@@ -72,8 +120,6 @@
   grid-template-rows: auto 56px auto 56px auto;
   column-gap: 0;
 }
-/* Files sit centered under the browser */
-.flow-node-files { justify-self: center; width: 50%; }
 
 /* Band names in the left margin */
 .flow-band {
@@ -100,14 +146,75 @@
   border-radius: var(--radius-lg);
   text-align: center;
 }
-.flow-node-accent {
-  border-color: var(--color-accent);
+.flow-node-row { flex-direction: row; gap: var(--space-3); text-align: left; }
+.flow-node-optional { border-style: dashed; background: transparent; }
+.flow-text { display: flex; flex-direction: column; gap: 2px; }
+.flow-label { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text); }
+.flow-link { text-decoration: none; }
+.flow-link:hover { text-decoration: underline; }
+.flow-desc { font-size: var(--font-size-sm); color: var(--color-text-muted); line-height: var(--line-height-normal); }
+
+/* Line icons */
+.flow-icon { width: 40px; height: 32px; flex-shrink: 0; }
+.flow-icon,
+.flow-laptop {
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.flow-icon-fill { fill: var(--color-text-muted); stroke: none; }
+
+/* Browser window */
+.flow-browser {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
 }
-.flow-node-wide { padding: var(--space-5); }
-.flow-node-optional { border-style: dashed; background: transparent; }
-.flow-label { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text); }
-.flow-desc { font-size: var(--font-size-sm); color: var(--color-text-muted); line-height: var(--line-height-normal); }
+.flow-browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.flow-browser-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--color-border-subtle); }
+.flow-browser-url {
+  flex: 1;
+  max-width: 320px;
+  margin: 0 auto;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-bg);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.flow-browser-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-5);
+  text-align: center;
+}
+
+/* Laptop with files */
+.flow-machine { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; }
+.flow-laptop { width: 160px; height: 92px; flex-shrink: 0; }
+.flow-file text {
+  fill: var(--color-text);
+  stroke: none;
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  text-anchor: middle;
+}
 
 /* Edges: a line, a label, and an arrowhead at each end that has one */
 .flow-edge { position: relative; }
