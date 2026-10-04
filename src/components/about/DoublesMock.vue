@@ -6,7 +6,7 @@ const props = defineProps<{ activeTab: number; draft: DoublesDraft }>()
 
 // The resting state (-1) shows the first tab
 const state = computed(() => props.draft.states[Math.max(props.activeTab, 0)]!)
-const gridColumns = computed(() => `40px minmax(200px, 1fr) repeat(${state.value.playlists.length}, minmax(90px, 130px))`)
+const gridColumns = computed(() => `40px minmax(220px, 1fr) repeat(${state.value.playlists.length}, minmax(76px, 130px))`)
 
 const isOn = (cell: DoublesCell) => cell === 1 || cell === 'add' || cell === 'keep'
 const cellMark: Record<string, string> = {

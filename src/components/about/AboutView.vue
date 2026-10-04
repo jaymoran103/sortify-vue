@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import TabbedDiveSection from './TabbedDiveSection.vue'
 import WorkspaceMock from './WorkspaceMock.vue'
 import OverlapMock from './OverlapMock.vue'
@@ -18,7 +19,10 @@ const overlapTabs = [
   { label: 'Compare a pair', sub: 'Open any result to see what is only here, only there, and in both.' },
   { label: 'Act on it', sub: 'Save the shared tracks as a playlist, or clear them out of one side.' },
 ]
-const doublesDraft = DOUBLES_DRAFTS[0]!
+// DRAFT: the doubles emphasis is still being chosen. The picker shows in dev builds only.
+const showDraftPicker = import.meta.env.DEV
+const doublesDraftKey = ref(DOUBLES_DRAFTS[0]!.key)
+const doublesDraft = computed(() => DOUBLES_DRAFTS.find((d) => d.key === doublesDraftKey.value) ?? DOUBLES_DRAFTS[0]!)
 const featureCards = [
   {
     icon: '⊞',
@@ -119,7 +123,17 @@ const featureCards = [
     <!-- SECTION: DOUBLES (coming soon) -->
     <section class="workspace-dive">
       <h2 class="section-heading">Sort out the doubles <span class="coming-soon-badge">Coming soon!</span></h2>
-      <TabbedDiveSection :tabs="doublesDraft.tabs">
+      <div v-if="showDraftPicker" class="draft-picker" role="group" aria-label="Doubles emphasis draft">
+        <span class="draft-picker-label">Draft</span>
+        <button
+          v-for="d in DOUBLES_DRAFTS"
+          :key="d.key"
+          class="btn btn--sm"
+          :class="d.key === doublesDraftKey ? 'btn--primary' : 'btn--ghost'"
+          @click="doublesDraftKey = d.key"
+        >{{ d.name }}</button>
+      </div>
+      <TabbedDiveSection :key="doublesDraft.key" :tabs="doublesDraft.tabs">
         <template #default="{ activeTab }">
           <DoublesMock :activeTab="activeTab" :draft="doublesDraft" />
         </template>
@@ -190,6 +204,10 @@ const featureCards = [
 /* ── Section text ── */
 .section-sub { color: var(--color-text-muted); font-size: var(--font-size-md); line-height: var(--line-height-normal); margin-bottom: var(--space-4); }
 .data-model-sub { color: var(--color-text-muted); font-size: var(--font-size-md); max-width: 560px; margin-bottom: var(--space-6); }
+
+/* ── Doubles draft picker (dev only) ── */
+.draft-picker { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-5); }
+.draft-picker-label { font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* ── Feature cards ── */
 .cards-grid {
