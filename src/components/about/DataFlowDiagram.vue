@@ -14,7 +14,7 @@
     </div>
 
     <!-- Spotify, drawn as a desktop app window -->
-    <div class="flow-node flow-node-row" style="grid-row: 1; grid-column: 2">
+    <div class="flow-node flow-node-row flow-node-main" style="grid-row: 1; grid-column: 4">
       <svg class="flow-icon" viewBox="0 0 40 32" aria-hidden="true">
         <rect x="1" y="1" width="38" height="30" rx="4" />
         <line x1="1" y1="8" x2="39" y2="8" />
@@ -27,15 +27,15 @@
       </svg>
       <div class="flow-text">
         <a class="flow-label flow-link" href="https://open.spotify.com" target="_blank" rel="noopener">Spotify ↗</a>
-        <div class="flow-desc">The app. Syncs both ways.</div>
+        <div class="flow-desc">Main source. Syncs both ways.</div>
       </div>
     </div>
-    <div class="flow-edge flow-edge-h" style="grid-row: 1; grid-column: 3">
+    <div class="flow-edge flow-edge-h flow-edge-side" style="grid-row: 1; grid-column: 5">
       <i class="flow-head flow-head-end"></i>
     </div>
 
-    <!-- Exportify, drawn as a website -->
-    <div class="flow-node flow-node-row flow-node-optional" style="grid-row: 1; grid-column: 4">
+    <!-- Exportify, a side path: drawn as a website -->
+    <div class="flow-node flow-node-row flow-node-optional" style="grid-row: 1; grid-column: 6">
       <svg class="flow-icon" viewBox="0 0 32 32" aria-hidden="true">
         <circle cx="16" cy="16" r="14" />
         <ellipse cx="16" cy="16" rx="6" ry="14" />
@@ -44,17 +44,17 @@
       </svg>
       <div class="flow-text">
         <a class="flow-label flow-link" href="https://exportify.net" target="_blank" rel="noopener">Exportify ↗</a>
-        <div class="flow-desc">A website. Optional.</div>
+        <div class="flow-desc">Side path</div>
       </div>
     </div>
 
     <!-- Links: the web to the browser -->
-    <div class="flow-edge flow-edge-v" style="grid-row: 2; grid-column: 2">
+    <div class="flow-edge flow-edge-v" style="grid-row: 2; grid-column: 4">
       <i class="flow-head flow-head-start"></i>
       <span class="flow-edge-label">sync</span>
       <i class="flow-head flow-head-end"></i>
     </div>
-    <div class="flow-edge flow-edge-v" style="grid-row: 2; grid-column: 4">
+    <div class="flow-edge flow-edge-v flow-edge-side" style="grid-row: 2; grid-column: 6">
       <span class="flow-edge-label">CSV</span>
       <i class="flow-head flow-head-end"></i>
     </div>
@@ -64,7 +64,7 @@
       <span class="flow-band-name">Your browser</span>
       <span class="flow-band-sub">Your local copy and workspace</span>
     </div>
-    <div class="flow-browser" style="grid-row: 3; grid-column: 2 / 5">
+    <div class="flow-browser" style="grid-row: 3; grid-column: 2 / 7">
       <div class="flow-browser-bar">
         <i class="flow-browser-dot"></i>
         <i class="flow-browser-dot"></i>
@@ -78,7 +78,7 @@
     </div>
 
     <!-- Link: the browser to files -->
-    <div class="flow-edge flow-edge-v" style="grid-row: 4; grid-column: 2 / 5">
+    <div class="flow-edge flow-edge-v" style="grid-row: 4; grid-column: 2 / 7">
       <i class="flow-head flow-head-start"></i>
       <span class="flow-edge-label">save / load</span>
       <i class="flow-head flow-head-end"></i>
@@ -89,7 +89,7 @@
       <span class="flow-band-name">Your files</span>
       <span class="flow-band-sub">Reliable, compact, universal</span>
     </div>
-    <div class="flow-machine" style="grid-row: 5; grid-column: 2 / 5">
+    <div class="flow-machine" style="grid-row: 5; grid-column: 2 / 7">
       <svg class="flow-laptop" viewBox="0 0 160 92" aria-hidden="true">
         <rect x="14" y="2" width="132" height="78" rx="5" />
         <path d="M2 84h156l-6 6H8z" />
@@ -115,7 +115,7 @@
 <style scoped>
 .flow {
   display: grid;
-  grid-template-columns: 170px 1fr 36px 1fr;
+  grid-template-columns: 170px 1fr 40px 1.8fr 40px 1fr;
   max-width: 900px;
   grid-template-rows: auto 56px auto 56px auto;
   column-gap: 0;
@@ -146,8 +146,11 @@
   border-radius: var(--radius-lg);
   text-align: center;
 }
-.flow-node-row { flex-direction: row; gap: var(--space-3); text-align: left; }
-.flow-node-optional { border-style: dashed; background: transparent; }
+.flow-node-row { flex-direction: row; gap: var(--space-3); text-align: left; white-space: nowrap; }
+.flow-node-main { padding: var(--space-4) var(--space-5); border-color: var(--color-text-muted); }
+.flow-node-optional { border-style: dashed; background: transparent; padding: var(--space-2) var(--space-3); align-self: center; }
+.flow-node-optional .flow-label { font-size: var(--font-size-sm); }
+.flow-node-optional .flow-icon { width: 26px; height: 26px; }
 .flow-text { display: flex; flex-direction: column; gap: 2px; }
 .flow-label { font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text); }
 .flow-link { text-decoration: none; }
@@ -235,6 +238,12 @@
   height: 0;
   border: 5px solid transparent;
 }
+
+/* A side path: a dashed line */
+.flow-edge-side.flow-edge-h::before { background: repeating-linear-gradient(to right, var(--color-border-subtle) 0 5px, transparent 5px 9px); }
+.flow-edge-side.flow-edge-v::before { background: repeating-linear-gradient(to bottom, var(--color-border-subtle) 0 5px, transparent 5px 9px); }
+/* Exportify is shorter than Spotify and centered in its row, so its line reaches up to meet it */
+.flow-edge-side.flow-edge-v { margin-top: -20px; }
 
 /* Horizontal: start is left, end is right */
 .flow-edge-h::before { left: 4px; right: 4px; top: 50%; height: 2px; margin-top: -1px; }
