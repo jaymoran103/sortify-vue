@@ -3,6 +3,7 @@ import TabbedDiveSection from './TabbedDiveSection.vue'
 import WorkspaceMock from './WorkspaceMock.vue'
 import OverlapMock from './OverlapMock.vue'
 import DoublesMock from './DoublesMock.vue'
+import { DOUBLES_DRAFTS } from './doublesDrafts'
 import DataFlowDiagram from './DataFlowDiagram.vue'
 import FeatureCard from './FeatureCard.vue'
 
@@ -17,11 +18,7 @@ const overlapTabs = [
   { label: 'Compare a pair', sub: 'Open any result to see what is only here, only there, and in both.' },
   { label: 'Act on it', sub: 'Save the shared tracks as a playlist, or clear them out of one side.' },
 ]
-const doublesTabs = [
-  { label: 'Spot the versions', sub: 'Studio cuts, live takes and covers of one song, grouped together.' },
-  { label: 'See where they live', sub: 'Every version, across every playlist that holds one.' },
-  { label: 'Keep one', sub: 'Swap in a single version everywhere. Keep the exceptions you want.' },
-]
+const doublesDraft = DOUBLES_DRAFTS[0]!
 const featureCards = [
   {
     icon: '⊞',
@@ -122,9 +119,9 @@ const featureCards = [
     <!-- SECTION: DOUBLES (coming soon) -->
     <section class="workspace-dive">
       <h2 class="section-heading">Sort out the doubles <span class="coming-soon-badge">Coming soon!</span></h2>
-      <TabbedDiveSection :tabs="doublesTabs">
+      <TabbedDiveSection :tabs="doublesDraft.tabs">
         <template #default="{ activeTab }">
-          <DoublesMock :activeTab="activeTab" />
+          <DoublesMock :activeTab="activeTab" :draft="doublesDraft" />
         </template>
       </TabbedDiveSection>
     </section>

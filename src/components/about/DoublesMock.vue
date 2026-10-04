@@ -1,57 +1,70 @@
 <script setup lang="ts">
-defineProps<{ activeTab: number }>()
+import { computed } from 'vue'
+import type { DoublesCell, DoublesDraft } from './doublesDrafts'
 
-const song = "Knockin' on Heaven's Door"
-const playlists = ['Dylan Essentials', 'Road Trip', 'Sunday Morning', 'Guitar Heroes']
+const props = defineProps<{ activeTab: number; draft: DoublesDraft }>()
 
-// before: where each version sits now. after: the result once one version is kept.
-// kept marks an exception the user chose to leave in place.
-const versions = [
-  { artist: 'Bob Dylan',          label: 'Studio',     match: 'Original', before: [true,  false, true,  false], after: [true,  true,  true,  false], kept: [false, false, false, false] },
-  { artist: 'Bob Dylan',          label: 'Live',       match: 'Same artist', before: [false, true,  false, false], after: [false, false, false, false], kept: [false, false, false, false] },
-  { artist: 'Dylan & the Dead',   label: 'Live',       match: 'Same artist', before: [false, true,  true,  false], after: [false, false, false, false], kept: [false, false, false, false] },
-  { artist: 'Eric Clapton',       label: 'Cover',      match: 'Cover',    before: [false, true,  false, true ], after: [false, false, false, true ], kept: [false, false, false, true ] },
-]
+// The resting state (-1) shows the first tab
+const state = computed(() => props.draft.states[Math.max(props.activeTab, 0)]!)
+const gridColumns = computed(() => `40px minmax(200px, 1fr) repeat(${state.value.playlists.length}, minmax(90px, 130px))`)
+
+const isOn = (cell: DoublesCell) => cell === 1 || cell === 'add' || cell === 'keep'
+const cellMark: Record<string, string> = {
+  add: '+',
+  rm: '−',
+}
 </script>
 
 <template>
-  <div class="db-panel">
-    <div class="db-header">
-      <span class="ws-title">Doubles: <strong>{{ song }}</strong></span>
-      <span class="ws-meta">{{ versions.length }} versions · {{ playlists.length }} playlists</span>
-      <button class="ws-btn" :class="activeTab === 2 ? 'ws-btn-primary' : 'ws-btn-ghost'">
-        {{ activeTab === 2 ? 'Applied' : 'Keep one' }}
-      </button>
+  <!-- Header: same shape as the workspace mock -->
+  <div class="ws-header">
+    <span class="ws-title">{{ state.title }}</span>
+    <span class="ws-meta">{{ state.meta }}</span>
+    <div class="ws-header-actions">
+      <span v-if="state.status" class="ws-unsaved">{{ state.status }}</span>
+      <button class="ws-btn" :class="state.actionPrimary ? 'ws-btn-primary' : 'ws-btn-ghost'">{{ state.action }}</button>
+    </div>
+  </div>
+
+  <div class="ws-table" :class="{ 'db-folded': state.folded }">
+    <div class="ws-row ws-row-head" :style="{ gridTemplateColumns: gridColumns }">
+      <div class="ws-cell ws-idx">#</div>
+      <div class="ws-cell ws-track-col">Track</div>
+      <div
+        v-for="(pl, ci) in state.playlists"
+        :key="pl"
+        class="ws-cell ws-pl-col db-pl"
+        :class="{ 'db-focus': state.focusCol?.index === ci }"
+      >
+        <span>{{ pl }}</span>
+        <span v-if="state.focusCol?.index === ci" class="db-focus-note">{{ state.focusCol.note }}</span>
+      </div>
     </div>
 
-    <div class="ws-table" :class="{ 'db-folded': activeTab <= 0 }">
-      <div class="ws-row ws-row-head db-row">
-        <div class="ws-cell">Version</div>
-        <div class="ws-cell db-center">Match</div>
-        <div v-for="pl in playlists" :key="pl" class="ws-cell db-center db-pl">{{ pl }}</div>
+    <div
+      v-for="(row, ri) in state.rows"
+      :key="ri"
+      class="ws-row"
+      :class="row.mark && `db-row-${row.mark}`"
+      :style="{ gridTemplateColumns: gridColumns }"
+    >
+      <div class="ws-cell ws-idx">{{ row.mark === 'playing' ? '▶' : ri + 1 }}</div>
+      <div class="ws-cell ws-track-col">
+        <span class="ws-track-title">{{ row.title }}</span>
+        <span class="ws-track-artist">{{ row.artist }}</span>
       </div>
-
       <div
-        v-for="(v, vi) in versions"
-        :key="v.artist + v.label"
-        class="ws-row db-row"
-        :class="{ 'db-preferred': activeTab === 2 && vi === 0, 'ws-muted': activeTab === 2 && vi > 0 && !v.kept.includes(true) }"
+        v-for="(cell, ci) in row.cols"
+        :key="ci"
+        class="ws-cell ws-pl-col db-pl"
+        :class="{ 'db-focus': state.focusCol?.index === ci }"
       >
-        <div class="ws-cell ws-track-col">
-          <span class="ws-track-title">{{ v.artist }}</span>
-          <span class="ws-track-artist">{{ v.label }}</span>
-        </div>
-        <div class="ws-cell db-center">
-          <span v-if="activeTab === 2 && vi === 0" class="db-badge db-badge-keep">Preferred</span>
-          <span v-else class="db-badge">{{ v.match }}</span>
-        </div>
-        <div v-for="(_, ci) in playlists" :key="ci" class="ws-cell db-center db-pl">
-          <template v-if="activeTab === 2">
-            <span v-if="v.kept[ci]" class="db-exception" title="Kept as an exception">✓ kept</span>
-            <span v-else :class="['ws-checkbox', v.after[ci] && 'ws-checked']">{{ v.after[ci] ? '✓' : '' }}</span>
-          </template>
-          <span v-else :class="['ws-checkbox', v.before[ci] && 'ws-checked']">{{ v.before[ci] ? '✓' : '' }}</span>
-        </div>
+        <span v-if="cell === 'pick' || cell === 'picked'" :class="['db-radio', cell === 'picked' && 'db-radio-on']"></span>
+        <span
+          v-else
+          :class="['ws-checkbox', isOn(cell) && 'ws-checked', `db-cell-${cell}`]"
+          :title="cell === 'keep' ? 'Kept as an exception' : undefined"
+        >{{ isOn(cell) ? '✓' : cellMark[cell] ?? '' }}</span>
       </div>
     </div>
   </div>
@@ -60,38 +73,30 @@ const versions = [
 <style scoped>
 @import './mock-shared.css';
 
-.db-panel { display: flex; flex-direction: column; height: 100%; }
-.db-header {
-  display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: var(--color-surface-raised);
-}
-
-.db-row { grid-template-columns: minmax(150px, 1.4fr) 110px repeat(4, minmax(90px, 1fr)); }
-.db-row .ws-cell { font-size: var(--font-size-xs); }
-.db-center { justify-content: center; text-align: center; }
-
-/* Tab 0: only the labelled column of versions. Playlist columns fold away. */
-.db-pl { transition: opacity 0.2s ease; }
+/* Tab 0 of some drafts: only the list of versions. Playlist columns fold away. */
+.db-pl { flex-direction: column; gap: 2px; transition: opacity 0.2s ease, background 0.2s ease; }
 .db-folded .db-pl { opacity: 0; }
 
-.db-badge {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
+/* A column under discussion */
+.db-focus { background: var(--color-accent-subtle); }
+.db-focus-note { font-size: 10px; font-weight: var(--font-weight-normal); color: var(--color-accent-hover); }
+
+/* Rows */
+.db-row-preferred { background: color-mix(in srgb, var(--color-accent) 6%, transparent); }
+.db-row-muted .ws-track-col { opacity: 0.4; }
+.db-row-playing .ws-idx { color: var(--color-accent-hover); }
+.db-row-playing .ws-track-title { color: var(--color-accent-hover); }
+
+/* Cells that changed or were kept on purpose */
+.db-cell-add { box-shadow: 0 0 0 2px var(--color-accent-subtle); }
+.db-cell-rm { border-color: var(--color-danger); color: var(--color-danger); font-size: 12px; }
+.db-cell-keep { outline: 1px dashed var(--color-accent); outline-offset: 2px; }
+
+/* An unapplied choice */
+.db-radio {
+  width: 15px; height: 15px;
+  border-radius: 50%;
   border: 1px solid var(--color-border-subtle);
-  color: var(--color-text-muted);
-  white-space: nowrap;
 }
-.db-badge-keep { border-color: var(--color-accent); color: var(--color-accent-hover); background: var(--color-accent-subtle); }
-.db-preferred { background: color-mix(in srgb, var(--color-accent) 6%, transparent); }
-.db-exception {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
-  border: 1px dashed var(--color-accent);
-  color: var(--color-accent-hover);
-  white-space: nowrap;
-}
+.db-radio-on { border: 5px solid var(--color-accent); }
 </style>
