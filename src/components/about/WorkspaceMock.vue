@@ -119,43 +119,11 @@ const timeOnLoad = new Date().toLocaleTimeString()
     grid-template-columns: 40px minmax(160px, 1fr) repeat(4, minmax(90px, 130px)); 
 }
 
-.ws-idx {
-  position: relative;
-  justify-content: center;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-/* TODO: Tentative feature, planning to add to workspace along with direct play */
-.ws-idx::after {
-  content: '▶';
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  color: var(--color-text-muted);
-}
-.ws-row:hover:not(.ws-row-head) .ws-idx { color: transparent; }
-.ws-row:hover:not(.ws-row-head) .ws-idx::after { opacity: 1; }
-
-.ws-pl-col {
-  justify-content: center;
-  font-weight: var(--font-weight-medium);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
 .ws-col-menu { 
     opacity: 0.5; 
     font-size: 10px; 
     margin-left: 2px;
  }
-.ws-unsaved { 
-    font-size: var(--font-size-xs); 
-    color: var(--color-text-muted); 
-}
-
 .ws-col-dropdown {
   position: absolute;
   top: 68px;
