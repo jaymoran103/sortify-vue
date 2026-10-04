@@ -19,6 +19,9 @@ const overlapTabs = [
   { label: 'Compare a pair', sub: 'Open any result to see what is only here, only there, and in both.' },
   { label: 'Act on it', sub: 'Save the shared tracks as a playlist, or clear them out of one side.' },
 ]
+// Hidden for now: the overlap and doubles showcases. Flip to show them again.
+const showComingSoon = false
+
 // DRAFT: the doubles emphasis is still being chosen. The picker shows in dev builds only.
 const showDraftPicker = import.meta.env.DEV
 const doublesDraftKey = ref(DOUBLES_DRAFTS[0]!.key)
@@ -68,10 +71,10 @@ const featureCards = [
     <!-- SECTION: PROBLEM STATEMENT-->
     <section class="feature-cards">
       <h2 class="section-heading">The problem.</h2>
-     
+
       <p class="section-sub">Most music platforms prioritize discovery over organization. It's much easier to find cool new content than to keep your existing library clean.</p>
       <p class="section-sub"><b>Sortify</b> is built to solve that problem. It separates your library from all the other noise, with simple but powerful tools to sort out your music.</p>
-            
+
     </section>
 
     <!-- SECTION: FEATURE CARDS -->
@@ -108,11 +111,14 @@ const featureCards = [
       <h2 class="section-heading">Move your data flexibly.</h2>
       <p class="data-model-sub">Your browser holds the working copy. Everything else is a way in or out.</p>
       <DataFlowDiagram />
+
+      <p class="section-sub">Sortify runs entirely in your browser. Your data is never tracked, shared, or fed to robots :)</p>
+
     </section>
 
     <!-- SECTION: OVERLAP (coming soon) -->
-    <section class="workspace-dive">
-      <h2 class="section-heading">Find the overlap <span class="coming-soon-badge">Coming soon!</span></h2>
+    <section v-if="showComingSoon" class="workspace-dive">
+      <h2 class="section-heading">Find the overlap </h2>
       <TabbedDiveSection :tabs="overlapTabs">
         <template #default="{ activeTab }">
           <OverlapMock :activeTab="activeTab" />
@@ -121,8 +127,8 @@ const featureCards = [
     </section>
 
     <!-- SECTION: DOUBLES (coming soon) -->
-    <section class="workspace-dive">
-      <h2 class="section-heading">Sort out the doubles <span class="coming-soon-badge">Coming soon!</span></h2>
+    <section v-if="showComingSoon" class="workspace-dive">
+      <h2 class="section-heading">Sort out the doubles </h2>
       <div v-if="showDraftPicker" class="draft-picker" role="group" aria-label="Doubles emphasis draft">
         <span class="draft-picker-label">Draft</span>
         <button
@@ -143,7 +149,7 @@ const featureCards = [
     <!-- SECTION: ACCOUNTLESS-->
     <section class="feature-cards">
       <h2 class="section-heading">Private, Simple, Flexible.</h2>
-     
+
       <p class="section-sub">Sortify runs entirely in your browser. Your data is never tracked, shared, or fed to robots :)</p>
     </section>
 
@@ -237,14 +243,14 @@ const featureCards = [
   align-items: center;
   gap: var(--space-5);
 }
-.cta-heading { 
-  font-size: 2rem; 
-  font-weight: var(--font-weight-bold); 
+.cta-heading {
+  font-size: 2rem;
+  font-weight: var(--font-weight-bold);
 }
-.cta-actions { 
-  display: flex; 
-  gap: var(--space-4); 
-  align-items: center; 
+.cta-actions {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
   }
 .cta-btn {
   padding: var(--space-3) var(--space-6);
@@ -255,18 +261,18 @@ const featureCards = [
   transition: opacity 0.1s;
 }
 .cta-btn:hover {opacity: 0.85; }
-.cta-btn-primary { 
-  background: var(--color-accent); 
-  color: var(--color-text-on-accent); 
+.cta-btn-primary {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
 }
-.cta-btn-ghost { 
-  border: 1px solid var(--color-border-subtle); 
-  color: var(--color-text-muted); 
-  cursor: pointer; 
+.cta-btn-ghost {
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text-muted);
+  cursor: pointer;
 }
-.cta-note { 
-  font-size: var(--font-size-sm); 
-  color: var(--color-text-muted); 
+.cta-note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 .cta-link { color: var(--blue-450); text-decoration: underline; }
 </style>
