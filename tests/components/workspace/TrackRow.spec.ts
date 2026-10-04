@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TrackRow from '@/components/workspace/TrackRow.vue'
+import { TRACK_COLUMNS } from '@/components/workspace/trackColumns'
 import type { Track } from '@/types/models'
 import type { WorkspacePlaylist } from '@/types/models'
 
@@ -70,6 +71,55 @@ describe('TrackRow', () => {
     const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [pl])
     const checkbox = wrapper.find('input[type="checkbox"]')
     expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('marks only the cells of member playlists as checked', () => {
+    const playlists = [makePlaylist(1, 'PL1', ['t1']), makePlaylist(2, 'PL2', [])]
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, playlists)
+    const cells = wrapper.findAll('.track-row__checkbox')
+    expect(cells[0]!.classes()).toContain('track-row__checkbox--checked')
+    expect(cells[1]!.classes()).not.toContain('track-row__checkbox--checked')
+  })
+
+  it('keeps the native checkbox for assistive tech, visually hidden', () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [makePlaylist(1, 'PL1', [])])
+    expect(wrapper.find('input[type="checkbox"]').classes()).toContain('sr-only')
+  })
+
+  it('reports the hovered column on cell enter and clears it on leave', async () => {
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, [makePlaylist(7, 'PL1', [])])
+    const cell = wrapper.find('.track-row__checkbox')
+    await cell.trigger('mouseenter')
+    await cell.trigger('mouseleave')
+    expect(wrapper.emitted('hoverColumn')).toEqual([[7], [null]])
+  })
+
+  it('marks only the cell in the hovered column', async () => {
+    const playlists = [makePlaylist(1, 'PL1', []), makePlaylist(2, 'PL2', [])]
+    const wrapper = mountRow(makeTrack('t1', 'Song', 'Artist'), 0, playlists)
+    await wrapper.setProps({ hoveredPlaylistId: 2 })
+    const cells = wrapper.findAll('.track-row__checkbox')
+    expect(cells[0]!.classes()).not.toContain('track-row__checkbox--column-hover')
+    expect(cells[1]!.classes()).toContain('track-row__checkbox--column-hover')
+  })
+
+  it('renders a cell per picked track column and drops that field from the title line', () => {
+    const track = { ...makeTrack('t1', 'Song', 'Artist', 'Album'), duration: 65_000 }
+    const trackColumns = TRACK_COLUMNS.filter((c) => c.key === 'artist' || c.key === 'duration')
+    const wrapper = mount(TrackRow, {
+      props: { track, index: 0, playlists: [], selected: false, trackColumns },
+    })
+    expect(wrapper.findAll('.track-row__field').map((c) => c.text())).toEqual(['Artist', '1:05'])
+    expect(wrapper.find('.track-row__meta .track-row__artist').exists()).toBe(false)
+    expect(wrapper.find('.track-row__meta .track-row__album').text()).toBe('Album')
+  })
+
+  it('hides the title line once artist and album both have columns', () => {
+    const trackColumns = TRACK_COLUMNS.filter((c) => c.key === 'artist' || c.key === 'album')
+    const wrapper = mount(TrackRow, {
+      props: { track: makeTrack('t1', 'Song', 'Artist'), index: 0, playlists: [], selected: false, trackColumns },
+    })
+    expect(wrapper.find('.track-row__meta').exists()).toBe(false)
   })
 
   it('checkbox checked state uses trackIdSet not trackIDs array', () => {

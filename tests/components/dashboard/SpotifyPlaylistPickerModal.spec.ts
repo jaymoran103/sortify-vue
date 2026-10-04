@@ -277,7 +277,7 @@ describe('SpotifyPlaylistPickerModal', () => {
     await flushPromises()
 
     const selectAll = () =>
-      wrapper.findAll('button').find((b) => /elect All$/.test(b.text()))!
+      wrapper.findAll('button').find((b) => b.text().endsWith('elect All'))!
 
     // Filter down to one row, then select it. Every visible row is now selected,
     // so the button must offer to undo that.

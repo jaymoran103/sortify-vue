@@ -1,16 +1,109 @@
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { initials } from '@/utils/initials'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 
 // Presentational only. The menu this header opens depends on state the header does not
 // own — search-filter counts, the active sort, Spotify URIs — so WorkspaceView builds it
 // and this component just reports that one was requested (design decision D1).
+// A collapsed column is one square cell wide, so its header shows only initials.
 const props = defineProps<{
   playlist: WorkspacePlaylist
+  expanded: boolean
 }>()
 
 const emit = defineEmits<{
   requestMenu: [playlistId: PlaylistId, event: MouseEvent]
+  toggleExpand: [playlistId: PlaylistId]
+  move: [playlistId: PlaylistId, direction: -1 | 1]
+  dragEnd: [playlistId: PlaylistId]
 }>()
+
+// Drag to reorder. A press becomes a drag only past DRAG_THRESHOLD_PX, so a plain click
+// still toggles the column. Listeners sit on window, not pointer capture, because the
+// header's element moves in the DOM each time the column hops.
+const DRAG_THRESHOLD_PX = 4
+const root = ref<HTMLElement | null>(null)
+
+// Only initials wider than the column fade at its edge. Ones that fit stay crisp. A
+// collapsed column is a fixed width, so a check on mount and on rename is enough.
+const initialsEl = ref<HTMLElement | null>(null)
+const initialsOverflow = ref(false)
+async function measureInitials(): Promise<void> {
+  await nextTick()
+  const el = initialsEl.value
+  initialsOverflow.value = el !== null && el.scrollWidth > el.clientWidth
+}
+onMounted(measureInitials)
+watch(() => [props.playlist.name, props.expanded], measureInitials)
+const dragging = ref(false)
+const canMoveLeft = ref(false)
+const canMoveRight = ref(false)
+let startX = 0
+let pressed = false
+// The click that ends a drag must not also toggle the column.
+let suppressClick = false
+
+function onPointerDown(event: PointerEvent): void {
+  if (event.button !== 0) return
+  // A drag that ended off the header left no click to eat. Clear the flag here.
+  suppressClick = false
+  pressed = true
+  startX = event.clientX
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerUp)
+}
+
+// Hop one column once the pointer passes a neighbour's midpoint. Only playlist headers
+// count as neighbours, so the column never crosses into the track column.
+function onPointerMove(event: PointerEvent): void {
+  if (!pressed || !root.value) return
+  if (!dragging.value) {
+    if (Math.abs(event.clientX - startX) < DRAG_THRESHOLD_PX) return
+    dragging.value = true
+  }
+  const next = playlistHeader(root.value.nextElementSibling)
+  const prev = playlistHeader(root.value.previousElementSibling)
+  // Chevrons mark the sides the column can still move to. They trail a hop by one event.
+  canMoveLeft.value = prev !== null
+  canMoveRight.value = next !== null
+  if (next && event.clientX > midpoint(next)) {
+    emit('move', props.playlist.id, 1)
+  } else if (prev && event.clientX < midpoint(prev)) {
+    emit('move', props.playlist.id, -1)
+  }
+}
+
+function playlistHeader(el: Element | null): Element | null {
+  return el?.classList.contains('playlist-col-header') ? el : null
+}
+
+function onPointerUp(): void {
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', onPointerUp)
+  pressed = false
+  if (!dragging.value) return
+  dragging.value = false
+  suppressClick = true
+  emit('dragEnd', props.playlist.id)
+}
+
+function midpoint(el: Element): number {
+  const rect = el.getBoundingClientRect()
+  return rect.left + rect.width / 2
+}
+
+function onClick(): void {
+  if (suppressClick) {
+    suppressClick = false
+    return
+  }
+  emit('toggleExpand', props.playlist.id)
+}
+
+onBeforeUnmount(onPointerUp)
 
 /**
  * Report a menu request to the parent, passing the originating event so the parent
@@ -23,35 +116,82 @@ function onMenu(event: MouseEvent): void {
 
 <template>
   <!-- Right-click anywhere on the header requests the menu at the cursor position. -->
-  <div class="playlist-col-header" @contextmenu.prevent="onMenu">
-    <!-- Name over count. Stacked in their own column so the ellipsis button below stays a
-         flex sibling on the right rather than being pushed down. -->
-    <div class="playlist-col-header__text">
-      <!-- Playlist Title. FUTURE: Find solution for long playlist names in tight displays -->
-      <span class="playlist-col-header__name" :title="playlist.name">
-        {{ playlist.name }}
-      </span>
-      <!-- An empty column is marked here, continuously, rather than sprung at exit. The
-           leave dialog only repeats it as a footnote, and only if it opened anyway. -->
+  <!-- Left-click anywhere else on it toggles the column open or closed. -->
+  <!-- Press and drag sideways to move the column. -->
+  <div
+    ref="root"
+    class="playlist-col-header"
+    :class="{
+      'playlist-col-header--collapsed': !expanded,
+      'playlist-col-header--dragging': dragging,
+    }"
+    @pointerdown="onPointerDown"
+    @click="onClick"
+    @contextmenu.prevent="onMenu"
+  >
+    <!-- The toggle is a real button for keyboard users. It has no handler of its own: its
+         click bubbles to the header, which does the toggling. -->
+    <button class="playlist-col-header__toggle" type="button" :aria-expanded="expanded">
+      <!-- Collapsed: initials, with the full name as tooltip and for screen readers. An empty
+           playlist keeps its warning here too, in color and in words. -->
       <span
-        class="playlist-col-header__count"
-        :class="{ 'playlist-col-header__count--empty': playlist.trackIDs.length === 0 }"
+        v-if="!expanded"
+        ref="initialsEl"
+        class="playlist-col-header__initials"
+        :class="{
+          'playlist-col-header__initials--empty': playlist.trackIDs.length === 0,
+          'playlist-col-header__initials--overflow': initialsOverflow,
+        }"
+        :title="playlist.name"
       >
-        <!-- Not aria-hidden: the glyph is what carries the warning to a screen reader,
-             since colour alone does not. -->
-        <span v-if="playlist.trackIDs.length === 0">⚠</span>
-        {{ playlist.trackIDs.length }} track{{ playlist.trackIDs.length === 1 ? '' : 's' }}
+        <span aria-hidden="true">{{ initials(playlist.name) }}</span>
+        <span class="sr-only">
+          {{ playlist.name }}{{ playlist.trackIDs.length === 0 ? ', empty' : '' }}
+        </span>
       </span>
-    </div>
-    <!-- Ellipsis button: hidden by default, revealed on header hover. -->
+      <!-- Name over count. Stacked in their own column so the ellipsis button below stays a
+           flex sibling on the right rather than being pushed down. -->
+      <span v-else class="playlist-col-header__text">
+        <!-- Playlist Title. Wraps up to three lines; see .playlist-col-header__name. -->
+        <span class="playlist-col-header__name" :title="playlist.name">
+          {{ playlist.name }}
+        </span>
+        <!-- An empty column is marked here, continuously, rather than sprung at exit. The
+             leave dialog only repeats it as a footnote, and only if it opened anyway. -->
+        <span
+          class="playlist-col-header__count"
+          :class="{ 'playlist-col-header__count--empty': playlist.trackIDs.length === 0 }"
+        >
+          <!-- Not aria-hidden: the glyph is what carries the warning to a screen reader,
+               since color alone does not. -->
+          <span v-if="playlist.trackIDs.length === 0">⚠</span>
+          {{ playlist.trackIDs.length }} track{{ playlist.trackIDs.length === 1 ? '' : 's' }}
+        </span>
+      </span>
+    </button>
+    <!-- Ellipsis button: expanded columns only, revealed on header hover. -->
     <!-- Also triggered by right-click anywhere on the header. -->
     <button
+      v-if="expanded"
       class="playlist-col-header__menu-btn"
       aria-label="Playlist actions"
       @click.stop="onMenu"
     >
       ⋮
     </button>
+    <!-- While dragging, chevrons mark the sides the column can move to. -->
+    <template v-if="dragging">
+      <span
+        v-if="canMoveLeft"
+        class="playlist-col-header__chevron playlist-col-header__chevron--left"
+        aria-hidden="true"
+      >‹</span>
+      <span
+        v-if="canMoveRight"
+        class="playlist-col-header__chevron playlist-col-header__chevron--right"
+        aria-hidden="true"
+      >›</span>
+    </template>
   </div>
 </template>
 
@@ -61,15 +201,121 @@ function onMenu(event: MouseEvent): void {
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
+  position: relative;
   width: 100%;
-  overflow: hidden;
+  /* Fills the header row's height, so the lines between headers run top to bottom. */
+  align-self: stretch;
+  /* Not overflow: hidden. The label clips itself, and the drag chevrons stick out past
+     the edge. */
+  min-width: 0;
   cursor: pointer;
-  border-radius: 4px;
   transition: background 0.1s;
+  /* Tall enough for the tallest state, a three-line name over its count. Then no change of
+     layout, rename or fitted width ever moves the header's height and shifts the rows. */
+  min-height: calc(
+    (3 * var(--font-size-sm) + var(--font-size-xs)) * var(--line-height-normal) + 2 * var(--space-2)
+  );
 }
 
 .playlist-col-header:hover {
   background: var(--color-border-subtle);
+}
+
+/* Every header has a line on its left, like the cells below it. WorkspaceView draws the
+   line after the last one. */
+.playlist-col-header {
+  border-left: 2px solid var(--color-border-subtle);
+}
+
+/* Each chevron is centred on the 2px line it can cross, so it pokes past the header edge
+   into the neighbour. The dragged header sits above its neighbours to keep them showing. */
+.playlist-col-header--dragging {
+  z-index: 1;
+}
+
+.playlist-col-header__chevron {
+  position: absolute;
+  top: 50%;
+  color: var(--color-accent);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.playlist-col-header__chevron--left {
+  left: -1px;
+  transform: translate(-50%, -50%);
+}
+
+.playlist-col-header__chevron--right {
+  right: -1px;
+  transform: translate(50%, -50%);
+}
+
+.playlist-col-header--dragging,
+.playlist-col-header--dragging .playlist-col-header__toggle {
+  cursor: grabbing;
+}
+
+/* :hover here too, or the grey hover wins while the pointer sits on the dragged header.
+   No transition, so a hop does not fade the tint in and out. */
+.playlist-col-header--dragging,
+.playlist-col-header--dragging:hover {
+  background: var(--color-accent-subtle);
+  transition: none;
+}
+
+/* Safe centring: short initials sit centred, long ones start at the left edge and are
+   clipped on the right, so the first letters always show. */
+.playlist-col-header--collapsed {
+  justify-content: safe center;
+  padding: var(--space-2) var(--space-1);
+}
+
+.playlist-col-header__initials {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+/* Initials too wide for the column fade out at its edge instead of slicing a letter. */
+.playlist-col-header__initials--overflow {
+  mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+}
+
+.playlist-col-header__initials--empty {
+  color: var(--color-warning);
+}
+
+/* A bare button: it exists for focus and Enter/Space, not for looks. */
+/* The header itself no longer clips, so its drag chevrons can stick out. The toggle clips
+   instead. Relative positioning makes it the box for the screen-reader name too, so long
+   initials and that name can never widen the table. Safari lays a button's flex children
+   out wider than the button, so the clip has to sit here. */
+.playlist-col-header__toggle {
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: inherit;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.playlist-col-header__toggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 /* Stacks name over count. min-width: 0 lets the name ellipsise instead of forcing
@@ -82,11 +328,16 @@ function onMenu(event: MouseEvent): void {
   align-items: flex-start;
 }
 
+/* A long name wraps onto more lines rather than ellipsising, and the header row grows to
+   fit. Three lines is the cap. Past that it clamps, and the tooltip has the rest. */
 .playlist-col-header__name {
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
 }

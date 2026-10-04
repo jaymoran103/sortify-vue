@@ -17,12 +17,16 @@ import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
 import ControlBar from '@/components/common/ControlBar.vue'
 import SearchBar from '@/components/common/SearchBar.vue'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
+import MenuDropdown from '@/components/common/MenuDropdown.vue'
 import TrackRow from './TrackRow.vue'
+import WorkspaceMinimap from './WorkspaceMinimap.vue'
 import PlaylistColumnHeader from './PlaylistColumnHeader.vue'
-import AddContentModal from './AddContentModal.vue'
+import TrackColumnPicker from './TrackColumnPicker.vue'
+import TrackColumnHeader from './TrackColumnHeader.vue'
+import { TRACK_COLUMNS, type TrackColumnKey } from './trackColumns'
 import LeaveWorkspaceModal from './LeaveWorkspaceModal.vue'
 import type { Track, PlaylistId, WorkspacePlaylist } from '@/types/models'
-import type { SortOption, MenuEntry, AddContentChoice, LeaveChoice } from '@/types/ui'
+import type { SortOption, MenuEntry, LeaveChoice } from '@/types/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -50,6 +54,13 @@ const staticSortOptions: SortOption<Track>[] = [
   { key: 'title', label: 'Title', compareFn: (a, b) => a.title.localeCompare(b.title) },
   { key: 'artist', label: 'Artist', compareFn: (a, b) => a.artist.localeCompare(b.artist) },
   { key: 'album', label: 'Album', compareFn: (a, b) => a.album.localeCompare(b.album) },
+  // A track with no length sorts last.
+  {
+    key: 'duration',
+    label: 'Length',
+    compareFn: (a, b) => (a.duration ?? Number.MAX_VALUE) - (b.duration ?? Number.MAX_VALUE),
+  },
+  { key: 'source', label: 'Source', compareFn: (a, b) => a.source.localeCompare(b.source) },
   {
     key: 'most-playlists',
     label: 'Most Playlists',
@@ -122,7 +133,7 @@ const sortOptions = computed<SortOption<Track>[]>(() => {
   ]
 })
 
-// Chain: trackList -> filtered -> sorted -> displayTracks
+// Chain: trackList -> filtered -> sorted -> (reversed) -> displayTracks
 const { query, filtered } = useListFilter<Track>(
   computed(() => workspaceStore.trackList),
   (track, q) => {
@@ -134,15 +145,26 @@ const { query, filtered } = useListFilter<Track>(
     )
   },
 )
-const { currentSort, sorted: displayTracks } = useListSort<Track>(filtered, sortOptions)
+const { currentSort, sorted } = useListSort<Track>(filtered, sortOptions)
+// A second click on a track column header reverses its sort. Any change of sort key, from
+// the dropdown or a header, starts ascending again.
+const sortDescending = ref(false)
+const displayTracks = computed(() => (sortDescending.value ? [...sorted.value].reverse() : sorted.value))
 
 // Retire the dynamic playlist option as soon as the user picks a static sort, so a stale
 // "Playlist: X" entry does not linger in the dropdown.
 watch(currentSort, (key) => {
+  sortDescending.value = false
   if (playlistSortTarget.value !== null && key !== PLAYLIST_SORT_KEY) {
     playlistSortTarget.value = null
   }
 })
+
+// Header click: sort by that column, or reverse it if it already drives the sort.
+function sortByTrackColumn(key: TrackColumnKey): void {
+  if (currentSort.value === key) sortDescending.value = !sortDescending.value
+  else currentSort.value = key
+}
 
 /**
  * Activate the playlist-order sort for one column, adding its dynamic option and selecting it.
@@ -167,28 +189,142 @@ const rowSelection = useListSelection<Track>(
 
 // Dynamic CSS grid column template: index, track info, one column per playlist, and a
 // trailing track that absorbs whatever is left over.
-//
-// The track column used to be the 1fr, which meant a workspace with two playlists spent
-// every spare pixel widening the gap between the track text and the first checkbox. Every
-// column is now a fixed size and the slack parks past the last playlist, so a checkbox
-// stays where the cursor last left it however many playlists come and go. The trailing
-// track holds no element — both the header and each row place their children implicitly,
-// so it is simply the last one nothing lands in, and it collapses to 0 once the columns
-// overflow and the table scrolls.
-const PLAYLIST_COLUMN_WIDTH = '140px'
+// Row height in px. The virtualizer sizes rows with it, and every row is exactly this tall.
+const ROW_HEIGHT = 48
+// A collapsed playlist column is as wide as a row is tall, so each cell is a square tile.
+const COLLAPSED_COLUMN_PX = ROW_HEIGHT
+// An expanded column is wide enough to read its header. It is also Fit's widest.
+const EXPANDED_COLUMN_PX = 140
+// A column at least this wide heads itself with the full name. Narrower ones use initials,
+// since a name squeezed into less wraps mid-word.
+const NAMED_HEADER_MIN_PX = 120
+const INDEX_COLUMN_PX = 60
+const TRACK_COLUMN_MIN_PX = 200
+// Optional track columns picked from the control bar. Page state: none show after a reload.
+const shownTrackColumnKeys = ref(new Set<TrackColumnKey>())
+// Widths the user dragged to, by column. Page state too. A column not dragged keeps its default.
+const trackColumnWidths = ref(new Map<TrackColumnKey, number>())
+const shownTrackColumns = computed(() =>
+  TRACK_COLUMNS.filter((col) => shownTrackColumnKeys.value.has(col.key)).map((col) => ({
+    ...col,
+    widthPx: trackColumnWidths.value.get(col.key) ?? col.widthPx,
+  })),
+)
+function resizeTrackColumn(key: TrackColumnKey, widthPx: number): void {
+  trackColumnWidths.value.set(key, widthPx)
+}
+function toggleTrackColumn(key: TrackColumnKey): void {
+  if (!shownTrackColumnKeys.value.delete(key)) shownTrackColumnKeys.value.add(key)
+}
+// How playlist columns are sized. Every mode but Custom gives all columns one width:
+//   collapsed  each one tile wide
+//   expanded   each wide enough to read its header
+//   fit        the free width split evenly, between collapsed and expanded
+//   custom     each column sized on its own, set by header clicks
+// A playlist added later takes the mode's width, so the set stays uniform.
+type ColumnLayout = 'collapsed' | 'expanded' | 'fit' | 'custom'
+const layoutMode = ref<ColumnLayout>('collapsed')
+// Each column's width in Custom mode. Unused in the other modes. Missing means collapsed.
+const customWidths = ref(new Map<PlaylistId, number>())
+
+function setLayout(mode: Exclude<ColumnLayout, 'custom'>): void {
+  if (mode === 'fit') measureBody()
+  layoutMode.value = mode
+  customWidths.value = new Map()
+}
+
+// A header click opens or closes just that column, so the layout becomes Custom. Every
+// other column keeps the width it had, so one click never reflows the rest of the table.
+// A column showing its name collapses, and one showing initials opens.
+function toggleColumn(playlistId: PlaylistId): void {
+  if (layoutMode.value !== 'custom') {
+    customWidths.value = new Map(workspaceStore.playlists.map((pl) => [pl.id, columnWidth(pl.id)]))
+    layoutMode.value = 'custom'
+  }
+  const named = columnWidth(playlistId) >= NAMED_HEADER_MIN_PX
+  customWidths.value.set(playlistId, named ? COLLAPSED_COLUMN_PX : EXPANDED_COLUMN_PX)
+}
+
+// The table's scroll area. The virtualizer scrolls it, and Fit measures it.
+const scrollContainer = ref<HTMLElement | null>(null)
+// Its width, kept live so Fit follows window resizes, the minimap widening, and track
+// columns coming and going. Null until measured.
+const bodyWidth = ref<number | null>(null)
+function measureBody(): void {
+  if (scrollContainer.value) bodyWidth.value = scrollContainer.value.clientWidth
+}
+let bodyObserver: ResizeObserver | null = null
+watch(
+  () => scrollContainer.value,
+  (el) => {
+    bodyObserver?.disconnect()
+    bodyObserver = null
+    if (!el) return
+    measureBody()
+    if (typeof ResizeObserver === 'undefined') return
+    bodyObserver = new ResizeObserver(measureBody)
+    bodyObserver.observe(el)
+  },
+)
+onBeforeUnmount(() => bodyObserver?.disconnect())
+
+// Fit's one width for every playlist column: the room left with the track column at its
+// minimum, split evenly. Whole pixels, so every column matches; the remainder goes to the
+// track column. It never goes past expanded, where the trailing space takes the rest, or
+// under collapsed, where the table scrolls. 2px is the line closing the last column.
+const fitColumnPx = computed(() => {
+  const count = workspaceStore.playlists.length
+  if (count === 0 || bodyWidth.value === null) return EXPANDED_COLUMN_PX
+  const available =
+    bodyWidth.value - INDEX_COLUMN_PX - TRACK_COLUMN_MIN_PX - 2 -
+    shownTrackColumns.value.reduce((sum, col) => sum + col.widthPx, 0)
+  const even = Math.floor(available / count)
+  return Math.max(COLLAPSED_COLUMN_PX, Math.min(EXPANDED_COLUMN_PX, even))
+})
+
+function columnWidth(playlistId: PlaylistId): number {
+  switch (layoutMode.value) {
+    case 'collapsed':
+      return COLLAPSED_COLUMN_PX
+    case 'expanded':
+      return EXPANDED_COLUMN_PX
+    case 'fit':
+      return fitColumnPx.value
+    case 'custom':
+      return customWidths.value.get(playlistId) ?? COLLAPSED_COLUMN_PX
+  }
+}
+
+// The Layout menu in the control bar. The current mode is checked. Custom checks none.
+const layoutEntries = computed<MenuEntry[]>(() => [
+  { label: 'Collapse all', action: () => setLayout('collapsed'), checked: layoutMode.value === 'collapsed' },
+  { label: 'Expand all', action: () => setLayout('expanded'), checked: layoutMode.value === 'expanded' },
+  { label: 'Fit to screen', action: () => setLayout('fit'), checked: layoutMode.value === 'fit' },
+])
+// The playlist column under the pointer. Every row lifts its cell in that column.
+const hoveredPlaylistId = ref<PlaylistId | null>(null)
+// The track column is capped and a trailing 1fr track absorbs the slack past the last
+// playlist, so a checkbox stays put however many playlists come and go. The trailing
+// track holds no element, and it collapses to 0 once the columns overflow and scroll.
+const TRACK_COLUMN_MAX_PX = 480
 const columnTemplate = computed(() => {
-  const playlistCols = workspaceStore.playlists.map(() => PLAYLIST_COLUMN_WIDTH)
-  return ['60px', 'minmax(200px, 480px)', ...playlistCols, '1fr'].join(' ')
+  const playlistCols = workspaceStore.playlists.map((pl) => `${columnWidth(pl.id)}px`)
+  return [
+    `${INDEX_COLUMN_PX}px`,
+    `minmax(${TRACK_COLUMN_MIN_PX}px, ${TRACK_COLUMN_MAX_PX}px)`,
+    ...shownTrackColumns.value.map((col) => `${col.widthPx}px`),
+    ...playlistCols,
+    '1fr',
+  ].join(' ')
 })
 
 // Configure virtualizer: use displayTracks count, scroll container, and estimated row height.
 // Set overscan to 10 rows for now to balance performance and smoothness during scrolling.
-const scrollContainer = ref<HTMLElement | null>(null)
 const virtualizer = useVirtualizer(
   computed(() => ({
     count: displayTracks.value.length,
     getScrollElement: () => scrollContainer.value,
-    estimateSize: () => 48,
+    estimateSize: () => ROW_HEIGHT,
     overscan: 10,
   })),
 )
@@ -565,31 +701,14 @@ async function handleBulkDelete(): Promise<void> {
 
 // ─── Add content flow + handlers ──────────────
 
-/**
- * Run the add-content flow behind the control bar's single Add button.
- *
- * Opens AddContentModal, then hands off to the picker for whichever card was chosen. No
- * side effects of its own — each branch below owns its own modal and store call. Resolving
- * to null (cancelled, or dismissed) ends the flow.
- *
- * Two dialogs deep by design: the card grid is step one of the same shape Import and Export
- * use, so the workspace asks the question the same way the rest of the app does.
- */
-async function handleAddContent(): Promise<void> {
-  const choice = await modal.open<AddContentChoice>(AddContentModal)
-
-  switch (choice) {
-    case 'tracks':
-      await handleAddTracks()
-      break
-    case 'playlist':
-      await handleAddPlaylistToWorkspace()
-      break
-    case 'new':
-      await handleCreatePlaylist()
-      break
-  }
-}
+// The Add menu in the control bar. Each entry opens its own picker or prompt. Order keeps
+// the two library entries together, with creating something new last.
+const addEntries: MenuEntry[] = [
+  { label: 'Tracks from library', action: () => void handleAddTracks() },
+  { label: 'Playlists from library', action: () => void handleAddPlaylistToWorkspace() },
+  { divider: true },
+  { label: 'New playlist', action: () => void handleCreatePlaylist() },
+]
 
 async function handleAddPlaylistToWorkspace(): Promise<void> {
   const result = await modal.open<number[]>(PlaylistSelectModal, { mode: 'export' })
@@ -710,6 +829,11 @@ useKeyboardShortcuts({
       <ControlBar class="workspace__control-bar">
         <SearchBar v-model="query" placeholder="Search tracks…" />
         <SelectDropdown v-model="currentSort" :options="sortOptions" />
+        <TrackColumnPicker
+          :columns="TRACK_COLUMNS"
+          :shown="shownTrackColumnKeys"
+          @toggle="toggleTrackColumn"
+        />
 
         <!-- Track Count: shown tracks, qualified by the unfiltered total while searching -->
         <span class="text-muted text-sm">
@@ -721,57 +845,89 @@ useKeyboardShortcuts({
         </span>
 
         <template #actions>
-          <button class="btn btn--secondary workspace__add-btn" @click="handleAddContent">
-            + Add
-          </button>
+          <!-- Playlist column widths. Each header also toggles its own column. -->
+          <MenuDropdown class="workspace__layout-menu" label="Layout" :entries="layoutEntries" align="right" />
+          <!-- Every way into the workspace. A new one is a new entry in addEntries. -->
+          <MenuDropdown class="workspace__add-menu" label="+ Add" :entries="addEntries" align="right" />
         </template>
       </ControlBar>
 
-      <!-- Scroll container for the virtualized table -->
-      <div ref="scrollContainer" class="workspace__body">
+      <!-- Scroll container beside the minimap, which stays put while the table scrolls -->
+      <div class="workspace__body-wrap">
+        <div ref="scrollContainer" class="workspace__body">
 
-        <!-- Table with CSS-variable-driven column template shared by header and rows -->
-        <div class="workspace__table" :style="{ '--ws-col-template': columnTemplate }">
+          <!-- Table with CSS-variable-driven column template shared by header and rows -->
+          <div class="workspace__table" :style="{ '--ws-col-template': columnTemplate }">
 
-          <!-- Workspace Table Header: Titles for info columns and playlist titles  -->
-          <div class="workspace__table-header">
-            <div class="workspace__th workspace__th--index">#</div>
-            <div class="workspace__th workspace__th--track">Track</div>
+            <!-- Workspace Table Header: Titles for info columns and playlist titles  -->
+            <div class="workspace__table-header">
+              <div class="workspace__th workspace__th--index">#</div>
+              <div class="workspace__th workspace__th--track">Track</div>
+              <TrackColumnHeader
+                v-for="col in shownTrackColumns"
+                :key="col.key"
+                :column="col"
+                :sort="currentSort !== col.key ? null : sortDescending ? 'desc' : 'asc'"
+                @sort="sortByTrackColumn"
+                @resize="resizeTrackColumn"
+              />
 
-            <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
-            <PlaylistColumnHeader
-              v-for="pl in workspaceStore.playlists"
-              :key="pl.id"
-              :playlist="pl"
-              @request-menu="buildColumnMenu"
-            />
+              <!-- Playlist columns: one PlaylistColumnHeader per playlist -->
+              <PlaylistColumnHeader
+                v-for="pl in workspaceStore.playlists"
+                :key="pl.id"
+                :playlist="pl"
+                :expanded="columnWidth(pl.id) >= NAMED_HEADER_MIN_PX"
+                @request-menu="buildColumnMenu"
+                @toggle-expand="toggleColumn"
+                @move="workspaceStore.movePlaylist"
+                @drag-end="workspaceStore.persistPlaylistOrder()"
+              />
+              <!-- Sits in the trailing grid track, only to draw the line after the last header. -->
+              <div
+                v-if="workspaceStore.playlists.length"
+                class="workspace__th-edge"
+                aria-hidden="true"
+              />
+            </div>
+
+            <!-- Workspace Table Body: virtualized list of TrackRow components, one per track in displayTracks -->
+            <!-- FUTURE: Key field can facilitate column specific styling/actions like row coloring and locking-->
+            <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
+              <TrackRow
+                v-for="row in virtualizer.getVirtualItems()"
+                :key="trackAt(row.index).trackID"
+                :track="trackAt(row.index)"
+                :index="row.index"
+                :playlists="workspaceStore.playlists"
+                :selected="rowSelection.isSelected(trackAt(row.index).trackID)"
+                :hovered-playlist-id="hoveredPlaylistId"
+                :track-columns="shownTrackColumns"
+                :style="{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${row.size}px`,
+                  transform: `translateY(${row.start}px)`,
+                }"
+                @toggle-track="workspaceStore.toggleTrack"
+                @select="handleRowSelect"
+                @context-menu="handleTrackContextMenu"
+                @hover-column="hoveredPlaylistId = $event"
+              />
+            </div>
+
           </div>
-
-          <!-- Workspace Table Body: virtualized list of TrackRow components, one per track in displayTracks -->
-          <!-- FUTURE: Key field can facilitate column specific styling/actions like row coloring and locking-->
-          <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-            <TrackRow
-              v-for="row in virtualizer.getVirtualItems()"
-              :key="trackAt(row.index).trackID"
-              :track="trackAt(row.index)"
-              :index="row.index"
-              :playlists="workspaceStore.playlists"
-              :selected="rowSelection.isSelected(trackAt(row.index).trackID)"
-              :style="{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: `${row.size}px`,
-                transform: `translateY(${row.start}px)`,
-              }"
-              @toggle-track="workspaceStore.toggleTrack"
-              @select="handleRowSelect"
-              @context-menu="handleTrackContextMenu"
-            />
-          </div>
-
         </div>
+
+        <WorkspaceMinimap
+          :tracks="displayTracks"
+          :playlists="workspaceStore.playlists"
+          :scroll-el="scrollContainer"
+          :row-height="ROW_HEIGHT"
+          :scale-tracks="workspaceStore.trackList.length"
+        />
       </div>
     </div>
   </div>
@@ -792,7 +948,7 @@ useKeyboardShortcuts({
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 2px solid var(--color-border-subtle);
   z-index: 10;
 }
 
@@ -835,15 +991,24 @@ useKeyboardShortcuts({
   overflow: hidden;
 }
 
+/* Every major block of the view is split by the same 2px line as the grid. */
 .workspace__control-bar {
   flex-shrink: 0;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 2px solid var(--color-border-subtle);
+}
+
+.workspace__body-wrap {
+  flex: 1;
+  display: flex;
+  min-height: 0;
 }
 
 .workspace__body {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   position: relative;
+  border-right: 2px solid var(--color-border-subtle);
 }
 
 /* CSS variable scope: --ws-col-template is set inline on this element */
@@ -858,8 +1023,13 @@ useKeyboardShortcuts({
   grid-template-columns: var(--ws-col-template);
   align-items: center;
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 2px solid var(--color-border-subtle);
   z-index: 5;
+}
+
+.workspace__th-edge {
+  align-self: stretch;
+  border-left: 2px solid var(--color-border-subtle);
 }
 
 .workspace__th {

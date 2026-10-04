@@ -73,7 +73,7 @@ useKeyboardShortcuts({
     <div
       v-if="ctx.isOpen.value"
       ref="menuEl"
-      class="context-menu"
+      class="context-menu menu-panel"
       :style="{ top: `${ctx.position.value.y}px`, left: `${ctx.position.value.x}px` }"
       role="menu"
     >
@@ -84,7 +84,7 @@ useKeyboardShortcuts({
         <!-- Else: Menu item -->
         <button
           v-else
-          class="context-menu__item"
+          class="context-menu__item menu-item"
           role="menuitem"
           :disabled="entry.disabled"
           @click="handleClick(entry as MenuItem)"
@@ -97,34 +97,9 @@ useKeyboardShortcuts({
 </template>
 
 <style scoped>
+/* Panel and item looks come from .menu-panel and .menu-item in utilities.css. */
 .context-menu {
   position: fixed;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  padding: var(--space-1) 0;
-  min-width: 160px;
-  z-index: var(--z-dropdown);
-}
-
-.context-menu__item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-size-sm);
-  color: var(--color-text);
-  transition: background var(--duration-fast) var(--ease-default);
-}
-
-.context-menu__item:hover {
-  background: var(--color-row-hover);
-}
-
-.context-menu__item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .context-menu__divider {
