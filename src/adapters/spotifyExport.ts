@@ -4,14 +4,15 @@ import type { ExportAdapter, ExportResult } from '@/types/adapters'
 import { spotifyAuth } from '@/spotify/auth'
 import { spotifyApi } from '@/spotify/api'
 import { SLEEP_BETWEEN_PLAYLISTS_MS } from '@/spotify/config'
+import { resolveDescription, type DescriptionOptions } from '@/utils/playlistDescription'
 
-//TODO: let users optionally specify export playlist name and description
+//TODO: let users optionally specify export playlist name
 const PREFIX_PLAYLIST_NAME = '[Sortify] - '
-const PLAYLIST_DESCRIPTION = 'Exported from Sortify'
-// const PLAYLIST_DESCRIPTION = 'Exported from Sortify - jaymoran103.github.io/sortify-vue'
 
 export interface SpotifyExportOptions {
   playlistIds: number[]
+  // Omitted means every playlist gets the Sortify link.
+  description?: DescriptionOptions
 }
 
 interface SpotifyCreatePlaylistResponse {
@@ -112,7 +113,7 @@ export const spotifyExportAdapter: ExportAdapter<SpotifyExportOptions> = {
           // name: `${PREFIX_PLAYLIST_NAME}${playlist.name}`,
           name: PREFIX_PLAYLIST_NAME+playlist.name,
           public: false,
-          description: PLAYLIST_DESCRIPTION,
+          description: resolveDescription(playlist, options.description ?? { mode: 'site' }),
         })
 
         // Add tracks to the playlist in batches, respecting Spotify's limits. NOTE: Leaning conservative for now with lower chunk size

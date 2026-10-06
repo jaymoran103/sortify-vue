@@ -12,6 +12,7 @@ import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import { openSpotifyURI, copyToClipboard } from '@/utils/spotifyLinks'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import PromptModal from '@/components/modals/PromptModal.vue'
+import DescriptionModal from '@/components/modals/DescriptionModal.vue'
 import PlaylistSelectModal from '@/components/dashboard/PlaylistSelectModal.vue'
 import TrackSelectModal from '@/components/dashboard/TrackSelectModal.vue'
 import ControlBar from '@/components/common/ControlBar.vue'
@@ -441,6 +442,19 @@ async function handleRename(playlistId: PlaylistId): Promise<void> {
   }
 }
 
+// An empty answer is a real one here: it clears the description. Only cancel returns null.
+async function handleEditDescription(playlistId: PlaylistId): Promise<void> {
+  const pl = workspaceStore.playlists.find((p) => p.id === playlistId)
+  if (!pl) return
+  const description = await modal.open<string>(DescriptionModal, {
+    playlistName: pl.name,
+    initialValue: pl.description ?? '',
+  })
+  if (description !== null) {
+    workspaceStore.setDescription(playlistId, description)
+  }
+}
+
 /**
  * Remove a playlist from the workspace, confirming first when that discards buffered edits.
  *
@@ -528,6 +542,10 @@ function buildColumnMenu(playlistId: PlaylistId, event: MouseEvent): void {
     { label: 'Sort by this Playlist', action: () => handleSortByPlaylist(playlistId) },
     { divider: true },
     { label: 'Rename', action: () => void handleRename(playlistId) },
+    {
+      label: workspaceStore.playlists[index]?.description ? 'Edit Description' : 'Add Description',
+      action: () => void handleEditDescription(playlistId),
+    },
     { label: 'Duplicate', action: () => handleDuplicate(playlistId) },
   ]
 

@@ -4,7 +4,7 @@ import { useSessionStore } from '@/stores/sessions'
 import { usePlaylistStore } from '@/stores/playlists'
 import { useTrackStore } from '@/stores/tracks'
 import { collectWorkspaceIssues } from '@/utils/workspaceIssues'
-import type { Track, WorkspacePlaylist, PlaylistId } from '@/types/models'
+import type { Playlist, Track, WorkspacePlaylist, PlaylistId } from '@/types/models'
 import type { WorkspaceIssue } from '@/types/ui'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
@@ -236,6 +236,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const pl = playlists.value.find((p) => p.id === playlistId)
     if (!pl) return
     pl.name = newName
+    modifiedIds.value.add(playlistId)
+  }
+
+  /** Set a playlist's description in the buffer. An empty string clears it. */
+  function setDescription(playlistId: PlaylistId, description: string): void {
+    const pl = playlists.value.find((p) => p.id === playlistId)
+    if (!pl) return
+    const next = description.trim() || undefined
+    if (next === pl.description) return
+    pl.description = next
     modifiedIds.value.add(playlistId)
   }
 
@@ -537,12 +547,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
 
       // Step 2: update modified library playlists in a single batched transaction.
-      const batchUpdates: Array<{ id: number; changes: { name: string; trackIDs: string[] } }> = []
+      const batchUpdates: Array<{ id: number; changes: Pick<Playlist, 'name' | 'description' | 'trackIDs'> }> = []
       for (const modId of modifiedIds.value) {
         // After pending resolution above, only numeric IDs remain in modifiedIds
         const pl = playlists.value.find((p) => p.id === modId)
         if (!pl) continue
-        batchUpdates.push({ id: pl.id as number, changes: { name: pl.name, trackIDs: [...pl.trackIDs] } })
+        batchUpdates.push({ id: pl.id as number, changes: { name: pl.name, description: pl.description, trackIDs: [...pl.trackIDs] } })
       }
       await playlistStore.batchUpdatePlaylists(batchUpdates)
 
@@ -597,6 +607,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     addPlaylist,
     removePlaylist,
     renamePlaylist,
+    setDescription,
     duplicatePlaylist,
     movePlaylist,
     persistPlaylistOrder,

@@ -288,6 +288,42 @@ describe('Workspace Store', () => {
     expect(store.modifiedIds.has(pl1Id)).toBe(true)
   })
 
+  // ─── setDescription ───────────────────────────────────────────────────────
+
+  it('setDescription buffers the text and save writes it to IDB', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.setDescription(pl1Id, '  Late drive home  ')
+    expect(store.modifiedIds.has(pl1Id)).toBe(true)
+
+    await store.save()
+    expect((await db.playlists.get(pl1Id))?.description).toBe('Late drive home')
+  })
+
+  it('setDescription with an empty string clears a saved description', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    await db.playlists.update(pl1Id, { description: 'Old' })
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.setDescription(pl1Id, '')
+    await store.save()
+
+    expect((await db.playlists.get(pl1Id))?.description).toBeUndefined()
+  })
+
+  it('setDescription with unchanged text leaves the playlist unmodified', async () => {
+    const { pl1Id, sessionId } = await setupData()
+    const store = useWorkspaceStore()
+    await store.loadSession(sessionId)
+
+    store.setDescription(pl1Id, '   ')
+
+    expect(store.hasUnsavedChanges).toBe(false)
+  })
+
   // ─── duplicatePlaylist ────────────────────────────────────────────────────
 
   it('duplicatePlaylist creates a copy with a pending string ID', async () => {

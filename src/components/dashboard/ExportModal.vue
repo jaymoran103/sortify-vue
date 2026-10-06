@@ -13,8 +13,16 @@ import ScrollableList from '@/components/common/ScrollableList.vue'
 import SelectableItem, { SELECTABLE_ITEM_HEIGHT } from '@/components/common/SelectableItem.vue'
 import type { Playlist } from '@/types/models'
 import type { SortOption } from '@/types/ui'
+import {
+  MAX_DESCRIPTION_LENGTH,
+  cleanDescription,
+  resolveDescription,
+  type DescriptionMode,
+  type DescriptionOptions,
+} from '@/utils/playlistDescription'
 
-type Step = 'source' | 'playlists' | 'options'
+// 'options' is the local-file format step. 'details' is the Spotify step that sets descriptions.
+type Step = 'source' | 'playlists' | 'options' | 'details'
 
 const props = withDefaults(defineProps<{ autoSpotify?: boolean }>(), { autoSpotify: false })
 
@@ -102,12 +110,50 @@ onMounted(() => {
 })
 
 function confirmPlaylists(): void {
-  if (destination.value === 'spotify') {
-    void handleSpotifyExport()
-  } else {
-    step.value = 'options'
-  }
+  step.value = destination.value === 'spotify' ? 'details' : 'options'
 }
+
+// ── Spotify description ───────────────────────────────────────────────────────
+
+const descriptionModeOptions: Array<{ key: DescriptionMode; label: string }> = [
+  { key: 'site', label: 'Sortify link' },
+  { key: 'playlist', label: "Each playlist's own description" },
+  { key: 'custom', label: 'Write one for all' },
+]
+
+const descriptionMode = ref<DescriptionMode>('site')
+const customDescription = ref('')
+const appendLink = ref(true)
+
+const descriptionOptions = computed((): DescriptionOptions => ({
+  mode: descriptionMode.value,
+  customText: customDescription.value,
+  appendLink: appendLink.value,
+}))
+
+// Selected playlists in list order, so the preview shows the first one the user sees.
+const selectedPlaylists = computed(() =>
+  displayItems.value.filter((p) => isSelected(String(p.id!))),
+)
+
+// How many selected playlists carry their own text; 'playlist' mode falls back for the rest.
+const withOwnDescription = computed(
+  () => selectedPlaylists.value.filter((p) => cleanDescription(p.description ?? '')).length,
+)
+
+const previewPlaylist = computed(
+  () => selectedPlaylists.value.find((p) => p.description) ?? selectedPlaylists.value[0],
+)
+
+const descriptionPreview = computed(() =>
+  previewPlaylist.value ? resolveDescription(previewPlaylist.value, descriptionOptions.value) : '',
+)
+
+const customTooLong = computed(
+  () =>
+    descriptionMode.value === 'custom' &&
+    cleanDescription(customDescription.value).length > MAX_DESCRIPTION_LENGTH,
+)
 
 // ── Export ────────────────────────────────────────────────────────────────────
 
@@ -131,7 +177,7 @@ async function handleSpotifyExport(): Promise<void> {
 
   try {
     const result = await adapter.export(
-      { playlistIds: ids },
+      { playlistIds: ids, description: descriptionOptions.value },
       (done, total, label) => {
         activityStore.updateProgress(operationId, {
           done,
@@ -257,6 +303,39 @@ async function handleExport(): Promise<void> {
       <p v-if="errorMsg" class="io-modal__error">{{ errorMsg }}</p>
     </div>
 
+    <!-- Step: Spotify playlist details -->
+    <div v-else-if="step === 'details'" class="io-modal__body">
+      <div class="io-modal__field">
+        <label class="io-modal__label">Description</label>
+        <SelectDropdown v-model="descriptionMode" :options="descriptionModeOptions" />
+        <p v-if="descriptionMode === 'playlist'" class="io-modal__hint">
+          {{ withOwnDescription }} of {{ selectedCount }} have one. The rest get the Sortify link.
+        </p>
+      </div>
+      <div v-if="descriptionMode === 'custom'" class="io-modal__field">
+        <textarea
+          v-model="customDescription"
+          class="io-modal__textarea"
+          aria-label="Description for every exported playlist"
+          placeholder="Leave empty to use the Sortify link"
+        />
+        <p class="io-modal__hint">
+          <span>Line breaks become spaces.</span>
+          <span :class="{ 'io-modal__error': customTooLong }">
+            {{ cleanDescription(customDescription).length }}/{{ MAX_DESCRIPTION_LENGTH }}
+          </span>
+        </p>
+      </div>
+      <label v-if="descriptionMode !== 'site'" class="io-modal__check">
+        <input v-model="appendLink" type="checkbox" />
+        Add the Sortify link at the end
+      </label>
+      <div v-if="previewPlaylist" class="io-modal__field">
+        <span class="io-modal__label">Preview · {{ previewPlaylist.name }}</span>
+        <p class="io-modal__hint export-modal__preview">{{ descriptionPreview }}</p>
+      </div>
+    </div>
+
     <!-- Footer: playlists step has select-all on left + nav on right -->
     <div v-if="step === 'playlists'" class="selection-modal__footer">
       <button
@@ -280,12 +359,24 @@ async function handleExport(): Promise<void> {
 
     <!-- Footer: all other steps -->
     <div v-else class="io-modal__footer">
-      <button v-if="step === 'options'" class="btn btn--ghost" @click="step = 'playlists'">
+      <button
+        v-if="step === 'options' || step === 'details'"
+        class="btn btn--ghost"
+        @click="step = 'playlists'"
+      >
         Back
       </button>
       <button class="btn btn--secondary" @click="emit('cancel')">Cancel</button>
       <button v-if="step === 'options'" class="btn btn--primary" @click="handleExport">
         Export
+      </button>
+      <button
+        v-if="step === 'details'"
+        class="btn btn--primary"
+        :disabled="customTooLong"
+        @click="handleSpotifyExport"
+      >
+        Export to Spotify
       </button>
     </div>
   </div>
@@ -298,5 +389,11 @@ async function handleExport(): Promise<void> {
 
 .selection-modal__list--compact {
   height: 220px;
+}
+
+.export-modal__preview {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
 }
 </style>

@@ -22,6 +22,7 @@ export interface Track {
 export interface Playlist {
   id?: number             // auto-incremented by Dexie
   name: string
+  description?: string      // plain text, set in the workspace; sent to Spotify on export
   trackIDs: string[]
   playlistURI?: string
   timeAdded?: number        // Date.now() when track was added to playlist

@@ -84,12 +84,31 @@ describe('spotifyExportAdapter', () => {
     expect(spotifyPostMock).toHaveBeenCalledWith('/me/playlists', {
       name: '[Sortify] - My Playlist',
       public: false,
-      description: 'Exported from Sortify',
+      description: 'https://jaymoran103.github.io/sortify-vue',
     })
     // Should have called POST /playlists/{id}/items with the track URI
     expect(spotifyPostMock).toHaveBeenCalledWith(
       '/playlists/new-spotify-playlist-id/items',
       { uris: ['spotify:track:abc'] },
+    )
+  })
+
+  it("sends the playlist's own description when asked", async () => {
+    await db.tracks.put(sampleTrack)
+    const playlistId = await db.playlists.add({
+      name: 'Described',
+      description: 'Late drive home',
+      trackIDs: [sampleTrack.trackID],
+    })
+
+    await spotifyExportAdapter.export({
+      playlistIds: [playlistId],
+      description: { mode: 'playlist' },
+    })
+
+    expect(spotifyPostMock).toHaveBeenCalledWith(
+      '/me/playlists',
+      expect.objectContaining({ description: 'Late drive home' }),
     )
   })
 

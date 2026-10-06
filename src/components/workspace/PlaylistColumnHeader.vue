@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { initials } from '@/utils/initials'
 import type { WorkspacePlaylist, PlaylistId } from '@/types/models'
 
@@ -18,6 +18,13 @@ const emit = defineEmits<{
   move: [playlistId: PlaylistId, direction: -1 | 1]
   dragEnd: [playlistId: PlaylistId]
 }>()
+
+// The description has no room in a column header, so it rides along in the hover title.
+const hoverTitle = computed(() =>
+  props.playlist.description
+    ? `${props.playlist.name}\n${props.playlist.description}`
+    : props.playlist.name,
+)
 
 // Drag to reorder. A press becomes a drag only past DRAG_THRESHOLD_PX, so a plain click
 // still toggles the column. Listeners sit on window, not pointer capture, because the
@@ -142,7 +149,7 @@ function onMenu(event: MouseEvent): void {
           'playlist-col-header__initials--empty': playlist.trackIDs.length === 0,
           'playlist-col-header__initials--overflow': initialsOverflow,
         }"
-        :title="playlist.name"
+        :title="hoverTitle"
       >
         <span aria-hidden="true">{{ initials(playlist.name) }}</span>
         <span class="sr-only">
@@ -153,7 +160,7 @@ function onMenu(event: MouseEvent): void {
            flex sibling on the right rather than being pushed down. -->
       <span v-else class="playlist-col-header__text">
         <!-- Playlist Title. Wraps up to three lines; see .playlist-col-header__name. -->
-        <span class="playlist-col-header__name" :title="playlist.name">
+        <span class="playlist-col-header__name" :title="hoverTitle">
           {{ playlist.name }}
         </span>
         <!-- An empty column is marked here, continuously, rather than sprung at exit. The

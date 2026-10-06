@@ -175,6 +175,50 @@ describe('ExportModal', () => {
   })
 })
 
+describe('ExportModal Spotify details step', () => {
+  beforeEach(() => {
+    mockExport.mockReset()
+    mockExport.mockResolvedValue({ playlistsExported: 1, errors: [] })
+    mockAuthState.isAuthenticated = true
+    vi.spyOn(registry, 'getExporter').mockReturnValue({
+      key: 'spotify',
+      label: 'Spotify',
+      export: mockExport,
+    })
+  })
+
+  async function mountAtDetails() {
+    const wrapper = mountExport()
+    await wrapper.findAll('.source-card')[1]!.trigger('click')
+    await wrapper.find('.io-modal__select-all').trigger('click')
+    await wrapper.find('button.btn--primary').trigger('click')
+    return wrapper
+  }
+
+  it('asks for a description before exporting, defaulting to the Sortify link', async () => {
+    const wrapper = await mountAtDetails()
+    expect(mockExport).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Description')
+    expect(wrapper.text()).toContain('https://jaymoran103.github.io/sortify-vue')
+  })
+
+  it('passes the chosen description options to the exporter', async () => {
+    const wrapper = await mountAtDetails()
+    await wrapper.find('select').setValue('custom')
+    await wrapper.find('textarea').setValue('Sorted by hand')
+    await wrapper.find('button.btn--primary').trigger('click')
+    await flushPromises()
+
+    expect(mockExport).toHaveBeenCalledWith(
+      {
+        playlistIds: [1],
+        description: { mode: 'custom', customText: 'Sorted by hand', appendLink: true },
+      },
+      expect.any(Function),
+    )
+  })
+})
+
 describe('ExportModal playlist step', () => {
   // Local Files is the first source card and needs no auth; it lands on the playlist step.
   async function mountAtPlaylists() {
