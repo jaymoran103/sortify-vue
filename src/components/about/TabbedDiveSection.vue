@@ -4,7 +4,7 @@ import { ref } from 'vue'
 const props = defineProps<{
   tabs: { label: string; sub: string }[]
   mockClass?: string
-  /** The mock plays a short demo per tab. Tabs then show a play hint and a progress ring. */
+  /** The mock plays a short demo per tab. Tabs then show a play state and a progress ring. */
   playable?: boolean
 }>()
 // Active tab defaults to none (-1), but retains value on mouse leave
@@ -54,9 +54,6 @@ function cancel(): void {
 
     <!-- Dive Sidebar Tabs: highlight when hovered, retain styling on leave -->
     <div class="dive-tabs">
-      <p v-if="playable" class="dive-hint">
-        <span class="dive-hint__icon" aria-hidden="true">▶</span> Hover a step to play it
-      </p>
       <div class="dive-tab-list">
         <div
           v-show="activeTab >= 0"
@@ -118,18 +115,6 @@ function cancel(): void {
   flex-direction: column;
   gap: var(--space-2);
 }
-
-.dive-hint {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-4);
-  font-size: var(--font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-accent-hover);
-}
-.dive-hint__icon { font-size: 9px; }
 
 .dive-tab-list {
   position: relative;
