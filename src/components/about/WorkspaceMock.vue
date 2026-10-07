@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import TrackRow from '@/components/workspace/TrackRow.vue'
 import PlaylistColumnHeader from '@/components/workspace/PlaylistColumnHeader.vue'
 import { useListSelection } from '@/composables/useListSelection'
@@ -8,6 +8,9 @@ import type { PlaylistId, Track, WorkspacePlaylist } from '@/types/models'
 // A live workspace built from the workspace's own TrackRow and PlaylistColumnHeader, on
 // local state only. Tiles toggle, headers expand and drag, rows select. No menu ever opens:
 // the ⋮ buttons only show that each row and column will have one.
+// Hovering a tab beside the demo plays that tab's action on it. Any press in the demo stops it.
+
+const props = defineProps<{ activeTab: number }>()
 
 // Same sizes as WorkspaceView, so tiles are square and expanded headers read the same.
 const ROW_HEIGHT = 48
@@ -95,16 +98,101 @@ const rowSelection = useListSelection<Track>(trackList, (t) => t.trackID, { sele
 
 // Menus are not part of the demo. The ⋮ buttons and right-click do nothing.
 function noMenu(): void {}
+
+// ── Tab simulations ──
+// Each tab plays a short script through the same functions a click would call. A cue class
+// stands in for the pointer: hover on a tile, press on a header or button.
+const root = ref<HTMLElement | null>(null)
+const showExport = ref(false)
+let runId = 0
+
+const tileEl = (row: number, col: number) =>
+  root.value?.querySelectorAll('.track-row')[row]?.querySelectorAll('.track-row__checkbox')[col] ?? null
+const headerEl = (col: number) => root.value?.querySelectorAll('.playlist-col-header')[col] ?? null
+
+function clearCues(): void {
+  root.value?.querySelectorAll('.ws-sim-hover, .ws-sim-press').forEach((el) => el.classList.remove('ws-sim-hover', 'ws-sim-press'))
+  hoveredPlaylistId.value = null
+}
+
+function stop(): void {
+  runId++
+  clearCues()
+  showExport.value = false
+}
+
+/** Waits, then reports whether this run is still the current one. */
+function pause(id: number, ms: number): Promise<boolean> {
+  return new Promise((resolve) => setTimeout(() => resolve(id === runId), ms))
+}
+
+async function simToggle(id: number, row: number, col: number): Promise<boolean> {
+  const pl = playlists.value[col]
+  if (!pl) return true
+  hoveredPlaylistId.value = pl.id
+  tileEl(row, col)?.classList.add('ws-sim-hover')
+  if (!(await pause(id, 450))) return false
+  toggleTrack(pl.id, tracks[row]!.trackID)
+  if (!(await pause(id, 450))) return false
+  clearCues()
+  return true
+}
+
+const scripts: Record<number, (id: number) => Promise<unknown>> = {
+  // Edit memberships: a few tiles toggled in turn.
+  0: async (id) => {
+    for (const [row, col] of [[0, 2], [2, 3], [4, 1]] as const) {
+      if (!(await simToggle(id, row, col))) return
+    }
+  },
+  // Arrange playlists: the last column dragged two places left, then opened and closed.
+  1: async (id) => {
+    const moving = playlists.value[playlists.value.length - 1]
+    if (!moving) return
+    for (let step = 0; step < 2; step++) {
+      const index = playlists.value.findIndex((p) => p.id === moving.id)
+      headerEl(index)?.classList.add('ws-sim-press')
+      if (!(await pause(id, 400))) return
+      clearCues()
+      movePlaylist(moving.id, -1)
+    }
+    headerEl(playlists.value.findIndex((p) => p.id === moving.id))?.classList.add('ws-sim-press')
+    if (!(await pause(id, 500))) return
+    toggleExpand(moving.id)
+    if (!(await pause(id, 1200))) return
+    toggleExpand(moving.id)
+    clearCues()
+  },
+  // Save & Export: an edit if there is none, then Save, then the export dialog.
+  2: async (id) => {
+    if (!dirty.value && !(await simToggle(id, 1, 0))) return
+    root.value?.querySelector('.ws-mock__save')?.classList.add('ws-sim-press')
+    if (!(await pause(id, 500))) return
+    save()
+    clearCues()
+    if (!(await pause(id, 600))) return
+    showExport.value = true
+  },
+}
+
+watch(
+  () => props.activeTab,
+  (tab) => {
+    stop()
+    void scripts[tab]?.(runId)
+  },
+)
+onBeforeUnmount(() => runId++)
 </script>
 
 <template>
-  <div class="ws-mock no-text-select">
+  <div ref="root" class="ws-mock no-text-select" @pointerdown.capture="stop">
     <div class="ws-header">
       <span class="ws-title">Blues Session</span>
       <span class="ws-meta">{{ playlists.length }} playlists · {{ tracks.length }} tracks</span>
       <div class="ws-header-actions">
         <span class="ws-unsaved">{{ dirty ? 'Unsaved changes' : `Saved at ${savedAt}` }}</span>
-        <button class="btn btn--sm" :class="dirty ? 'btn--primary' : 'btn--secondary'" :disabled="!dirty" @click="save">
+        <button class="btn btn--sm ws-mock__save" :class="dirty ? 'btn--primary' : 'btn--secondary'" :disabled="!dirty" @click="save">
           Save
         </button>
       </div>
@@ -140,13 +228,56 @@ function noMenu(): void {}
         @hover-column="hoveredPlaylistId = $event"
       />
     </div>
+
+    <!-- Save & Export: the export dialog, as the dashboard shows it. Any press closes it. -->
+    <div v-if="showExport" class="ws-mock__overlay">
+      <div class="ws-mock__dialog io-modal">
+        <h2 class="io-modal__title">Export</h2>
+        <div class="io-modal__body">
+          <p class="text-muted text-sm">Where are you exporting to?</p>
+          <div class="source-card-grid">
+            <button class="source-card" type="button">
+              <span class="source-card__label">Local Files</span>
+              <span class="source-card__hint">CSV or JSON</span>
+            </button>
+            <button class="source-card" type="button" disabled>
+              <span class="source-card__label">Spotify</span>
+              <span class="source-card__hint">Not available yet</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 @import './mock-shared.css';
 
-.ws-mock { display: flex; flex-direction: column; }
+.ws-mock { position: relative; display: flex; flex-direction: column; }
+
+/* Simulation cues, matching the real hover and press looks. */
+.ws-mock :deep(.track-row__checkbox.ws-sim-hover) { box-shadow: inset 0 0 0 4px var(--color-cell-hover-edge); }
+.ws-mock :deep(.track-row__checkbox--checked.ws-sim-hover) { box-shadow: inset 0 0 0 4px var(--color-accent-hover); }
+.ws-mock :deep(.playlist-col-header.ws-sim-press) { background: var(--color-accent-subtle); }
+.ws-mock__save.ws-sim-press { box-shadow: 0 0 0 2px var(--color-focus-ring); }
+
+/* Export dialog over the demo */
+.ws-mock__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-bg) 60%, transparent);
+  z-index: 5;
+}
+.ws-mock__dialog {
+  width: min(420px, calc(100% - 2 * var(--space-4)));
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
 
 /* Same look as WorkspaceView's table header. */
 .ws-mock__table { width: fit-content; max-width: 100%; overflow-x: auto; }
