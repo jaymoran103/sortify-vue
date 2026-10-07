@@ -44,7 +44,7 @@
       </svg>
       <div class="flow-text">
         <a class="flow-label flow-link" href="https://exportify.net" target="_blank" rel="noopener">Exportify ↗</a>
-        <div class="flow-desc">Side path</div>
+        <div class="flow-desc">Alternative export</div>
       </div>
     </div>
 
