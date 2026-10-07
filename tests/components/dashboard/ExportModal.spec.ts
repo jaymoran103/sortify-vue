@@ -12,6 +12,12 @@ const playlists: Playlist[] = [
   { id: 1, name: 'Test Playlist', trackIDs: ['a', 'b'] },
 ]
 
+// These tests cover the Spotify path, which is off by default while Spotify I/O is disabled.
+vi.mock('@/spotify/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/spotify/config')>()),
+  SPOTIFY_IO_ENABLED: true,
+}))
+
 vi.mock('@/stores/playlists', () => ({
   usePlaylistStore: () => ({ playlists }),
 }))

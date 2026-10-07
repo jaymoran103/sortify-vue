@@ -13,6 +13,12 @@ const testState = vi.hoisted(() => ({
   },
 }))
 
+// These tests cover the Spotify path, which is off by default while Spotify I/O is disabled.
+vi.mock('@/spotify/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/spotify/config')>()),
+  SPOTIFY_IO_ENABLED: true,
+}))
+
 vi.mock('@/composables/useModal', () => ({
   useModal: () => ({
     open: testState.mockOpen,

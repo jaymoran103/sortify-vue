@@ -5,6 +5,7 @@ import { usePlaylistStore } from '@/stores/playlists'
 import { useActivityStore } from '@/stores/activity'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
+import { SPOTIFY_IO_ENABLED } from '@/spotify/config'
 import type { SpotifyExportOptions } from '@/adapters/spotifyExport'
 import { useSelectableList } from '@/composables/useSelectableList'
 import SelectDropdown from '@/components/common/SelectDropdown.vue'
@@ -209,9 +210,12 @@ async function handleExport(): Promise<void> {
           <span class="source-card__label">Local Files</span>
           <span class="source-card__hint">CSV or JSON</span>
         </button>
-        <button class="source-card" @click="selectSpotify">
+        <!-- Spotify Option: disabled while Spotify export is off. No third party exports for us. -->
+        <button class="source-card" :disabled="!SPOTIFY_IO_ENABLED" @click="selectSpotify">
           <span class="source-card__label">Spotify</span>
-          <span class="source-card__hint">{{ isAuthenticated ? 'Export playlists' : 'Connect to Spotify' }}</span>
+          <span class="source-card__hint">
+            {{ !SPOTIFY_IO_ENABLED ? 'Not available yet' : isAuthenticated ? 'Export playlists' : 'Connect to Spotify' }}
+          </span>
         </button>
       </div>
     </div>

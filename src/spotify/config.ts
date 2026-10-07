@@ -1,3 +1,7 @@
+// Spotify import and export are off while the app awaits Spotify's approval for public use.
+// Import points to Exportify instead, and export is unavailable. Flip to turn both back on.
+export const SPOTIFY_IO_ENABLED = false
+
 // Client ID for Spotify API. This is a public key, safe to include in client-side code
 export const SPOTIFY_CLIENT_ID = '95ba1274418d436a8540ebee2d22c8ed'
 

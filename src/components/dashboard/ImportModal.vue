@@ -5,6 +5,8 @@ import { useModal } from '@/composables/useModal'
 import { useSpotifyAuth } from '@/composables/useSpotifyAuth'
 import { useActivityStore } from '@/stores/activity'
 import { PENDING_ACTIONS } from '@/spotify/pendingIntent'
+import { SPOTIFY_IO_ENABLED } from '@/spotify/config'
+import ConfirmModal from '@/components/modals/ConfirmModal.vue'
 import SpotifyPlaylistPickerModal from './SpotifyPlaylistPickerModal.vue'
 import type { ImportResult } from '@/types/adapters'
 
@@ -30,6 +32,16 @@ const errorMsg = ref<string | null>(null)
 
 function selectLocalFiles(): void {
   step.value = 'files'
+}
+
+// With Spotify import off, warn first, then send the user to Exportify for a CSV to import here.
+async function openExportify(): Promise<void> {
+  const confirmed = await modal.open<true>(ConfirmModal, {
+    title: 'Import with Exportify',
+    message: "Spotify import is off for now. Exportify saves your Spotify playlists as CSV files. Download them there, then import them here as Local Files.",
+    confirmLabel: 'Open Exportify',
+  }).catch(() => undefined)
+  if (confirmed) window.open('https://exportify.net', '_blank', 'noopener')
 }
 
 async function openSpotifyImport(): Promise<void> {
@@ -159,9 +171,15 @@ async function handleFiles(e: Event): Promise<void> {
         </button>
 
         <!-- Spotify Option: opens the Spotify playlist picker when authenticated. -->
-        <button class="source-card" type="button" @click="openSpotifyImport" :disabled="isLoading">
+        <button v-if="SPOTIFY_IO_ENABLED" class="source-card" type="button" @click="openSpotifyImport" :disabled="isLoading">
           <span class="source-card__label">Spotify</span>
           <span class="source-card__hint">{{ isAuthenticated ? 'Browse playlists' : 'Sign in to Spotify' }}</span>
+        </button>
+
+        <!-- Exportify Option: stands in for Spotify while Spotify import is off. -->
+        <button v-else class="source-card" type="button" @click="openExportify">
+          <span class="source-card__label">Spotify via Exportify</span>
+          <span class="source-card__hint">Opens exportify.net</span>
         </button>
       </div>
     </div>
