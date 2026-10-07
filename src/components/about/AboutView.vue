@@ -48,10 +48,10 @@ const doublesDraft = computed(() => DOUBLES_DRAFTS.find((d) => d.key === doubles
     <!-- SECTION: WORKSPACE -->
     <section class="workspace-dive">
       <h2 class="section-heading">Multi-playlist Workspace</h2>
-      <TabbedDiveSection :tabs="workspaceTabs">
+      <TabbedDiveSection :tabs="workspaceTabs" playable>
 
-        <template #default="{ activeTab }">
-          <WorkspaceMock :activeTab="activeTab" />
+        <template #default="{ activeTab, runKey, play, finish, cancel }">
+          <WorkspaceMock :activeTab="activeTab" :runKey="runKey" :play="play" :finish="finish" :cancel="cancel" />
         </template>
 
       </TabbedDiveSection>

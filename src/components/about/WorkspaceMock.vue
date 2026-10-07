@@ -10,7 +10,15 @@ import type { PlaylistId, Track, WorkspacePlaylist } from '@/types/models'
 // the ⋮ buttons only show that each row and column will have one.
 // Hovering a tab beside the demo plays that tab's action on it. Any press in the demo stops it.
 
-const props = defineProps<{ activeTab: number }>()
+const props = defineProps<{
+  activeTab: number
+  // Changes each time the active tab should play. See TabbedDiveSection.
+  runKey: number
+  // Report the run to the tab, which draws its progress ring.
+  play: (ms: number) => void
+  finish: () => void
+  cancel: () => void
+}>()
 
 // Same sizes as WorkspaceView, so tiles are square and expanded headers read the same.
 const ROW_HEIGHT = 48
@@ -121,6 +129,12 @@ function stop(): void {
   showExport.value = false
 }
 
+// A press in the demo skips the run, so the tab's ring clears.
+function skip(): void {
+  stop()
+  props.cancel()
+}
+
 /** Waits, then reports whether this run is still the current one. */
 function pause(id: number, ms: number): Promise<boolean> {
   return new Promise((resolve) => setTimeout(() => resolve(id === runId), ms))
@@ -131,62 +145,79 @@ async function simToggle(id: number, row: number, col: number): Promise<boolean>
   if (!pl) return true
   hoveredPlaylistId.value = pl.id
   tileEl(row, col)?.classList.add('ws-sim-hover')
-  if (!(await pause(id, 450))) return false
+  if (!(await pause(id, TOGGLE_MS / 2))) return false
   toggleTrack(pl.id, tracks[row]!.trackID)
-  if (!(await pause(id, 450))) return false
+  if (!(await pause(id, TOGGLE_MS / 2))) return false
   clearCues()
   return true
 }
 
-const scripts: Record<number, (id: number) => Promise<unknown>> = {
+// Each script's runtime in ms, so the tab's ring finishes as the script does.
+const TOGGLE_MS = 900
+const runtimes: Record<number, () => number> = {
+  0: () => 3 * TOGGLE_MS,
+  1: () => 2 * 400 + 500 + 1200,
+  2: () => (dirty.value ? 0 : TOGGLE_MS) + 500 + 600,
+}
+
+const scripts: Record<number, (id: number) => Promise<boolean | void>> = {
   // Edit memberships: a few tiles toggled in turn.
   0: async (id) => {
     for (const [row, col] of [[0, 2], [2, 3], [4, 1]] as const) {
-      if (!(await simToggle(id, row, col))) return
+      if (!(await simToggle(id, row, col))) return false
     }
+    return true
   },
   // Arrange playlists: the last column dragged two places left, then opened and closed.
   1: async (id) => {
     const moving = playlists.value[playlists.value.length - 1]
-    if (!moving) return
+    if (!moving) return true
     for (let step = 0; step < 2; step++) {
       const index = playlists.value.findIndex((p) => p.id === moving.id)
       headerEl(index)?.classList.add('ws-sim-press')
-      if (!(await pause(id, 400))) return
+      if (!(await pause(id, 400))) return false
       clearCues()
       movePlaylist(moving.id, -1)
     }
     headerEl(playlists.value.findIndex((p) => p.id === moving.id))?.classList.add('ws-sim-press')
-    if (!(await pause(id, 500))) return
+    if (!(await pause(id, 500))) return false
     toggleExpand(moving.id)
-    if (!(await pause(id, 1200))) return
+    if (!(await pause(id, 1200))) return false
     toggleExpand(moving.id)
     clearCues()
+    return true
   },
   // Save & Export: an edit if there is none, then Save, then the export dialog.
   2: async (id) => {
-    if (!dirty.value && !(await simToggle(id, 1, 0))) return
+    if (!dirty.value && !(await simToggle(id, 1, 0))) return false
     root.value?.querySelector('.ws-mock__save')?.classList.add('ws-sim-press')
-    if (!(await pause(id, 500))) return
+    if (!(await pause(id, 500))) return false
     save()
     clearCues()
-    if (!(await pause(id, 600))) return
+    if (!(await pause(id, 600))) return false
     showExport.value = true
+    return true
   },
 }
 
 watch(
-  () => props.activeTab,
-  (tab) => {
+  () => props.runKey,
+  async () => {
     stop()
-    void scripts[tab]?.(runId)
+    const tab = props.activeTab
+    const script = scripts[tab]
+    if (!script) return
+    const id = runId
+    props.play(runtimes[tab]!())
+    // A run replaced by a newer one leaves the ring to the newer run.
+    if ((await script(id)) && id === runId) props.finish()
   },
 )
 onBeforeUnmount(() => runId++)
 </script>
 
 <template>
-  <div ref="root" class="ws-mock no-text-select" @pointerdown.capture="stop">
+  <div ref="root" class="ws-mock no-text-select" @pointerdown.capture="skip">
     <div class="ws-header">
       <span class="ws-title">Blues Session</span>
       <span class="ws-meta">{{ playlists.length }} playlists · {{ tracks.length }} tracks</span>
