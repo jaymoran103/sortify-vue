@@ -6,7 +6,6 @@ import OverlapMock from './OverlapMock.vue'
 import DoublesMock from './DoublesMock.vue'
 import { DOUBLES_DRAFTS } from './doublesDrafts'
 import DataFlowDiagram from './DataFlowDiagram.vue'
-import FeatureCard from './FeatureCard.vue'
 
 const workspaceTabs = [
   { label: 'Edit memberships', sub: 'Toggle tracks across playlists. Nothing is permanent until you save.' },
@@ -26,37 +25,6 @@ const showComingSoon = false
 const showDraftPicker = import.meta.env.DEV
 const doublesDraftKey = ref(DOUBLES_DRAFTS[0]!.key)
 const doublesDraft = computed(() => DOUBLES_DRAFTS.find((d) => d.key === doublesDraftKey.value) ?? DOUBLES_DRAFTS[0]!)
-const featureCards = [
-  {
-    icon: '⊞',
-    // icon: '',
-    title: 'Workspace',
-    description: 'View playlists in a shared grid, and toggle membership across playlists. Create, combine and refine.',
-  },
-  {
-    // icon: 'ᯤ',
-    icon: '⊙',
-    title: 'Spotify Sync',
-    description: "Connect to Spotify to load in your playlists, then send them back once you're done.",
-  },
-  {
-    icon: '☰',
-    // icon: '▤',
-    title: 'Local Files',
-    description: "Import playlists from CSV or JSON files, export any time.",
-    // description: "Import playlists from CSV or JSON files, export any time. If Spotify disappears tomorrow, your organized library doesn't.",
-    // description: "Import playlists from CSV or JSON files, export any time. Works with sources like Exportify and TuneMyMusic.",
-  },
-  {
-    icon: '◈',
-    title: 'Similarity',
-    description: "Scan your library for duplicates, equivalents, and overlaps. Then sort them out.",
-    badge: 'Coming soon!',
-
-    // description: "Hunt down duplicates, equivalents, and overlaps across your library. Then clean up the mess.",
-    // description: "Find the playlists that overlap the most, the songs you add everywhere, and equivalent versions with different names. Then do something about it",
-  },
-]
 </script>
 
 <template>
@@ -75,21 +43,6 @@ const featureCards = [
       <p class="section-sub">Most music platforms prioritize discovery over organization. It's much easier to find cool new content than to keep your existing library clean.</p>
       <p class="section-sub"><b>Sortify</b> is built to solve that problem. It separates your library from all the other noise, with simple but powerful tools to sort out your music.</p>
 
-    </section>
-
-    <!-- SECTION: FEATURE CARDS -->
-    <section class="feature-cards">
-      <h2 class="section-heading">The tools.</h2>
-      <div class="cards-grid">
-        <FeatureCard
-          v-for="card in featureCards"
-          :key="card.title"
-          :icon="card.icon"
-          :title="card.title"
-          :description="card.description"
-          :badge="card.badge"
-        />
-      </div>
     </section>
 
     <!-- SECTION: WORKSPACE -->
@@ -215,25 +168,6 @@ const featureCards = [
 .draft-picker { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-5); }
 .draft-picker-label { font-size: var(--font-size-xs); text-transform: uppercase; letter-spacing: 0.06em; }
 
-/* ── Feature cards ── */
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-4);
-  margin-top: var(--space-5);
-}
-
-.coming-soon-badge {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-subtle);
-  color: var(--color-text-muted);
-  vertical-align: middle;
-  margin-left: var(--space-2);
-}
 /* ── Call to action ── */
 .cta {
   padding: var(--space-8) 0;
