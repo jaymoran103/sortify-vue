@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { initials } from '@/utils/initials'
+
 defineProps<{ activeTab: number }>()
 
-const playlists = ['Blues Rock', 'Classic Blues', 'Blues Covers', 'Best Riffs']
+// Columns are collapsed, as the workspace opens: one square tile wide, headed by initials.
+const playlists = ['Blues Rock', 'Classic Blues', 'Blues Covers', 'Guitar Riffs']
 
 const tracks = [
   { title: 'The Thrill is Gone',    artist: 'B.B. King',          cols: [false, true,  false, false] },
@@ -36,41 +39,38 @@ const timeOnLoad = new Date().toLocaleTimeString()
   </div>
 
   <!-- Table Display -->
-   <!-- Tab 1: Display playlist menu over columns -->
+  <!-- Tab 1: Display playlist menu over columns -->
   <div class="ws-table">
     <div class="ws-row ws-row-head">
       <div class="ws-cell ws-idx">#</div>
       <div class="ws-cell ws-track-col">Track</div>
 
-      <!-- For each playlist, display a column -->
-      <div v-for="pl in playlists" :key="pl" class="ws-cell ws-pl-col">
-        <span>{{ pl }} <span class="ws-col-menu" :style="activeTab !== 1 ? 'visibility: hidden' : ''"></span></span>
-      </div>
+      <!-- For each playlist, a collapsed column headed by its initials -->
+      <div
+        v-for="(pl, ci) in playlists"
+        :key="pl"
+        class="ws-cell ws-pl-col ws-tile-head"
+        :class="{ 'ws-tile-head-open': activeTab === 1 && ci === 2 }"
+        :title="pl"
+      >{{ initials(pl) }}</div>
+      <div class="ws-tile-edge"></div>
     </div>
 
-    <!-- Track rows -->
-     <!-- Tab 1: Render checkboxes as disabled (emphasizes context menu) -->
-
-     <!-- For each track, display a row with metadata and checkboxes for each playlist-->
+    <!-- Track rows: the whole cell is the checkbox. Accent when checked, background when not. -->
+    <!-- Tab 1: tiles dim, which puts the column menu forward -->
     <div
       v-for="(track, ti) in tracks"
       :key="track.title + track.artist"
-      class="ws-row"
+      class="ws-row ws-tile-row"
+      :class="{ 'ws-tiles-muted': activeTab === 1 }"
     >
       <div class="ws-cell ws-idx">{{ ti + 1 }}</div>
       <div class="ws-cell ws-track-col">
         <span class="ws-track-title">{{ track.title }}</span>
         <span class="ws-track-artist">{{ track.artist }}</span>
       </div>
-
-      <!-- For each playlist, display a checkbox
-       case 0,2: default checkboxes 
-       case 1: disabled checkboxes with muted styling, emphasizes column menu 
-       -->
-      <div v-for="(checked, ci) in track.cols" :key="ci" class="ws-cell ws-pl-col">
-        <span v-if="activeTab !== 1" :class="['ws-checkbox', checked && 'ws-checked']">{{ checked ? '✓' : '' }}</span>
-        <span v-else :class="['ws-checkbox', 'ws-muted', checked && 'ws-checked-muted']">{{ checked ? '✓' : '' }}</span>
-      </div>
+      <div v-for="(checked, ci) in track.cols" :key="ci" class="ws-tile" :class="{ 'ws-tile-on': checked }"></div>
+      <div class="ws-tile-edge"></div>
     </div>
   </div>
 
@@ -116,18 +116,25 @@ const timeOnLoad = new Date().toLocaleTimeString()
 /* FUTURE: Borrow more styling explictly from workspace/modal components? Better to leave independent here? */
 @import './mock-shared.css';
 .ws-row { 
-    grid-template-columns: 40px minmax(160px, 1fr) repeat(4, minmax(90px, 130px)); 
+    grid-template-columns: 40px minmax(160px, 1fr) repeat(4, 48px) 2px; 
 }
 
-.ws-col-menu { 
-    opacity: 0.5; 
-    font-size: 10px; 
-    margin-left: 2px;
- }
+/* Square tiles, as in the workspace: a 48px row with a 2px border leaves a 46px cell, and
+   each column's 2px left line leaves it 46px wide. */
+.ws-tile-row { height: 48px; border-bottom-width: 2px; grid-template-rows: 46px; }
+.ws-tile-row .ws-cell { padding-block: 0; }
+.ws-tile,
+.ws-tile-head,
+.ws-tile-edge { border-left: 2px solid var(--color-border-subtle); align-self: stretch; }
+.ws-tile-on { background: var(--color-accent); }
+.ws-tiles-muted .ws-tile { opacity: 0.4; }
+.ws-tile-head { padding: 0; font-size: var(--font-size-xs); }
+.ws-tile-head-open { color: var(--color-text); background: var(--color-surface); }
+
 .ws-col-dropdown {
   position: absolute;
-  top: 68px;
-  right: 100px;
+  top: 84px;
+  right: 54px;
 }
 
 .ws-modal-overlay {
