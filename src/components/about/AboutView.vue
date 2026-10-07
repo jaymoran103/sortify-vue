@@ -8,9 +8,9 @@ import { DOUBLES_DRAFTS } from './doublesDrafts'
 import DataFlowDiagram from './DataFlowDiagram.vue'
 
 const workspaceTabs = [
-  { label: 'Edit memberships', sub: 'Toggle tracks across playlists. Nothing is permanent until you save.' },
-  { label: 'Manage playlists', sub: 'Rename, duplicate, or remove playlists. Perform mass actions.' },
-  { label: 'Save & Export', sub: 'Send back to Spotify, or download as CSV / JSON.' },
+  { label: 'Edit memberships', sub: 'Click a tile to add or remove a track. Nothing is permanent until you save.' },
+  { label: 'Arrange playlists', sub: 'Click a header to open or close it. Drag one to reorder.' },
+  { label: 'Save & Export', sub: 'Save your changes, then download them as CSV or JSON.' },
   // { label: 'Track Actions', sub: 'Toggle across multiple playlists at once, or open in Spotify' },
 ]
 const overlapTabs = [

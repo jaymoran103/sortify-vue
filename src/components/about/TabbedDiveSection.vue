@@ -93,6 +93,9 @@ const activeTab = ref(-1)
 
 .dive-mock {
   position: relative;
+  /* As wide as its content, up to the column. The workspace demo grows as columns open. */
+  justify-self: start;
+  max-width: 100%;
   background: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
